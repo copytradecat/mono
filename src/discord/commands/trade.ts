@@ -1,4 +1,3 @@
-import { Message } from 'discord.js';
 import { Connection, Transaction, Keypair } from '@solana/web3.js';
 import Trade from '../../models/Trade';
 import dbConnect from '../../lib/mongodb.js';
@@ -6,20 +5,21 @@ import User from '../../models/User';
 import { decrypt } from '../../lib/encryption.js';
 import bs58 from 'bs58';
 
-export async function handleTradeCommand(message: Message) {
-  const args = message.content.split(' ');
-  if (args.length < 3) {
-    return message.reply('Usage: !trade <amount> <token>');
+export async function handleTradeCommand(interaction: any, args: string[]) {
+  if (args.length < 2) {
+    return interaction.reply('Usage: .ct trade <amount> <token>');
   }
 
-  const amount = parseFloat(args[1]);
-  const token = args[2];
+  const amount = parseFloat(args[0]);
+  const token = args[1];
+  const userId = interaction.user?.id || interaction.author.id;
+
   // Fetch the user's encrypted seed from the database
   await dbConnect();
-  const user = await User.findOne({ discordId: message.author.id });
+  const user = await User.findOne({ discordId: userId });
 
   if (!user || !user.encryptedSeed) {
-    return message.reply('You need to set up your wallet first.');
+    return interaction.reply('You need to set up your wallet first.');
   }
 
   // Decrypt the seed
@@ -42,15 +42,15 @@ export async function handleTradeCommand(message: Message) {
 
     // Store trade information in database
     await Trade.create({
-      user: message.author.id,
+      user: userId,
       txid: signature,
       amount,
       token,
     });
 
-    message.reply(`Trade executed successfully. Transaction ID: ${signature}`);
+    interaction.reply(`Trade executed successfully. Transaction ID: ${signature}`);
   } catch (error) {
     console.error('Trade execution failed:', error);
-    message.reply('Failed to execute trade. Please try again later.');
+    interaction.reply('Failed to execute trade. Please try again later.');
   }
 }

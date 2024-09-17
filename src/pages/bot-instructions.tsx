@@ -3,7 +3,7 @@ import Link from 'next/link';
 import BotSettings from '../components/BotSettings';
 
 export default function BotInstructions() {
-  const botInviteLink = `https://discord.com/api/oauth2/authorize?client_id=${process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID}&permissions=68608&scope=bot`;
+  const botInviteLink = `https://discord.com/api/oauth2/authorize?client_id=${process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID}&permissions=2147560512&scope=bot`;
 
   return (
     <div className="container mx-auto px-4 py-8">

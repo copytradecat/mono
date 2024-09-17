@@ -1,4 +1,4 @@
-import { Message } from "discord.js";
+import { Message, CommandInteraction } from "discord.js";
 import Channel from '../../models/Channel';
 import { handleHelp } from "./help.js";
 import { handleRegister } from "./register.js";
@@ -9,50 +9,64 @@ import { handleTradeCommand } from "./trade.js";
 import { handleFollow, handleUnfollow, handleList } from "./follow.js";
 import { handleSettings, handleSet } from "./settings.js";
 
-export async function handleCommand(message: Message) {
-  const args = message.content.slice(4).trim().split(/ +/);
-  const command = args.shift()?.toLowerCase();
+export async function handleCommand(interaction: Message | CommandInteraction, command?: string, args?: string[]) {
+  let channelId: string;
+  let guildId: string | null;
+  let reply: (content: string) => Promise<void>;
+  let userId: string;
+
+  if (interaction instanceof Message) {
+    channelId = interaction.channel.id;
+    guildId = interaction.guild?.id ?? null;
+    reply = (content: string) => interaction.reply(content);
+    userId = interaction.author.id;
+  } else {
+    channelId = interaction.channelId;
+    guildId = interaction.guildId;
+    reply = (content: string) => interaction.reply({ content, ephemeral: true });
+    userId = interaction.user.id;
+  }
 
   // Check if the command is in a DM or an allowed channel
-  if (!message.guild || await Channel.findOne({ channelId: message.channel.id })) {
+  if (!guildId || await Channel.findOne({ channelId })) {
     switch (command) {
       case 'help':
-        await handleHelp(message);
+        await handleHelp(reply);
         break;
       case 'register':
-        await handleRegister(message);
+        await handleRegister(userId, reply);
         break;
       case 'setup':
-        await handleSetup(message);
+        await handleSetup(interaction);
         break;
       case 'wallet':
-        await handleWallet(message);
+        await handleWallet(userId, reply);
         break;
       case 'balance':
-        await handleBalance(message);
+        await handleBalance(userId, reply);
         break;
       case 'trade':
-        await handleTradeCommand(message, args);
+        await handleTradeCommand(interaction, args);
         break;
       case 'follow':
-        await handleFollow(message, args);
+        await handleFollow(userId, args, reply);
         break;
       case 'unfollow':
-        await handleUnfollow(message, args);
+        await handleUnfollow(userId, args, reply);
         break;
       case 'list':
-        await handleList(message);
+        await handleList(userId, reply);
         break;
       case 'settings':
-        await handleSettings(message);
+        await handleSettings(userId, reply);
         break;
       case 'set':
-        await handleSet(message, args);
+        await handleSet(userId, args, reply);
         break;
       default:
-        message.reply("Unknown command. Use `.ct help` for a list of available commands.");
+        reply("Unknown command. Use `.ct help` or `/ct help` for a list of available commands.");
     }
   } else {
-    message.reply("This command can only be used in designated channels or direct messages.");
+    reply("This command can only be used in designated channels or direct messages.");
   }
 }
