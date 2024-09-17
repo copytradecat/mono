@@ -8,12 +8,10 @@ const config: Config = {
   ],
   theme: {
     extend: {
-      colors: {
-        background: "var(--background)",
-        foreground: "var(--foreground)",
-      },
+      // Your theme extensions here
     },
   },
   plugins: [],
 };
+
 export default config;

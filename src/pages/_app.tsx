@@ -1,41 +1,46 @@
-import { useMemo } from 'react';
+// src/pages/_app.tsx
+
 import { AppProps } from 'next/app';
-import { SessionProvider } from "next-auth/react";
-import { UnifiedWalletProvider, WalletAdapterNetwork } from '@jup-ag/wallet-adapter';
-import { PhantomWalletAdapter } from '@solana/wallet-adapter-phantom';
-import { Connection } from '@solana/web3.js';
-import WalletNotification from '../components/WalletNotification'; // Adjust the path accordingly
-
+import { SessionProvider } from 'next-auth/react';
+import { WalletAdapterNetwork, UnifiedWalletProvider } from '@jup-ag/wallet-adapter';
+import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
+import { useMemo } from 'react';
+// import '../styles/globals.css';
+type UnifiedSupportedProvider = 'solana-wallet-adapter' | 'walletconnect';
 function MyApp({ Component, pageProps }: AppProps) {
-  // Initialize Solana connection
-  const connection = useMemo(() => new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!), []);
+  const network = WalletAdapterNetwork.Devnet;
 
-  // Define wallets
-  const wallets = useMemo(() => [new PhantomWalletAdapter()], []);
+  const wallets = useMemo(
+    () => [
+      // Add wallet adapters compatible with `@jup-ag/wallet-adapter`
+    ],
+    []
+  );
 
-  // Combine wallets and config into a single params object
-  const params = useMemo(() => ({
-    wallets,
-    config: {
+  const config = useMemo(
+    () => ({
       autoConnect: false,
-      env: WalletAdapterNetwork.Mainnet,
+      env: network,
+      provider: 'solana-wallet-adapter' as UnifiedSupportedProvider,
       metadata: {
         name: 'CopyTradeCat',
         description: 'CopyTradeCat',
         url: 'https://copytradecat.com',
         iconUrls: ['https://copytradecat.com'],
       },
-      notificationCallback: WalletNotification,
-      walletlistExplanation: {
-        href: 'https://station.jup.ag/docs/additional-topics/wallet-list',
-      },
-      provider: connection, // Added the 'provider' property
-    },
-  }), [wallets, connection]);
+      walletAttachments: { 
+        'Phantom': {
+          attachment: <div tw="text-xs rounded-md bg-red-500 px-2 mx-2 text-center">Auto Confirm</div>
+        } 
+      }
+      // Add any additional config options
+    }),
+    [network]
+  );
 
   return (
     <SessionProvider session={pageProps.session}>
-      <UnifiedWalletProvider wallets={params.wallets} config={params.config}>
+      <UnifiedWalletProvider wallets={wallets} config={config}>
         <Component {...pageProps} />
       </UnifiedWalletProvider>
     </SessionProvider>

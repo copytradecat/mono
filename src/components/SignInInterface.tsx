@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useSession, signIn } from 'next-auth/react';
 import { useWallet } from '@jup-ag/wallet-adapter';
-import { encrypt, decrypt } from '../lib/encryption';
 import { Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
+import { encrypt } from '../lib/encryption';
 
 export default function SignInInterface() {
   const { data: session } = useSession();
   const { connected, connect, publicKey } = useWallet();
   const [walletSeed, setWalletSeed] = useState('');
-  const [storedWallet, setStoredWallet] = useState(null);
+  const [storedWallet, setStoredWallet] = useState<any>(null);
 
   useEffect(() => {
     if (session) {
@@ -25,15 +25,15 @@ export default function SignInInterface() {
     }
   };
 
-  const handleCreateWallet = async () => {
+  const handleCreateWallet = () => {
     const newKeypair = Keypair.generate();
     const seed = bs58.encode(newKeypair.secretKey);
     setWalletSeed(seed);
   };
 
-  const handleImportWallet = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleImportWallet = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const seed = event.currentTarget.seed.value;
+    const seed = (event.currentTarget.elements.namedItem('seed') as HTMLInputElement).value;
     try {
       const keypair = Keypair.fromSecretKey(bs58.decode(seed));
       setWalletSeed(seed);
@@ -47,7 +47,7 @@ export default function SignInInterface() {
     if (!session || !walletSeed) return;
 
     const encryptedSeed = encrypt(walletSeed);
-    
+
     const response = await fetch('/api/save-wallet', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -73,7 +73,7 @@ export default function SignInInterface() {
 
   return (
     <div>
-      <h2>Welcome, {session.user.email}</h2>
+      <h2>Welcome, {session?.user?.email || 'Friend'}</h2>
       {!connected ? (
         <button onClick={connect}>Connect Wallet</button>
       ) : (

@@ -1,5 +1,6 @@
 import { Client, GatewayIntentBits } from "discord.js";
 import dotenv from 'dotenv';
+import { handleTradeCommand } from './commands/trade';
 
 dotenv.config();
 
@@ -18,12 +19,9 @@ client.once("ready", () => {
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
-  // Implement command handling logic here
   if (message.content.startsWith('!trade')) {
-    // Handle trade command
+    await handleTradeCommand(message);
   }
 });
 
 client.login(process.env.DISCORD_BOT_TOKEN);
-
-export default client;

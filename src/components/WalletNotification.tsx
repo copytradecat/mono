@@ -1,7 +1,22 @@
 import { toast } from 'sonner';
 import 'twin.macro'
 
-import { IUnifiedWalletConfig, IWalletNotification } from '../../../deps/Unified-Wallet-Kit/src/contexts/WalletConnectionProvider';
+interface IWalletNotification {
+  shortAddress?: string;
+  walletName?: string;
+  metadata?: {
+    url?: string;
+  };
+}
+
+interface IUnifiedWalletConfig {
+  notificationCallback?: {
+    onConnect?: (props: IWalletNotification) => void;
+    onConnecting?: (props: IWalletNotification) => void;
+    onDisconnect?: (props: IWalletNotification) => void;
+    onNotInstalled?: (props: IWalletNotification) => void;
+  };
+}
 
 const WalletNotification: IUnifiedWalletConfig['notificationCallback'] = {
   onConnect: (props: IWalletNotification) => {
@@ -48,7 +63,7 @@ const WalletNotification: IUnifiedWalletConfig['notificationCallback'] = {
         <span tw="font-semibold">{props.walletName} Wallet is not installed</span>
         <span>
           {`Please go to the provider`}{' '}
-          <a target="_blank" rel="noopener noreferrer" tw="underline font-bold" href={props.metadata.url}>
+          <a target="_blank" rel="noopener noreferrer" tw="underline font-bold" href={props.metadata?.url}>
             {`website`}
           </a>{' '}
           {`to download.`}
