@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from 'di
 import dotenv from 'dotenv';
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, Transaction, SystemProgram, SendTransactionError } from '@solana/web3.js';
 import fs from 'fs';
+import { Jupiter } from '@jup-ag/api';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -121,27 +122,38 @@ async function simulateCommandResponse(command: string, options: any): Promise<s
 
 async function simulateTrade(amount: number, token: string): Promise<string> {
   try {
-    const sender = demoWallets[0];
-    const receiver = demoWallets[1];
+    const jupiter = await Jupiter.load({
+      connection,
+      cluster: 'devnet', // or 'mainnet-beta'
+      user: demoWallets[0], // Use the first demo wallet as the user
+    });
 
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: sender.publicKey,
-        toPubkey: receiver.publicKey,
-        lamports: amount * LAMPORTS_PER_SOL,
-      })
-    );
+    const inputToken = 'SOL'; // Assuming we're always trading from SOL
+    const outputToken = token;
 
-    const signature = await connection.sendTransaction(transaction);
-    console.log('Transaction sent:', signature);
-    return `Trade simulated: ${amount} ${token} sent from ${sender.publicKey.toBase58()} to ${receiver.publicKey.toBase58()}`;
-  } catch (error) {
-    if (error instanceof SendTransactionError) {
-      console.error('SendTransactionError:', error.message);
-      console.error('Logs:', error.logs);
+    const routes = await jupiter.computeRoutes({
+      inputMint: inputToken,
+      outputMint: outputToken,
+      amount: amount * LAMPORTS_PER_SOL,
+      slippageBps: 50,
+    });
+
+    const { execute } = await jupiter.exchange({
+      routeInfo: routes.routesInfos[0],
+    });
+
+    const swapResult = await execute();
+
+    if ('txid' in swapResult) {
+      console.log('Transaction sent:', swapResult.txid);
+      return `Trade simulated: ${amount} ${inputToken} swapped for ${outputToken}. Transaction ID: ${swapResult.txid}`;
     } else {
-      console.error('Unexpected error:', error);
+      console.error('Swap failed:', swapResult.error);
+      return `Trade simulation failed: ${swapResult.error}`;
     }
+  } catch (error) {
+    console.error('Unexpected error:', error);
+    return `Trade simulation failed: ${error.message}`;
   }
 }
 
