@@ -21,11 +21,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.status(500).json({ error: 'Failed to retrieve settings' });
     }
   } else if (req.method === 'POST') {
-    const { setting, value } = req.body;
+    const { settings } = req.body;
     try {
       const user = await User.findOneAndUpdate(
         { discordId: session.user.id },
-        { $set: { [`settings.${setting}`]: value } },
+        { $set: { settings } },
         { new: true }
       );
       res.status(200).json({ settings: user.settings });

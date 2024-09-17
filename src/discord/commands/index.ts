@@ -28,7 +28,7 @@ export async function handleCommand(interaction: Message | CommandInteraction, c
   }
 
   // Check if the command is in a DM or an allowed channel
-  if (!guildId || await Channel.findOne({ channelId })) {
+  if (!guildId || await Channel.findOne({ channelId }) || channelId === process.env.DISCORD_TEST_CHANNEL_ID) {
     switch (command) {
       case 'help':
         await handleHelp(reply);

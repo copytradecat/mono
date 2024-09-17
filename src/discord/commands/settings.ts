@@ -19,29 +19,29 @@ export async function handleSettings(message: Message) {
   }
 }
 
-export async function handleSet(message: Message, args: string[]) {
-  if (args.length < 2) {
-    return message.reply("Usage: .ct set <setting> <value>");
+export async function handleSet(userId: string, args: string[] | undefined, reply: (content: string) => Promise<void>) {
+  if (!args || args.length < 2) {
+    return reply("Usage: .ct set <setting> <value>");
   }
   
   const [setting, value] = args;
   
   try {
-    const user = await User.findOne({ discordId: message.author.id });
+    const user = await User.findOne({ discordId: userId });
     if (!user) {
-      return message.reply("You need to register first. Use `.ct register` to get started.");
+      return reply("You need to register first. Use `.ct register` to get started.");
     }
     
     if (!(setting in user.settings)) {
-      return message.reply(`Invalid setting: ${setting}`);
+      return reply(`Invalid setting: ${setting}`);
     }
     
     user.settings[setting] = value;
     await user.save();
     
-    message.reply(`Setting updated: ${setting} = ${value}`);
+    reply(`Setting updated: ${setting} = ${value}`);
   } catch (error) {
     console.error("Error in set command:", error);
-    message.reply("An error occurred while updating your settings.");
+    reply("An error occurred while updating your settings.");
   }
 }
