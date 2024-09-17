@@ -1,5 +1,6 @@
 import { MongoClient } from 'mongodb';
 import dotenv from 'dotenv';
+import mongoose from 'mongoose';
 
 dotenv.config({ path: ['.env.local', '.env'] })
 
@@ -27,3 +28,29 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 export default clientPromise;
+
+const MONGODB_URI = process.env.MONGODB_URI;
+
+if (!MONGODB_URI) {
+  throw new Error('Please define the MONGODB_URI environment variable inside .env.local');
+}
+
+export async function connectDB() {
+  if (mongoose.connection.readyState >= 1) {
+    return;
+  }
+  try {
+    if (MONGODB_URI) {
+      await mongoose.connect(MONGODB_URI);
+    } else {
+      throw new Error('MONGODB_URI is undefined');
+    }
+  } catch (error) {
+    console.error('Failed to connect to MongoDB:', error);
+    throw error;
+  }
+}
+
+export function disconnectDB() {
+  return mongoose.disconnect();
+}

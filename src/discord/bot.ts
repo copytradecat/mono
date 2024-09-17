@@ -1,6 +1,8 @@
 import { Client, GatewayIntentBits, Partials, REST, Routes, SlashCommandBuilder } from "discord.js";
 import dotenv from 'dotenv';
 import { handleCommand } from './commands/index.js';
+import mongoose from 'mongoose';
+import { connectDB } from '../lib/mongodb.js';
 
 dotenv.config();
 
@@ -38,18 +40,26 @@ const commands = [
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN!);
 
-client.once("ready", async () => {
-  console.log("Discord bot is ready!");
+async function startBot() {
   try {
+    await connectDB();
+    console.log('Connected to MongoDB');
+
+    await client.login(process.env.DISCORD_BOT_TOKEN);
+    console.log("Discord bot is ready!");
+
     await rest.put(
       Routes.applicationCommands(client.user!.id),
       { body: commands },
     );
     console.log('Successfully registered application commands.');
   } catch (error) {
-    console.error('Error registering application commands:', error);
+    console.error('Error starting the bot:', error);
+    process.exit(1);
   }
-});
+}
+
+startBot();
 
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isCommand()) return;
@@ -68,5 +78,3 @@ client.on("messageCreate", async (message) => {
     await handleCommand(message, command, args);
   }
 });
-
-client.login(process.env.DISCORD_BOT_TOKEN);
