@@ -1,9 +1,11 @@
 import mongoose from 'mongoose';
 
 const TradeSchema = new mongoose.Schema({
-  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  txid: String,
-  amount: Number,
+  userId: { type: String, required: true },
+  walletAddress: { type: String, required: true },
+  amount: { type: Number, required: true },
+  token: { type: String, required: true },
+  txid: { type: String, required: true },
   timestamp: { type: Date, default: Date.now },
 });
 

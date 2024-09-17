@@ -1,9 +1,9 @@
 import { Message } from 'discord.js';
 import { Connection, Transaction, Keypair } from '@solana/web3.js';
 import Trade from '../../models/Trade';
-import dbConnect from '../../lib/mongodb';
+import dbConnect from '../../lib/mongodb.js';
 import User from '../../models/User';
-import { decrypt } from '../../lib/encryption';
+import { decrypt } from '../../lib/encryption.js';
 import bs58 from 'bs58';
 
 export async function handleTradeCommand(message: Message) {
@@ -14,7 +14,6 @@ export async function handleTradeCommand(message: Message) {
 
   const amount = parseFloat(args[1]);
   const token = args[2];
-
   // Fetch the user's encrypted seed from the database
   await dbConnect();
   const user = await User.findOne({ discordId: message.author.id });

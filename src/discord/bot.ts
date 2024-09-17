@@ -1,6 +1,6 @@
-import { Client, GatewayIntentBits } from "discord.js";
+import { Client, GatewayIntentBits, Partials } from "discord.js";
 import dotenv from 'dotenv';
-import { handleTradeCommand } from './commands/trade';
+import { handleCommand } from './commands/index.js';
 
 dotenv.config();
 
@@ -8,8 +8,10 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.DirectMessages,
     GatewayIntentBits.MessageContent,
   ],
+  partials: [Partials.Channel, Partials.Message],
 });
 
 client.once("ready", () => {
@@ -18,9 +20,8 @@ client.once("ready", () => {
 
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
-
-  if (message.content.startsWith('!trade')) {
-    await handleTradeCommand(message);
+  if (message.content.startsWith('.ct ')) {
+    await handleCommand(message);
   }
 });
 

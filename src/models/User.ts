@@ -1,9 +1,17 @@
 import mongoose from 'mongoose';
 
 const UserSchema = new mongoose.Schema({
-    email: { type: String, required: true, unique: true },
-    encryptedSeed: String,
-    discordId: String,
-  });
-  
+    email: { type: String, unique: true },
+    discordId: { type: String, required: true, unique: true },
+    wallets: [{
+        publicAddress: String,
+        encryptedSeed: String,
+    }],
+    settings: {
+        defaultWallet: String,
+        maxTradeAmount: { type: Number, default: 100 },
+        // Add other user-specific settings as needed
+    },
+});
+
 export default mongoose.models.User || mongoose.model('User', UserSchema);

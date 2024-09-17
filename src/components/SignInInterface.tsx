@@ -9,19 +9,22 @@ export default function SignInInterface() {
   const { data: session } = useSession();
   const { connected, connect, publicKey } = useWallet();
   const [walletSeed, setWalletSeed] = useState('');
-  const [storedWallet, setStoredWallet] = useState<any>(null);
+  const [publicAddress, setPublicAddress] = useState('');
+  const [showPrivateKey, setShowPrivateKey] = useState(false);
+  const [walletCreated, setWalletCreated] = useState(false);
+  const [storedWallets, setStoredWallets] = useState<any[]>([]);
 
   useEffect(() => {
     if (session) {
-      fetchStoredWallet();
+      fetchStoredWallets();
     }
   }, [session]);
 
-  const fetchStoredWallet = async () => {
-    const response = await fetch('/api/get-wallet');
+  const fetchStoredWallets = async () => {
+    const response = await fetch('/api/get-wallets');
     if (response.ok) {
       const data = await response.json();
-      setStoredWallet(data.wallet);
+      setStoredWallets(data.wallets);
     }
   };
 
@@ -29,18 +32,8 @@ export default function SignInInterface() {
     const newKeypair = Keypair.generate();
     const seed = bs58.encode(newKeypair.secretKey);
     setWalletSeed(seed);
-  };
-
-  const handleImportWallet = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const seed = (event.currentTarget.elements.namedItem('seed') as HTMLInputElement).value;
-    try {
-      const keypair = Keypair.fromSecretKey(bs58.decode(seed));
-      setWalletSeed(seed);
-    } catch (error) {
-      console.error('Invalid seed phrase');
-      alert('Invalid seed phrase');
-    }
+    setPublicAddress(newKeypair.publicKey.toBase58());
+    setWalletCreated(true);
   };
 
   const handleSaveWallet = async () => {
@@ -51,22 +44,36 @@ export default function SignInInterface() {
     const response = await fetch('/api/save-wallet', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ encryptedSeed }),
+      body: JSON.stringify({ encryptedSeed, publicAddress }),
     });
 
     if (response.ok) {
       alert('Wallet saved successfully!');
-      fetchStoredWallet();
+      fetchStoredWallets();
     } else {
       alert('Failed to save wallet');
+    }
+  };
+
+  const handleImportWallet = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const seed = (event.currentTarget.elements.namedItem('seed') as HTMLInputElement).value;
+    try {
+      const keypair = Keypair.fromSecretKey(bs58.decode(seed));
+      setWalletSeed(seed);
+      setPublicAddress(keypair.publicKey.toBase58());
+      setWalletCreated(true);
+    } catch (error) {
+      console.error('Invalid seed phrase');
+      alert('Invalid seed phrase');
     }
   };
 
   if (!session) {
     return (
       <div>
-        <h2>Sign in to get started</h2>
-        <button onClick={() => signIn()}>Sign in</button>
+        <h2>Sign in with Discord to get started</h2>
+        <button onClick={() => signIn('discord')}>Sign in with Discord</button>
       </div>
     );
   }
@@ -80,22 +87,30 @@ export default function SignInInterface() {
       ) : (
         <p>Wallet connected: {publicKey?.toBase58()}</p>
       )}
-      <h3>Create or Import Wallet</h3>
-      <button onClick={handleCreateWallet}>Create New Wallet</button>
-      <form onSubmit={handleImportWallet}>
-        <input type="text" name="seed" placeholder="Enter seed phrase" />
-        <button type="submit">Import Wallet</button>
-      </form>
-      {walletSeed && (
+      {storedWallets.length > 0 && (
         <div>
-          <p>Wallet Seed: {walletSeed}</p>
-          <button onClick={handleSaveWallet}>Save Wallet</button>
+          <h3>Stored Wallets</h3>
+          {storedWallets.map((wallet, index) => (
+            <p key={index}>Public Key: {wallet.publicKey}</p>
+          ))}
         </div>
       )}
-      {storedWallet && (
+      <h3>Create or Import Wallet</h3>
+      {!walletCreated && (
+        <form onSubmit={handleImportWallet}>
+          <input type="text" name="seed" placeholder="Enter seed phrase" />
+          <button type="submit">Import Wallet</button>
+        </form>
+      )}
+      {!walletCreated && <button onClick={handleCreateWallet}>Create New Wallet</button>}
+      {walletCreated && (
         <div>
-          <h3>Stored Wallet</h3>
-          <p>Public Key: {storedWallet.publicKey}</p>
+          <p>Public Address: {publicAddress}</p>
+          <button onClick={() => setShowPrivateKey(!showPrivateKey)}>
+            {showPrivateKey ? 'Hide' : 'Reveal'} Private Key
+          </button>
+          {showPrivateKey && <p>Private Key: {walletSeed}</p>}
+          <button onClick={handleSaveWallet}>Save Wallet</button>
         </div>
       )}
     </div>

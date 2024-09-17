@@ -1,38 +1,26 @@
-import mongoose from 'mongoose';
+import { MongoClient } from 'mongodb';
 
-const MONGODB_URI = process.env.MONGODB_URI!;
+const uri = process.env.MONGODB_URI!;
 
-if (!MONGODB_URI) {
+if (!uri) {
   throw new Error('Please define the MONGODB_URI environment variable');
 }
 
-interface Cached {
-  conn: mongoose.Connection | null;
-  promise: Promise<mongoose.Connection> | null;
-}
+let client: MongoClient;
+let clientPromise: Promise<MongoClient>;
 
-let cached: Cached = (global as any).mongoose;
-
-if (!cached) {
-  cached = (global as any).mongoose = { conn: null, promise: null };
-}
-
-async function dbConnect() {
-  if (cached.conn) {
-    return cached.conn;
+if (process.env.NODE_ENV === 'development') {
+  // In development mode, use a global variable so that the value
+  // is preserved across module reloads caused by HMR (Hot Module Replacement).
+  if (!(global as any)._mongoClientPromise) {
+    client = new MongoClient(uri);
+    (global as any)._mongoClientPromise = client.connect();
   }
-
-  if (!cached.promise) {
-    const opts = {
-      bufferCommands: false,
-    };
-
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((connection) => {
-      return connection.connection;
-    });
-  }
-  cached.conn = await cached.promise;
-  return cached.conn;
+  clientPromise = (global as any)._mongoClientPromise;
+} else {
+  // In production mode, it's best to not use a global variable.
+  client = new MongoClient(uri);
+  clientPromise = client.connect();
 }
 
-export default dbConnect;
+export default clientPromise;
