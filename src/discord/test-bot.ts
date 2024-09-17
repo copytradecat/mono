@@ -2,7 +2,7 @@ import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from 'di
 import dotenv from 'dotenv';
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, Transaction, SystemProgram, SendTransactionError } from '@solana/web3.js';
 import fs from 'fs';
-import { Jupiter } from '@jup-ag/api';
+import { getQuote, getSwapTransaction, executeSwap } from '../trading/jupiterApi';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -67,7 +67,7 @@ async function simulateUserFlow() {
   const userFlows = [
     { command: 'ct', options: { subcommand: 'register' } },
     { command: 'ct', options: { subcommand: 'wallet', wallet: demoWallets[0].publicKey.toBase58() } },
-    { command: 'ct', options: { subcommand: 'balance' } },
+    { command: 'ct', options: { subcommand: 'balance', wallet: demoWallets[0].publicKey.toBase58() } },
     { command: 'ct', options: { subcommand: 'follow', user: testUserId } },
     { command: 'ct', options: { subcommand: 'trade', amount: 0.1, token: 'SOL' } },
     { command: 'ct', options: { subcommand: 'list' } },
@@ -92,6 +92,7 @@ async function simulateUserFlow() {
 }
 
 async function simulateCommandResponse(command: string, options: any): Promise<string> {
+  console.log(`Simulating command response for: ${command}`, options);
   // This function simulates the bot's response to each command
   switch (options.subcommand) {
     case 'register':
@@ -100,6 +101,9 @@ async function simulateCommandResponse(command: string, options: any): Promise<s
       return `Wallet linked: ${options.wallet}`;
     case 'balance':
       try {
+        if (!options.wallet) {
+          return 'No wallet specified. Please link a wallet first.';
+        }
         const balance = await connection.getBalance(new PublicKey(options.wallet));
         console.log(`Balance for wallet ${options.wallet}: ${balance / LAMPORTS_PER_SOL} SOL`);
         return `Your current balance: ${balance / LAMPORTS_PER_SOL} SOL`;
@@ -127,51 +131,21 @@ async function simulateCommandResponse(command: string, options: any): Promise<s
 }
 
 async function simulateTrade(amount: number, token: string): Promise<string> {
+  console.log(`Simulating trade: ${amount} ${token}`);
   try {
-    const inputToken = 'SOL';
-    const outputToken = token;
+    const inputToken = 'So11111111111111111111111111111111111111112'; // SOL mint address
+    const outputToken = token === 'SOL' ? inputToken : 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'; // USDC mint address (example)
 
-    // Step 1: Get the route
-    const quoteResponse = await fetch('https://quote-api.jup.ag/v6/quote', {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        inputMint: inputToken,
-        outputMint: outputToken,
-        amount: amount * LAMPORTS_PER_SOL,
-        slippageBps: 50,
-      }),
-    });
+    const quoteData = await getQuote(inputToken, outputToken, amount * LAMPORTS_PER_SOL);
+    console.log('Quote data received:', JSON.stringify(quoteData, null, 2));
 
-    if (!quoteResponse.ok) {
-      throw new Error('Failed to get quote');
-    }
+    const swapData = await getSwapTransaction(quoteData, demoWallets[0].publicKey.toBase58());
+    console.log('Swap data received:', JSON.stringify(swapData, null, 2));
 
-    const quoteData = await quoteResponse.json();
-
-    // Step 2: Get the swap transaction
-    const swapResponse = await fetch('https://quote-api.jup.ag/v6/swap', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        quoteResponse: quoteData,
-        userPublicKey: demoWallets[0].publicKey.toBase58(),
-        wrapUnwrapSOL: true,
-      }),
-    });
-
-    if (!swapResponse.ok) {
-      throw new Error('Failed to get swap transaction');
-    }
-
-    const swapData = await swapResponse.json();
-
-    // Step 3: Sign and send the transaction
-    const transaction = Transaction.from(Buffer.from(swapData.swapTransaction, 'base64'));
-    const signature = await connection.sendTransaction(transaction, [demoWallets[0]]);
+    const signature = await executeSwap(connection, swapData.swapTransaction, demoWallets[0]);
 
     console.log('Transaction sent:', signature);
-    return `Trade simulated: ${amount} ${inputToken} swapped for ${outputToken}. Transaction ID: ${signature}`;
+    return `Trade simulated: ${amount} SOL swapped for ${token}. Transaction ID: ${signature}`;
   } catch (error) {
     console.error('Unexpected error:', error);
     return `Trade simulation failed: ${error.message}`;

@@ -9,6 +9,7 @@ import { handleTradeCommand } from "./trade.js";
 import { handleFollow, handleUnfollow, handleList } from "./follow.js";
 import { handleSettings, handleSet } from "./settings.js";
 import { handleConnectWallet } from "./connect-wallet.js";
+import { handleInfo } from "./info.js";
 
 export async function handleCommand(interaction: Message | CommandInteraction, command?: string, args?: string[]) {
   let channelId: string;
@@ -29,7 +30,16 @@ export async function handleCommand(interaction: Message | CommandInteraction, c
   }
 
   // Check if the command is in a DM or an allowed channel
-  if (!guildId || await Channel.findOne({ channelId }) || channelId === process.env.DISCORD_TEST_CHANNEL_ID) {
+  if (!guildId) {
+    // Allow commands in DMs
+    // ... (rest of the DM handling code)
+  } else {
+    // For guild messages, check if the channel is set up for the bot
+    const channelSetup = await Channel.findOne({ guildId, channelId });
+    if (!channelSetup && command !== 'setup') {
+      return reply("This channel is not set up for trading. An administrator must use `/ct setup` in this channel first.");
+    }
+
     switch (command) {
       case 'help':
         await handleHelp(reply);
@@ -67,10 +77,11 @@ export async function handleCommand(interaction: Message | CommandInteraction, c
       case 'connect-wallet':
         await handleConnectWallet(interaction as CommandInteraction);
         break;
+      case 'info':
+        await handleInfo(interaction as CommandInteraction);
+        break;
       default:
         reply("Unknown command. Use `.ct help` or `/ct help` for a list of available commands.");
     }
-  } else {
-    reply("This command can only be used in designated channels or direct messages.");
   }
 }

@@ -18,8 +18,8 @@ export default function BotInstructions() {
         <li>Select the server you want to add the bot to from the dropdown menu.</li>
         <li>Review the permissions and click "Authorize".</li>
         <li>Complete any additional verification steps if prompted.</li>
-        <li>Once added, the bot will be available in your server.</li>
-        <li>Use the command <code className="bg-gray-200 px-1 rounded">.ct help</code> to see available commands.</li>
+        <li>Once added, use the command <code className="bg-gray-200 px-1 rounded">/ct setup</code> in the channel where you want the bot to operate.</li>
+        <li>After setup, members can use <code className="bg-gray-200 px-1 rounded">/ct register</code> to start using the bot.</li>
       </ol>
       
       <h2 className="text-2xl font-bold mt-8 mb-4">Configuring Bot Settings</h2>
@@ -27,8 +27,8 @@ export default function BotInstructions() {
       
       <h3 className="text-xl font-semibold mb-2">Using Discord Commands</h3>
       <ul className="list-disc list-inside space-y-2 mb-4">
-        <li>Use <code className="bg-gray-200 px-1 rounded">.ct settings</code> to view current settings</li>
-        <li>Use <code className="bg-gray-200 px-1 rounded">.ct set &lt;setting&gt; &lt;value&gt;</code> to update a setting</li>
+        <li>Use <code className="bg-gray-200 px-1 rounded">/ct settings</code> to view current settings</li>
+        <li>Use <code className="bg-gray-200 px-1 rounded">/ct set &lt;setting&gt; &lt;value&gt;</code> to update a setting</li>
       </ul>
       
       <h3 className="text-xl font-semibold mb-2">Using Web Interface</h3>
