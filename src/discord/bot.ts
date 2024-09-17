@@ -69,9 +69,12 @@ startBot();
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isCommand()) return;
 
-  if (interaction.commandName === 'ct') {
+  const { commandName } = interaction;
+
+  if (commandName === 'ct') {
     const subcommand = interaction.options.getSubcommand();
-    await handleCommand(interaction, subcommand);
+    const args = interaction.options.data.map(option => option.value as string);
+    await handleCommand(interaction, subcommand, args);
   }
 });
 

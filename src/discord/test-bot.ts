@@ -1,5 +1,7 @@
 import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from 'discord.js';
 import dotenv from 'dotenv';
+import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, Transaction, SystemProgram, SendTransactionError } from '@solana/web3.js';
+import fs from 'fs';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -9,6 +11,15 @@ const client = new Client({
 
 const testChannelId = process.env.DISCORD_TEST_CHANNEL_ID;
 const testUserId = process.env.DISCORD_TEST_USER_ID;
+
+// Load demo wallets
+const demoWallets = [
+  Keypair.fromSecretKey(new Uint8Array(JSON.parse(fs.readFileSync('test-ledger/demo_wallet_1.json', 'utf-8')))),
+  Keypair.fromSecretKey(new Uint8Array(JSON.parse(fs.readFileSync('test-ledger/demo_wallet_2.json', 'utf-8')))),
+  Keypair.fromSecretKey(new Uint8Array(JSON.parse(fs.readFileSync('test-ledger/demo_wallet_3.json', 'utf-8')))),
+];
+
+const connection = new Connection('http://localhost:8899', 'confirmed');
 
 const commands = [
   new SlashCommandBuilder().setName('ct').setDescription('CopyTradeCat commands')
@@ -54,7 +65,7 @@ async function simulateUserFlow() {
 
   const userFlows = [
     { command: 'ct', options: { subcommand: 'register' } },
-    { command: 'ct', options: { subcommand: 'wallet', wallet: '0x1234567890123456789012345678901234567890' } },
+    { command: 'ct', options: { subcommand: 'wallet', wallet: demoWallets[0].publicKey.toBase58() } },
     { command: 'ct', options: { subcommand: 'balance' } },
     { command: 'ct', options: { subcommand: 'follow', user: testUserId } },
     { command: 'ct', options: { subcommand: 'trade', amount: 0.1, token: 'SOL' } },
@@ -87,11 +98,12 @@ async function simulateCommandResponse(command: string, options: any): Promise<s
     case 'wallet':
       return `Wallet linked: ${options.wallet}`;
     case 'balance':
-      return "Your current balance: 10 SOL";
+      const balance = await connection.getBalance(demoWallets[0].publicKey);
+      return `Your current balance: ${balance / LAMPORTS_PER_SOL} SOL`;
     case 'follow':
       return `You are now following user with ID: ${options.user}`;
     case 'trade':
-      return `Trade executed: ${options.amount} ${options.token}`;
+      return simulateTrade(options.amount, options.token);
     case 'list':
       return "Traders you are following:\n1. Trader123\n2. Trader456";
     case 'settings':
@@ -104,6 +116,32 @@ async function simulateCommandResponse(command: string, options: any): Promise<s
       return "Available commands:\n/ct register\n/ct wallet\n/ct balance\n/ct follow <user>\n/ct trade <amount> <token>\n/ct list\n/ct settings\n/ct set <setting> <value>\n/ct unfollow <user>\n/ct help";
     default:
       return "Unknown command";
+  }
+}
+
+async function simulateTrade(amount: number, token: string): Promise<string> {
+  try {
+    const sender = demoWallets[0];
+    const receiver = demoWallets[1];
+
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: sender.publicKey,
+        toPubkey: receiver.publicKey,
+        lamports: amount * LAMPORTS_PER_SOL,
+      })
+    );
+
+    const signature = await connection.sendTransaction(transaction);
+    console.log('Transaction sent:', signature);
+    return `Trade simulated: ${amount} ${token} sent from ${sender.publicKey.toBase58()} to ${receiver.publicKey.toBase58()}`;
+  } catch (error) {
+    if (error instanceof SendTransactionError) {
+      console.error('SendTransactionError:', error.message);
+      console.error('Logs:', error.logs);
+    } else {
+      console.error('Unexpected error:', error);
+    }
   }
 }
 

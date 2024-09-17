@@ -34,3 +34,15 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Test Ledger
+
+```bash
+solana-validator-test
+solana-keygen new --outfile test-ledger/demo_wallet_1.json
+solana-keygen new --outfile test-ledger/demo_wallet_2.json
+solana-keygen new --outfile test-ledger/demo_wallet_3.json
+solana airdrop 100 <demo_wallet_1_address>
+solana airdrop 100 <demo_wallet_2_address>
+solana airdrop 100 <demo_wallet_3_address>
+```

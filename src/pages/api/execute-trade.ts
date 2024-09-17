@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { Connection, PublicKey, Transaction } from '@solana/web3.js';
 import { getSession } from 'next-auth/react';
+import Trade from '../../models/Trade';
+import dbConnect from '../../lib/mongodb';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await getSession({ req });
@@ -8,17 +9,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { publicKey, signedTransaction } = req.body;
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { publicKey, txid, amount, token } = req.body;
 
   try {
-    const connection = new Connection(process.env.SOLANA_RPC_URL!);
-    const txid = await connection.sendRawTransaction(signedTransaction);
-    
-    // Store trade information in database
-    // Implement database logic here
-
-    res.status(200).json({ txid });
+    await dbConnect();
+    await Trade.create({
+      user: session.user.id,
+      publicKey,
+      txid,
+      amount,
+      token,
+    });
+    res.status(200).json({ message: 'Trade recorded successfully' });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to execute trade' });
+    console.error('Failed to record trade:', error);
+    res.status(500).json({ error: 'Failed to record trade' });
   }
 }
