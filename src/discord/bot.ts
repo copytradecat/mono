@@ -36,6 +36,11 @@ const commands = [
     .addSubcommand(subcommand => subcommand.setName('set').setDescription('Update a specific setting')
       .addStringOption(option => option.setName('setting').setDescription('Setting to update').setRequired(true))
       .addStringOption(option => option.setName('value').setDescription('New value for the setting').setRequired(true)))
+    .addSubcommand(subcommand => subcommand.setName('setup').setDescription('Initialize the CopyTradeCat bot for this server')
+      .addChannelOption(option => 
+        option.setName('channel')
+          .setDescription('The channel where trades will be executed')
+          .setRequired(true))),
 ];
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN!);

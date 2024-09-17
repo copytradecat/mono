@@ -8,6 +8,7 @@ import { handleBalance } from "./balance.js";
 import { handleTradeCommand } from "./trade.js";
 import { handleFollow, handleUnfollow, handleList } from "./follow.js";
 import { handleSettings, handleSet } from "./settings.js";
+import { handleConnectWallet } from "./connect-wallet.js";
 
 export async function handleCommand(interaction: Message | CommandInteraction, command?: string, args?: string[]) {
   let channelId: string;
@@ -37,7 +38,7 @@ export async function handleCommand(interaction: Message | CommandInteraction, c
         await handleRegister(userId, reply);
         break;
       case 'setup':
-        await handleSetup(interaction);
+        await handleSetup(interaction as CommandInteraction);
         break;
       case 'wallet':
         await handleWallet(userId, reply);
@@ -62,6 +63,9 @@ export async function handleCommand(interaction: Message | CommandInteraction, c
         break;
       case 'set':
         await handleSet(userId, args, reply);
+        break;
+      case 'connect-wallet':
+        await handleConnectWallet(interaction as CommandInteraction);
         break;
       default:
         reply("Unknown command. Use `.ct help` or `/ct help` for a list of available commands.");

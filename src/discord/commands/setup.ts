@@ -1,4 +1,4 @@
-import { CommandInteraction, PermissionFlagsBits } from "discord.js";
+import { CommandInteraction, TextChannel, PermissionFlagsBits } from "discord.js";
 import Channel from '../../models/Channel';
 
 export async function handleSetup(interaction: CommandInteraction) {
@@ -6,21 +6,32 @@ export async function handleSetup(interaction: CommandInteraction) {
     return interaction.reply({ content: "This command can only be used by administrators in a server.", ephemeral: true });
   }
 
+  const tradingChannel = interaction.options.getChannel('channel') as TextChannel;
+  if (!tradingChannel || tradingChannel.type !== 'GUILD_TEXT') {
+    return interaction.reply({ content: "Please select a valid text channel.", ephemeral: true });
+  }
+
   try {
     await Channel.findOneAndUpdate(
-      { guildId: interaction.guild.id, channelId: interaction.channelId },
-      { $setOnInsert: { settings: { maxTradeAmount: 100 } } },
+      { guildId: interaction.guild.id },
+      { 
+        $set: { 
+          channelId: tradingChannel.id,
+          settings: { maxTradeAmount: 100 }
+        }
+      },
       { upsert: true, new: true }
     );
 
-    interaction.reply({
-      content: `Setup complete! This channel is now configured for CopyTradeCat commands. 
-      Default max trade amount is set to 100. 
-      Use \`.ct set maxTradeAmount <value>\` to change this setting.`,
+    await interaction.reply({
+      content: `Setup complete! ${tradingChannel} is now configured for CopyTradeCat commands. 
+      Members can now connect their wallets using the \`/connect-wallet\` command.`,
       ephemeral: true
     });
+
+    await tradingChannel.send("This channel has been set up for CopyTradeCat trading. Use `/connect-wallet` to get started!");
   } catch (error) {
     console.error("Error in setup:", error);
-    interaction.reply({ content: "An error occurred during setup. Please try again later.", ephemeral: true });
+    await interaction.reply({ content: "An error occurred during setup. Please try again later.", ephemeral: true });
   }
 }
