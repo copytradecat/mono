@@ -1,4 +1,4 @@
-import { useSession, signIn, signOut } from "next-auth/react";
+import { useSession, signIn, signOut, SessionProvider } from "next-auth/react";
 import WalletConnection from "../components/WalletConnection";
 
 export default function Home() {
@@ -7,8 +7,9 @@ export default function Home() {
   return (
     <div>
       <h1>CopyTradeCat</h1>
-      {session ? (
-        <>
+      <SessionProvider session={session}>
+        {session && session.user ? (
+          <>
           Signed in as {session.user.email} <br />
           <button onClick={() => signOut()}>Sign out</button>
         </>
@@ -18,6 +19,7 @@ export default function Home() {
           <button onClick={() => signIn()}>Sign in</button>
         </>
       )}
+      </SessionProvider>
       <WalletConnection />
     </div>
   );
