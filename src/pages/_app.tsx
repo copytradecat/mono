@@ -8,7 +8,7 @@ import WalletNotification from '../components/WalletNotification'; // Adjust the
 
 function MyApp({ Component, pageProps }: AppProps) {
   // Initialize Solana connection
-  const connection = useMemo(() => new Connection("https://api.mainnet-beta.solana.com"), []);
+  const connection = useMemo(() => new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!), []);
 
   // Define wallets
   const wallets = useMemo(() => [new PhantomWalletAdapter()], []);
