@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSession, signIn } from 'next-auth/react';
+import { useSession, signIn, signOut } from 'next-auth/react';
 import { useWallet } from '@jup-ag/wallet-adapter';
 import { Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
@@ -74,6 +74,7 @@ export default function SignInInterface() {
   return (
     <div>
       <h2>Welcome, {session?.user?.email || 'Friend'}</h2>
+      <button onClick={() => signOut()}>Sign Out</button>
       {!connected ? (
         <button onClick={connect}>Connect Wallet</button>
       ) : (
