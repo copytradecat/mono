@@ -9,10 +9,12 @@ export async function handleRegister(userId: string, reply: (content: string) =>
       { upsert: true, new: true }
     );
 
+    const webAppUrl = 'https://copytradecat.com/connect-wallet';
+
     reply(`Registration successful! 
-    Use the web interface to link your wallet. 
+    Please visit ${webAppUrl} to connect your wallet and complete the setup.
     Your default max trade amount is set to 100. 
-    Use \`.ct set maxTradeAmount <value>\` to change this setting.`);
+    You can change your settings on the web interface or use \`.ct set maxTradeAmount <value>\` to update this setting.`);
   } catch (error) {
     console.error("Error in registration:", error);
     reply("An error occurred during registration. Please try again later.");

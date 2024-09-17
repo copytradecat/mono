@@ -99,8 +99,14 @@ async function simulateCommandResponse(command: string, options: any): Promise<s
     case 'wallet':
       return `Wallet linked: ${options.wallet}`;
     case 'balance':
-      const balance = await connection.getBalance(demoWallets[0].publicKey);
-      return `Your current balance: ${balance / LAMPORTS_PER_SOL} SOL`;
+      try {
+        const balance = await connection.getBalance(new PublicKey(options.wallet));
+        console.log(`Balance for wallet ${options.wallet}: ${balance / LAMPORTS_PER_SOL} SOL`);
+        return `Your current balance: ${balance / LAMPORTS_PER_SOL} SOL`;
+      } catch (error) {
+        console.error('Error fetching balance:', error);
+        return 'Failed to fetch balance';
+      }
     case 'follow':
       return `You are now following user with ID: ${options.user}`;
     case 'trade':
@@ -122,35 +128,50 @@ async function simulateCommandResponse(command: string, options: any): Promise<s
 
 async function simulateTrade(amount: number, token: string): Promise<string> {
   try {
-    const jupiter = await Jupiter.load({
-      connection,
-      cluster: 'devnet', // or 'mainnet-beta'
-      user: demoWallets[0], // Use the first demo wallet as the user
-    });
-
-    const inputToken = 'SOL'; // Assuming we're always trading from SOL
+    const inputToken = 'SOL';
     const outputToken = token;
 
-    const routes = await jupiter.computeRoutes({
-      inputMint: inputToken,
-      outputMint: outputToken,
-      amount: amount * LAMPORTS_PER_SOL,
-      slippageBps: 50,
+    // Step 1: Get the route
+    const quoteResponse = await fetch('https://quote-api.jup.ag/v6/quote', {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        inputMint: inputToken,
+        outputMint: outputToken,
+        amount: amount * LAMPORTS_PER_SOL,
+        slippageBps: 50,
+      }),
     });
 
-    const { execute } = await jupiter.exchange({
-      routeInfo: routes.routesInfos[0],
-    });
-
-    const swapResult = await execute();
-
-    if ('txid' in swapResult) {
-      console.log('Transaction sent:', swapResult.txid);
-      return `Trade simulated: ${amount} ${inputToken} swapped for ${outputToken}. Transaction ID: ${swapResult.txid}`;
-    } else {
-      console.error('Swap failed:', swapResult.error);
-      return `Trade simulation failed: ${swapResult.error}`;
+    if (!quoteResponse.ok) {
+      throw new Error('Failed to get quote');
     }
+
+    const quoteData = await quoteResponse.json();
+
+    // Step 2: Get the swap transaction
+    const swapResponse = await fetch('https://quote-api.jup.ag/v6/swap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        quoteResponse: quoteData,
+        userPublicKey: demoWallets[0].publicKey.toBase58(),
+        wrapUnwrapSOL: true,
+      }),
+    });
+
+    if (!swapResponse.ok) {
+      throw new Error('Failed to get swap transaction');
+    }
+
+    const swapData = await swapResponse.json();
+
+    // Step 3: Sign and send the transaction
+    const transaction = Transaction.from(Buffer.from(swapData.swapTransaction, 'base64'));
+    const signature = await connection.sendTransaction(transaction, [demoWallets[0]]);
+
+    console.log('Transaction sent:', signature);
+    return `Trade simulated: ${amount} ${inputToken} swapped for ${outputToken}. Transaction ID: ${signature}`;
   } catch (error) {
     console.error('Unexpected error:', error);
     return `Trade simulation failed: ${error.message}`;
