@@ -10,6 +10,7 @@ import { handleFollow, handleUnfollow, handleList } from "./follow.js";
 import { handleSettings, handleSet } from "./settings.js";
 import { handleConnectWallet } from "./connect-wallet.js";
 import { handleInfo } from "./info.js";
+import { handleShutdown } from "./shutdown.js";
 
 export async function handleCommand(interaction: Message | CommandInteraction, command?: string, args?: string[]) {
   let channelId: string;
@@ -79,6 +80,9 @@ export async function handleCommand(interaction: Message | CommandInteraction, c
         break;
       case 'info':
         await handleInfo(interaction as CommandInteraction);
+        break;
+      case 'shutdown':
+        await handleShutdown(interaction as CommandInteraction);
         break;
       default:
         reply("Unknown command. Use `.ct help` or `/ct help` for a list of available commands.");

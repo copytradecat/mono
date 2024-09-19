@@ -10,20 +10,22 @@ export async function handleSetup(interaction: CommandInteraction) {
   await interaction.deferReply({ ephemeral: false });
 
   try {
-    const channel = await Channel.findOneAndUpdate(
-      { guildId: interaction.guild.id },
-      {
-        $set: {
-          channelId: interaction.channelId,
-          settings: { maxTradeAmount: 100 }
-        }
-      },
-      { upsert: true, new: true }
-    );
+    const existingChannel = await Channel.findOne({ guildId: interaction.guild.id });
+    if (existingChannel) {
+      return interaction.editReply({
+        content: `The bot is already set up in this server. The trading channel is <#${existingChannel.channelId}>. Use \`/ct info\` for more details.`
+      });
+    }
+
+    const channel = await Channel.create({
+      guildId: interaction.guild.id,
+      channelId: interaction.channelId,
+      settings: { maxTradeAmount: 100 }
+    });
 
     // Edit the deferred reply
     await interaction.editReply({
-      content: `Bot setup successful! This channel (${interaction.channel}) is now set for trading. Regular members can use \`/ct register\` to connect their wallets and start using the bot.`
+      content: `Bot setup successful! This channel (${interaction.channel}) is now set for trading. Regular members can use \`/ct register\` to connect their wallets and start using the bot. Use \`/ct info\` to check the bot's status.`
     });
   } catch (error) {
     console.error("Error in setup:", error);
