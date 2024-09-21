@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "./auth/[...nextauth]";
 import clientPromise from '../../lib/mongodb';
+import { encrypt } from '../../lib/encryption';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await getServerSession(req, res, authOptions);
@@ -13,18 +14,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { encryptedSeed, publicAddress } = req.body;
+  const { publicKey, privateKey } = req.body;
 
   try {
     const client = await clientPromise;
     const db = client.db('copytradecat');
     const usersCollection = db.collection('users');
 
+    const encryptedPrivateKey = encrypt(privateKey);
+
     await usersCollection.updateOne(
       { discordId: session.user.id },
       { 
         $push: { 
-          wallets: { encryptedSeed, publicAddress } 
+          wallets: { publicKey, encryptedPrivateKey } 
         } 
       },
       { upsert: true }

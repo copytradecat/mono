@@ -26,7 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     res.status(200).json({
       wallets: user.wallets.map((wallet: any) => ({
-        publicKey: wallet.publicAddress
+        publicKey: wallet.publicKey
       }))
     });
   } catch (error) {

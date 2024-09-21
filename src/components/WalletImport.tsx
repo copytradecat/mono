@@ -40,6 +40,7 @@ export default function WalletImport({ onWalletAdded }: WalletImportProps) {
 
     if (response.ok) {
       alert('Wallet saved successfully!');
+      onWalletAdded();
     } else {
       alert('Failed to save wallet. Please try again.');
     }
