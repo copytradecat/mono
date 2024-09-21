@@ -22,10 +22,11 @@ export default function WalletSelector({ channelId, refreshTrigger }: { channelI
       const response = await fetch('/api/get-wallets');
       if (response.ok) {
         const data = await response.json();
-        console.log('Fetched wallets:', data.wallets);
+        console.log('Fetched wallets (full object):', JSON.stringify(data.wallets, null, 2));
         setWallets(data.wallets);
       } else {
         const errorData = await response.json();
+        console.error('Error fetching wallets:', errorData);
         setError(errorData.error);
       }
     } catch (error) {
@@ -61,13 +62,25 @@ export default function WalletSelector({ channelId, refreshTrigger }: { channelI
         <option value="">Select a wallet</option>
         {wallets.map((wallet, index) => (
           <option key={index} value={wallet.publicKey}>
-            {wallet.publicKey}
+            {wallet.publicKey ? `${wallet.publicKey.slice(0, 10)}...${wallet.publicKey.slice(-10)}` : `Wallet ${index + 1}: No public key`}
           </option>
         ))}
       </select>
       <button onClick={handleConnect} disabled={!selectedWallet}>
         Connect Wallet
       </button>
+      <div>
+        <h3>Available Wallets:</h3>
+        {wallets.map((wallet, index) => (
+          <p key={index}>Wallet {index + 1}: {wallet.publicKey || 'No public key'}</p>
+        ))}
+      </div>
+      {selectedWallet && (
+        <div>
+          <h3>Connected Wallet:</h3>
+          <p>{selectedWallet}</p>
+        </div>
+      )}
     </div>
   );
 }

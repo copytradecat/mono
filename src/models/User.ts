@@ -4,8 +4,8 @@ const UserSchema = new mongoose.Schema({
     email: { type: String, unique: true },
     discordId: { type: String, required: true, unique: true },
     wallets: [{
-        publicAddress: String,
-        encryptedSeed: String,
+        publicKey: String,
+        encryptedPrivateKey: String,
     }],
     settings: {
         defaultWallet: String,

@@ -28,9 +28,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const user = await User.findOneAndUpdate(
-      { discordId: session.user.id },
+      { email: session.user.email },
       { 
-        $push: { 
+        $addToSet: { 
           wallets: { publicKey, encryptedPrivateKey } 
         } 
       },

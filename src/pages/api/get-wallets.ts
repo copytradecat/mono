@@ -16,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     await connectDB();
-    const user = await User.findOne({ discordId: session.user.id });
+    const user = await User.findOne({ email: session.user.email });
 
     if (!user || !user.wallets || user.wallets.length === 0) {
       return res.status(404).json({ error: 'No wallets found' });
@@ -24,7 +24,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     res.status(200).json({
       wallets: user.wallets.map((wallet: any) => ({
-        publicKey: wallet.publicKey
+        publicKey: wallet.publicKey || wallet.publicAddress,
+        // Include any other relevant fields here
       }))
     });
   } catch (error) {

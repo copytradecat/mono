@@ -43,6 +43,7 @@ export default function WalletImport({ onWalletAdded }: WalletImportProps) {
 
       if (response.ok) {
         console.log('Wallet saved successfully:', data);
+        console.log('Saved wallet public key:', publicKey);
         alert('Wallet saved successfully!');
         onWalletAdded();
       } else {
