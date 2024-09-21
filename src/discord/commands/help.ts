@@ -7,6 +7,7 @@ Available commands:
 /ct register - Link your Discord account to the web app
 /ct wallet - Display linked wallet information
 /ct balance - Show current balance of linked wallet
+/ct profile - Show your wallet information and token balances
 /ct trade <amount> <token> - Execute a trade
 /ct follow <trader_address> - Start copying trades from a specific address
 /ct unfollow <trader_address> - Stop copying trades from a specific address

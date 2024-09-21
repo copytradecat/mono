@@ -11,6 +11,8 @@ import { handleSettings, handleSet } from "./settings.js";
 import { handleConnectWallet } from "./connect-wallet.js";
 import { handleInfo } from "./info.js";
 import { handleShutdown } from "./shutdown.js";
+import { handleProfile } from "./profile.js";
+import { TextChannel } from "discord.js";
 
 export async function handleCommand(interaction: Message | CommandInteraction, command?: string, args?: string[]) {
   let channelId: string;
@@ -46,7 +48,7 @@ export async function handleCommand(interaction: Message | CommandInteraction, c
         await handleHelp(reply);
         break;
       case 'register':
-        await handleRegister(userId, reply);
+        await handleRegister(userId, interaction.channelId, reply);
         break;
       case 'setup':
         await handleSetup(interaction as CommandInteraction);
@@ -83,6 +85,9 @@ export async function handleCommand(interaction: Message | CommandInteraction, c
         break;
       case 'shutdown':
         await handleShutdown(interaction as CommandInteraction);
+        break;
+      case 'profile':
+        await handleProfile(interaction as CommandInteraction);
         break;
       default:
         reply("Unknown command. Use `.ct help` or `/ct help` for a list of available commands.");

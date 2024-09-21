@@ -1,6 +1,7 @@
 import { useSession } from "next-auth/react";
 import SignInInterface from "../components/SignInInterface";
 import AccountSettings from '../components/AccountSettings';
+import WalletConnection from '../components/WalletConnection';
 
 export default function Home() {
   const { data: session } = useSession();
@@ -9,7 +10,12 @@ export default function Home() {
     <div>
       <h1>CopyTradeCat</h1>
       <SignInInterface />
-      <AccountSettings />
+      {session && (
+        <>
+          <AccountSettings />
+          <WalletConnection />
+        </>
+      )}
     </div>
   );
 }
