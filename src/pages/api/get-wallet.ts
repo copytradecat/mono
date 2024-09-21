@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getSession } from 'next-auth/react';
-import dbConnect from '../../lib/mongodb';
+import { connectDB } from '../../lib/mongodb';
 import User from '../../models/User';
 import { decrypt } from '../../lib/encryption';
 import { Keypair } from '@solana/web3.js';
@@ -17,7 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    await dbConnect();
+    await connectDB();
     const user = await User.findOne({ email: session?.user?.email });
 
     if (!user || !user.encryptedSeed) {

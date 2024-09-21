@@ -32,17 +32,26 @@ export default function WalletImport({ onWalletAdded }: WalletImportProps) {
   };
 
   const saveWallet = async (publicKey: string, privateKey: string) => {
-    const response = await fetch('/api/save-wallet', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ publicKey, privateKey }),
-    });
+    try {
+      const response = await fetch('/api/save-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publicKey, privateKey }),
+      });
 
-    if (response.ok) {
-      alert('Wallet saved successfully!');
-      onWalletAdded();
-    } else {
-      alert('Failed to save wallet. Please try again.');
+      const data = await response.json();
+
+      if (response.ok) {
+        console.log('Wallet saved successfully:', data);
+        alert('Wallet saved successfully!');
+        onWalletAdded();
+      } else {
+        console.error('Failed to save wallet:', data);
+        alert(`Failed to save wallet. Error: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Error saving wallet:', error);
+      alert(`An error occurred while saving the wallet: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 

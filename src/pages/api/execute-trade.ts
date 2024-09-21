@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getSession } from 'next-auth/react';
 import Trade from '../../models/Trade';
-import dbConnect from '../../lib/mongodb';
+import { connectDB } from '../../lib/mongodb';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await getSession({ req });
@@ -16,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { publicKey, txid, amount, token } = req.body;
 
   try {
-    await dbConnect();
+    await connectDB();
     await Trade.create({
       user: session.user.id,
       publicKey,

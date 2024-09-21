@@ -1,7 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "./auth/[...nextauth]";
-import clientPromise from '../../lib/mongodb';
+import { connectDB } from '../../lib/mongodb';
+import User from '../../models/User';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await getServerSession(req, res, authOptions);
@@ -14,13 +15,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const client = await clientPromise;
-    const db = client.db('copytradecat');
-    const usersCollection = db.collection('users');
+    await connectDB();
+    const user = await User.findOne({ discordId: session.user.id });
 
-    const user = await usersCollection.findOne({ discordId: session.user.id });
-
-    if (!user || !user.wallets) {
+    if (!user || !user.wallets || user.wallets.length === 0) {
       return res.status(404).json({ error: 'No wallets found' });
     }
 
