@@ -14,8 +14,19 @@ export default function WalletSelector({ channelId, refreshTrigger }: { channelI
   useEffect(() => {
     if (session) {
       fetchWallets();
+      const storedWallet = localStorage.getItem(`selectedWallet_${channelId}`);
+      if (storedWallet) {
+        setSelectedWallet(storedWallet);
+      }
     }
-  }, [session, refreshTrigger]);
+  }, [session, refreshTrigger, channelId]);
+
+  useEffect(() => {
+    if (session && channelId && selectedWallet) {
+      localStorage.setItem(`selectedWallet_${channelId}`, selectedWallet);
+      connectWalletToChannel(selectedWallet, channelId);
+    }
+  }, [session, channelId, selectedWallet]);
 
   const fetchWallets = async () => {
     try {
@@ -35,20 +46,27 @@ export default function WalletSelector({ channelId, refreshTrigger }: { channelI
     }
   };
 
-  const handleConnect = async () => {
-    if (!selectedWallet || !channelId) return;
+  const connectWalletToChannel = async (walletAddress: string, channelId: string) => {
+    try {
+      const response = await fetch('/api/connect-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletAddress, channelId }),
+      });
 
-    const response = await fetch('/api/connect-wallet', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ walletAddress: selectedWallet, channelId }),
-    });
-
-    if (response.ok) {
-      alert('Wallet connected successfully!');
-    } else {
-      alert('Failed to connect wallet. Please try again.');
+      if (response.ok) {
+        console.log('Wallet connected successfully!');
+      } else {
+        console.error('Failed to connect wallet. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error connecting wallet to channel:', error);
     }
+  };
+
+  const handleWalletChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newWallet = e.target.value;
+    setSelectedWallet(newWallet);
   };
 
   if (error) {
@@ -58,7 +76,7 @@ export default function WalletSelector({ channelId, refreshTrigger }: { channelI
   return (
     <div>
       <h2>Select a Wallet</h2>
-      <select onChange={(e) => setSelectedWallet(e.target.value)}>
+      <select onChange={handleWalletChange} value={selectedWallet || ''}>
         <option value="">Select a wallet</option>
         {wallets.map((wallet, index) => (
           <option key={index} value={wallet.publicKey}>
@@ -66,9 +84,6 @@ export default function WalletSelector({ channelId, refreshTrigger }: { channelI
           </option>
         ))}
       </select>
-      <button onClick={handleConnect} disabled={!selectedWallet}>
-        Connect Wallet
-      </button>
       <div>
         <h3>Available Wallets:</h3>
         {wallets.map((wallet, index) => (

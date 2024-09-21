@@ -5,6 +5,7 @@ import { SessionProvider } from 'next-auth/react';
 import { WalletAdapterNetwork, UnifiedWalletProvider } from '@jup-ag/wallet-adapter';
 import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { useMemo } from 'react';
+import NavMenu from '../components/NavMenu';
 // import '../styles/globals.css';
 type UnifiedSupportedProvider = 'solana-wallet-adapter' | 'walletconnect';
 function MyApp({ Component, pageProps }: AppProps) {
@@ -41,6 +42,7 @@ function MyApp({ Component, pageProps }: AppProps) {
   return (
     <SessionProvider session={pageProps.session}>
       <UnifiedWalletProvider wallets={wallets} config={config}>
+        <NavMenu />
         <Component {...pageProps} />
       </UnifiedWalletProvider>
     </SessionProvider>

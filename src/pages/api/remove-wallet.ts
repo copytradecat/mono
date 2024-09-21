@@ -1,8 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "./auth/[...nextauth]";
-import User from '../../models/User';
 import { connectDB } from '../../lib/mongodb';
+import User from '../../models/User';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await getServerSession(req, res, authOptions);
@@ -14,32 +14,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { walletAddress, channelId } = req.body;
+  const { publicKey } = req.body;
 
-  if (!walletAddress || !channelId) {
-    return res.status(400).json({ error: 'Missing required parameters' });
+  if (!publicKey) {
+    return res.status(400).json({ error: 'Missing publicKey' });
   }
 
   try {
     await connectDB();
-
     const user = await User.findOneAndUpdate(
       { email: session.user.email },
       { 
-        $set: { 
-          [`connectedWallets.${channelId}`]: walletAddress
+        $pull: { 
+          wallets: { publicKey: publicKey },
+          connectedWallets: { walletAddress: publicKey }
         }
       },
-      { new: true, upsert: true }
+      { new: true }
     );
 
     if (!user) {
-      throw new Error('User not found or not updated');
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    res.status(200).json({ message: 'Wallet connected successfully', user });
+    res.status(200).json({ message: 'Wallet removed successfully' });
   } catch (error) {
-    console.error('Failed to connect wallet:', error);
-    res.status(500).json({ error: 'Failed to connect wallet' });
+    console.error('Failed to remove wallet:', error);
+    res.status(500).json({ error: 'Failed to remove wallet' });
   }
 }

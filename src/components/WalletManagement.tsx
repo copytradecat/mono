@@ -61,6 +61,28 @@ export default function WalletManagement() {
     }
   };
 
+  const handleRemoveWallet = async (publicKey: string) => {
+    if (confirm("Are you sure you want to remove this wallet? This action is irreversible. Please ensure you have backed up your wallet before proceeding.")) {
+      try {
+        const response = await fetch('/api/remove-wallet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ publicKey }),
+        });
+
+        if (response.ok) {
+          alert('Wallet removed successfully');
+          fetchWallets();
+        } else {
+          alert('Failed to remove wallet. Please try again.');
+        }
+      } catch (error) {
+        console.error('Error removing wallet:', error);
+        alert('An error occurred while removing the wallet');
+      }
+    }
+  };
+
   return (
     <div>
       <h1>Wallet Management</h1>
@@ -68,7 +90,7 @@ export default function WalletManagement() {
         <option value="">Select a wallet</option>
         {wallets.map((wallet, index) => (
           <option key={index} value={wallet.publicKey}>
-            {wallet.publicKey.slice(0, 10)}...{wallet.publicKey.slice(-10)}
+            {wallet.publicKey ? `${wallet.publicKey.slice(0, 10)}...${wallet.publicKey.slice(-10)}` : `Wallet ${index + 1}: No public key`}
           </option>
         ))}
       </select>
@@ -84,8 +106,17 @@ export default function WalletManagement() {
               </li>
             ))}
           </ul>
+          <button onClick={() => handleRemoveWallet(selectedWallet)}>Remove Wallet</button>
         </div>
       )}
+
+      <h3>Available Wallets:</h3>
+      {wallets.map((wallet, index) => (
+        <div key={index}>
+          <p>Wallet {index + 1}: {wallet.publicKey || 'No public key'}</p>
+          <button onClick={() => handleRemoveWallet(wallet.publicKey)}>Remove</button>
+        </div>
+      ))}
     </div>
   );
 }

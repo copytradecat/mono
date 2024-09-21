@@ -12,6 +12,10 @@ const UserSchema = new mongoose.Schema({
         maxTradeAmount: { type: Number, default: 100 },
         // Add other user-specific settings as needed
     },
+    connectedWallets: [{
+        channelId: String,
+        walletAddress: String,
+    }],
 });
 
 export default mongoose.models.User || mongoose.model('User', UserSchema);
