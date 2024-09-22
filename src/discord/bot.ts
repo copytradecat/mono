@@ -1,8 +1,9 @@
-import { Client, GatewayIntentBits, Partials, REST, Routes, SlashCommandBuilder } from "discord.js";
-import dotenv from 'dotenv';
+import { Client, GatewayIntentBits, Partials, REST, Routes } from "discord.js";
+import { SlashCommandBuilder } from "@discordjs/builders";
 import { handleCommand } from './commands/index.js';
 import mongoose from 'mongoose';
 import { connectDB } from '../lib/mongodb.js';
+import dotenv from 'dotenv';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 

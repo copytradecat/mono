@@ -3,6 +3,9 @@
 import NextAuth from 'next-auth';
 import DiscordProvider from 'next-auth/providers/discord';
 import GoogleProvider from 'next-auth/providers/google';
+import dotenv from 'dotenv';
+
+dotenv.config({ path: ['.env.local', '.env'] });
 
 export default NextAuth({
   providers: [

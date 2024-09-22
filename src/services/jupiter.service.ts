@@ -1,5 +1,8 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 import { Jupiter } from '@jup-ag/core';
+import dotenv from 'dotenv';
+
+dotenv.config({ path: ['.env.local', '.env'] });
 
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 

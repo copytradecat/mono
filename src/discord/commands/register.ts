@@ -1,5 +1,8 @@
 import { Message } from "discord.js";
 import User from '../../models/User';
+import dotenv from 'dotenv';
+
+dotenv.config({ path: ['.env.local', '.env'] });
 
 export async function handleRegister(userId: string, channelId: string, reply: (content: string) => Promise<void>) {
   try {

@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import dotenv from 'dotenv';
+
+dotenv.config({ path: ['.env.local', '.env'] });
 
 interface Wallet {
   publicKey: string;

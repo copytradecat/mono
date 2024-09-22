@@ -1,5 +1,8 @@
 import { Connection, PublicKey } from "@solana/web3.js";
 import User from '../../models/User';
+import dotenv from 'dotenv';
+
+dotenv.config({ path: ['.env.local', '.env'] });
 
 export async function handleBalance(userId: string, reply: (content: string) => Promise<void>) {
   try {
