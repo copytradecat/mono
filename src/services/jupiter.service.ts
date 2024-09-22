@@ -1,48 +1,62 @@
-import { Connection, PublicKey } from '@solana/web3.js';
-import { Jupiter } from '@jup-ag/core';
+import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import dotenv from 'dotenv';
+import { RateLimiter } from 'limiter';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 
+// Create a rate limiter that allows 10 requests per second
+const limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' });
+
+export async function rateLimitedRequest<T>(fn: () => Promise<T>): Promise<T> {
+  await limiter.removeTokens(1);
+  return fn();
+}
+
 export async function getTokenBalances(publicKey: string) {
-  const jupiter = await Jupiter.load({
-    connection,
-    cluster: 'mainnet-beta',
-    user: null,
-  });
+  try {
+    const pubKey = new PublicKey(publicKey);
+    const tokenAccounts = await rateLimitedRequest(() => 
+      connection.getParsedTokenAccountsByOwner(pubKey, {
+        programId: TOKEN_PROGRAM_ID
+      })
+    );
 
-  const tokenAccounts = await jupiter.getTokenAccounts(new PublicKey(publicKey));
-  const balances: { [key: string]: number } = {};
+    const balances: { [key: string]: number } = {};
 
-  for (const [mint, account] of Object.entries(tokenAccounts)) {
-    const balance = account.balance / Math.pow(10, account.decimals);
-    balances[mint] = balance;
+    for (const account of tokenAccounts.value) {
+      const mintAddress = account.account.data.parsed.info.mint;
+      const balance = account.account.data.parsed.info.tokenAmount.uiAmount;
+      balances[mintAddress] = balance;
+    }
+
+    return balances;
+  } catch (error) {
+    console.error('Error fetching token balances:', error);
+    throw error;
   }
-
-  return balances;
 }
 
 export async function getAggregateBalance(wallets: string[]) {
-  const jupiter = await Jupiter.load({
-    connection,
-    cluster: 'mainnet-beta',
-    user: null,
-  });
-
   const aggregateBalance: { [key: string]: number } = {};
 
   for (const wallet of wallets) {
-    const publicKey = new PublicKey(wallet);
-    const solBalance = await connection.getBalance(publicKey);
-    aggregateBalance['SOL'] = (aggregateBalance['SOL'] || 0) + solBalance / 1e9;
+    try {
+      const publicKey = new PublicKey(wallet);
+      const solBalance = await rateLimitedRequest(() => connection.getBalance(publicKey));
+      aggregateBalance['SOL'] = (aggregateBalance['SOL'] || 0) + solBalance / LAMPORTS_PER_SOL;
 
-    const tokenAccounts = await jupiter.getTokenAccounts(publicKey);
-    for (const [mint, account] of Object.entries(tokenAccounts)) {
-      const balance = account.balance / Math.pow(10, account.decimals);
-      aggregateBalance[mint] = (aggregateBalance[mint] || 0) + balance;
+      const tokenBalances = await getTokenBalances(wallet);
+      for (const [mint, balance] of Object.entries(tokenBalances)) {
+        aggregateBalance[mint] = (aggregateBalance[mint] || 0) + balance;
+      }
+    } catch (error) {
+      console.error(`Error fetching balance for wallet ${wallet}:`, error);
     }
+    // Add a small delay between processing each wallet
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
 
   return aggregateBalance;

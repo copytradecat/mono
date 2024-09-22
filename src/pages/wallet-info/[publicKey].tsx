@@ -1,7 +1,7 @@
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
-import { Connection, PublicKey } from '@solana/web3.js';
-import { getTokenBalances } from '../../services/jupiter.service';
+import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { getTokenBalances, rateLimitedRequest } from '../../services/jupiter.service';
 
 export default function WalletInfo() {
   const router = useRouter();
@@ -16,9 +16,9 @@ export default function WalletInfo() {
 
   const fetchBalances = async (pubKey: string) => {
     const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
-    const solBalance = await connection.getBalance(new PublicKey(pubKey));
+    const solBalance = await rateLimitedRequest(() => connection.getBalance(new PublicKey(pubKey)));
     const tokenBalances = await getTokenBalances(pubKey);
-    setBalances({ SOL: solBalance / 1e9, ...tokenBalances });
+    setBalances({ SOL: solBalance / LAMPORTS_PER_SOL, ...tokenBalances });
   };
 
   if (!publicKey) return <div>Loading...</div>;

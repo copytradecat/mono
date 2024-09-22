@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { getTokenBalances } from '../services/jupiter.service';
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 
@@ -30,18 +30,16 @@ export default function WalletInfo() {
     }
   };
 
-  const fetchBalances = async (wallets: Wallet[]) => {
-    const balancesData: { [key: string]: any } = {};
-    for (const wallet of wallets) {
-      const publicKey = new PublicKey(wallet.publicKey);
-      const solBalance = await connection.getBalance(publicKey);
-      const tokenBalances = await getTokenBalances(wallet.publicKey);
-      balancesData[wallet.publicKey] = {
-        SOL: solBalance / 1e9,
-        ...tokenBalances
-      };
+  const fetchBalances = async (pubKey: string) => {
+    try {
+      const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
+      const solBalance = await rateLimitedRequest(() => connection.getBalance(new PublicKey(pubKey)));
+      const tokenBalances = await getTokenBalances(pubKey);
+      setBalances({ SOL: solBalance / LAMPORTS_PER_SOL, ...tokenBalances });
+    } catch (error) {
+      console.error('Error fetching balances:', error);
+      setBalances({ error: 'Failed to fetch balances' });
     }
-    setBalances(balancesData);
   };
 
   return (

@@ -1,6 +1,7 @@
 import { Connection, PublicKey } from "@solana/web3.js";
 import User from '../../models/User';
 import dotenv from 'dotenv';
+import { rateLimitedRequest } from '../../services/jupiter.service';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -15,8 +16,8 @@ export async function handleBalance(userId: string, reply: (content: string) => 
     
     const balancePromises = user.wallets.map(async (wallet: { publicAddress: string }) => {
       const publicKey = new PublicKey(wallet.publicAddress);
-      const balance = await connection.getBalance(publicKey);
-      return `${wallet.publicAddress}: ${balance / 1e9} SOL`;
+      const balance = await rateLimitedRequest(() => connection.getBalance(publicKey));
+      return `${wallet.publicAddress}: ${balance / LAMPORTS_PER_SOL} SOL`;
     });
     
     const balances = await Promise.all(balancePromises);

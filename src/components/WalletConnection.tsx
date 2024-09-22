@@ -3,6 +3,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { rateLimitedRequest } from '../services/jupiter.service';
 
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 
@@ -28,9 +29,11 @@ export default function WalletConnection({ channelId }: WalletConnectionProps) {
 
   async function fetchTokenBalances(publicKey: PublicKey) {
     try {
-      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
-        programId: TOKEN_PROGRAM_ID,
-      });
+      const tokenAccounts = await rateLimitedRequest(() => 
+        connection.getParsedTokenAccountsByOwner(publicKey, {
+          programId: TOKEN_PROGRAM_ID,
+        })
+      );
 
       const balances = tokenAccounts.value.map((accountInfo) => ({
         mint: accountInfo.account.data.parsed.info.mint,

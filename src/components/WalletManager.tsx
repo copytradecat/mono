@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { getTokenBalances } from '../services/jupiter.service';
 import Link from 'next/link';
 
@@ -47,20 +47,37 @@ export default function WalletManager() {
     }
   };
 
-  const fetchBalances = async (publicKey: string) => {
-    const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
-    const solBalance = await connection.getBalance(new PublicKey(publicKey));
-    const tokenBalances = await getTokenBalances(publicKey);
-    setBalances({ SOL: solBalance / 1e9, ...tokenBalances });
+  const fetchBalances = async (pubKey: string) => {
+    try {
+      const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
+      const solBalance = await connection.getBalance(new PublicKey(pubKey));
+      const tokenBalances = await getTokenBalances(pubKey);
+      setBalances({ SOL: solBalance / LAMPORTS_PER_SOL, ...tokenBalances });
+    } catch (error) {
+      console.error('Error fetching balances:', error);
+      setBalances({ error: 'Failed to fetch balances' });
+    }
   };
 
   const fetchAggregateBalance = async () => {
-    const response = await fetch('/api/get-aggregate-balance');
-    if (response.ok) {
-      const data = await response.json();
-      setAggregateBalance(data.aggregateBalance);
+    try {
+      const response = await fetch('/api/get-aggregate-balance');
+      if (response.ok) {
+        const data = await response.json();
+        setAggregateBalance(data.aggregateBalance);
+      } else if (response.status === 429) {
+        console.log('Rate limit reached. Retrying in 5 seconds...');
+        setTimeout(fetchAggregateBalance, 5000);
+      } else {
+        throw new Error('Failed to fetch aggregate balance');
+      }
+    } catch (error) {
+      console.error('Failed to fetch aggregate balance:', error);
+      setAggregateBalance({ error: 'Failed to fetch aggregate balance' });
     }
   };
+
+  const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   return (
     <div className="bg-white shadow rounded-lg p-6">

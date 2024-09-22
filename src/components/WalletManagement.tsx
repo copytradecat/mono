@@ -3,6 +3,7 @@ import { useSession } from 'next-auth/react';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import dotenv from 'dotenv';
+import { rateLimitedRequest } from '../services/jupiter.service';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -49,9 +50,11 @@ export default function WalletManagement() {
     const pubKey = new PublicKey(publicKey);
 
     try {
-      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(pubKey, {
-        programId: TOKEN_PROGRAM_ID,
-      });
+      const tokenAccounts = await rateLimitedRequest(() => 
+        connection.getParsedTokenAccountsByOwner(pubKey, {
+          programId: TOKEN_PROGRAM_ID,
+        })
+      );
 
       const balances = tokenAccounts.value.map((accountInfo) => ({
         mint: accountInfo.account.data.parsed.info.mint,
