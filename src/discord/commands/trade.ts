@@ -1,9 +1,10 @@
-import { Connection, Transaction, Keypair } from '@solana/web3.js';
+import { Connection, Transaction, Keypair, PublicKey } from '@solana/web3.js';
 import Trade from '../../models/Trade';
-import dbConnect from '../../lib/mongodb.js';
+import dbConnect from '../../lib/mongodb';
 import User from '../../models/User';
-import { decrypt } from '../../lib/encryption.js';
+import { decrypt } from '../../lib/encryption';
 import bs58 from 'bs58';
+import { getQuote, getSwapTransaction, executeSwap } from '../../services/jupiter.service';
 
 export async function handleTradeCommand(interaction: any, args: string[]) {
   if (args.length < 2) {
@@ -30,10 +31,12 @@ export async function handleTradeCommand(interaction: any, args: string[]) {
   const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 
   try {
-    const transaction = new Transaction();
-    // Add actual trading logic here based on the token
-    // This is a placeholder for demonstration
-    const signature = await sendAndConfirmTransaction(connection, transaction, [keypair]);
+    const inputToken = 'So11111111111111111111111111111111111111112'; // SOL mint address
+    const outputToken = token === 'SOL' ? inputToken : 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'; // USDC mint address (example)
+
+    const quoteData = await getQuote(inputToken, outputToken, amount * 1e9); // Convert to lamports
+    const swapData = await getSwapTransaction(quoteData, keypair.publicKey.toBase58());
+    const signature = await executeSwap(connection, swapData.swapTransaction, keypair);
 
     await Trade.create({
       user: userId,

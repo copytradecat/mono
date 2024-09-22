@@ -37,9 +37,6 @@ const commands = [
     .addSubcommand(subcommand => subcommand.setName('set').setDescription('Update a specific setting')
       .addStringOption(option => option.setName('setting').setDescription('Setting to update').setRequired(true))
       .addStringOption(option => option.setName('value').setDescription('New value for the setting').setRequired(true)))
-    .addSubcommand(subcommand => subcommand.setName('setup').setDescription('Initialize the CopyTradeCat bot for this server'))
-    .addSubcommand(subcommand => subcommand.setName('info').setDescription('Display channel status and recent trades'))
-    .addSubcommand(subcommand => subcommand.setName('shutdown').setDescription('Disable the CopyTradeCat bot for this server'))
     .addSubcommand(subcommand => subcommand.setName('profile').setDescription('Display your wallet information and token balances')),
 ];
 
