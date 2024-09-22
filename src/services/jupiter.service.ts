@@ -18,13 +18,21 @@ export async function rateLimitedRequest<T>(fn: () => Promise<T>): Promise<T> {
 export async function getTokenBalances(publicKey: string) {
   try {
     const pubKey = new PublicKey(publicKey);
+    const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
+
+    // Fetch SOL balance
+    const solBalance = await rateLimitedRequest(() => connection.getBalance(pubKey));
+
+    // Fetch token accounts
     const tokenAccounts = await rateLimitedRequest(() => 
       connection.getParsedTokenAccountsByOwner(pubKey, {
         programId: TOKEN_PROGRAM_ID
       })
     );
 
-    const balances: { [key: string]: number } = {};
+    const balances: { [key: string]: number } = {
+      SOL: solBalance / LAMPORTS_PER_SOL
+    };
 
     for (const account of tokenAccounts.value) {
       const mintAddress = account.account.data.parsed.info.mint;
@@ -32,7 +40,10 @@ export async function getTokenBalances(publicKey: string) {
       balances[mintAddress] = balance;
     }
 
-    return balances;
+    // Fetch token metadata (you may need to implement this function)
+    const tokenMetadata = await getTokenMetadata(Object.keys(balances));
+
+    return { balances, metadata: tokenMetadata };
   } catch (error) {
     console.error('Error fetching token balances:', error);
     throw error;
@@ -103,4 +114,22 @@ export async function getSwapTransaction(quoteResponse: any, userPublicKey: stri
 export async function executeSwap(connection: Connection, swapTransaction: string, signer: any): Promise<string> {
   const transaction = Transaction.from(Buffer.from(swapTransaction, 'base64'));
   return await connection.sendTransaction(transaction, [signer]);
+}
+
+async function getTokenMetadata(mintAddresses: string[]) {
+  // You can use the Solana Token List API or another service like Jupiter API to fetch token metadata
+  // This is a placeholder implementation
+  const metadata: { [key: string]: { symbol: string, name: string } } = {};
+  for (const address of mintAddresses) {
+    try {
+      const response = await fetch(`https://api.jup.ag/v4/token/${address}`);
+      if (response.ok) {
+        const data = await response.json();
+        metadata[address] = { symbol: data.symbol, name: data.name };
+      }
+    } catch (error) {
+      console.error(`Error fetching metadata for token ${address}:`, error);
+    }
+  }
+  return metadata;
 }

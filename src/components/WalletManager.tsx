@@ -85,7 +85,7 @@ export default function WalletManager() {
       <div className="mb-6">
         <h3 className="text-xl font-semibold mb-2">Aggregate Balance</h3>
         {Object.entries(aggregateBalance).map(([token, balance]) => (
-          <p key={token} className="mb-1">{token}: {balance.toFixed(4)}</p>
+          <p key={token} className="mb-1">{token}: {balance}</p>
         ))}
       </div>
       <select 
