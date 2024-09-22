@@ -2,7 +2,7 @@ import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from 'di
 import dotenv from 'dotenv';
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, Transaction, SystemProgram, SendTransactionError } from '@solana/web3.js';
 import fs from 'fs';
-import { getQuote, getSwapTransaction, executeSwap } from '../trading/jupiterApi';
+import { getQuote, getSwapTransaction, executeSwap } from '../services/jupiter.service';
 import { rateLimitedRequest } from '../services/jupiter.service';
 
 dotenv.config({ path: ['.env.local', '.env'] });
