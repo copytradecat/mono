@@ -9,6 +9,7 @@ export default function NavMenu() {
       <Link href="/">Home</Link>&nbsp;
       {session && (
         <>
+          <Link href="/dashboard">Dashboard</Link>&nbsp;
           <Link href="/wallet-management">Wallet Management</Link>&nbsp;
           <button onClick={() => signOut()}>Log Out</button>
         </>

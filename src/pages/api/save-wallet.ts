@@ -19,19 +19,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { publicKey, privateKey } = req.body;
 
     await connectDB();
-    let encryptedPrivateKey;
-    try {
-      encryptedPrivateKey = encrypt(privateKey);
-    } catch (encryptError) {
-      console.error('Encryption error:', encryptError);
-      return res.status(500).json({ error: `Failed to encrypt wallet: ${encryptError.message}` });
-    }
+    const encryptedPrivateKey = encrypt(privateKey);
 
     const user = await User.findOneAndUpdate(
       { email: session.user.email },
       { 
         $addToSet: { 
-          wallets: { publicKey, encryptedPrivateKey } 
+          wallets: { publicKey, encryptedPrivateKey, connectedChannels: [] } 
         } 
       },
       { new: true, upsert: true }

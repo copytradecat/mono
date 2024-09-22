@@ -6,53 +6,44 @@ dotenv.config({ path: ['.env.local', '.env'] });
 
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 
-export async function getTokenBalances(walletAddress: string) {
+export async function getTokenBalances(publicKey: string) {
   const jupiter = await Jupiter.load({
     connection,
     cluster: 'mainnet-beta',
-    user: new PublicKey(walletAddress),
+    user: null,
   });
 
-  const tokenAccounts = await jupiter.getTokenAccounts();
+  const tokenAccounts = await jupiter.getTokenAccounts(new PublicKey(publicKey));
   const balances: { [key: string]: number } = {};
 
   for (const [mint, account] of Object.entries(tokenAccounts)) {
-    balances[mint] = account.balance / 10 ** account.decimals;
+    const balance = account.balance / Math.pow(10, account.decimals);
+    balances[mint] = balance;
   }
 
   return balances;
 }
 
-export async function executeSwap(
-  inputMint: string,
-  outputMint: string,
-  amount: number,
-  slippage: number,
-  walletAddress: string
-) {
+export async function getAggregateBalance(wallets: string[]) {
   const jupiter = await Jupiter.load({
     connection,
     cluster: 'mainnet-beta',
-    user: new PublicKey(walletAddress),
+    user: null,
   });
 
-  const routes = await jupiter.computeRoutes({
-    inputMint: new PublicKey(inputMint),
-    outputMint: new PublicKey(outputMint),
-    amount,
-    slippage,
-    forceFetch: true,
-  });
+  const aggregateBalance: { [key: string]: number } = {};
 
-  const { execute } = await jupiter.exchange({
-    routeInfo: routes.routesInfos[0],
-  });
+  for (const wallet of wallets) {
+    const publicKey = new PublicKey(wallet);
+    const solBalance = await connection.getBalance(publicKey);
+    aggregateBalance['SOL'] = (aggregateBalance['SOL'] || 0) + solBalance / 1e9;
 
-  const swapResult = await execute();
-
-  if ('error' in swapResult) {
-    throw new Error(swapResult.error);
+    const tokenAccounts = await jupiter.getTokenAccounts(publicKey);
+    for (const [mint, account] of Object.entries(tokenAccounts)) {
+      const balance = account.balance / Math.pow(10, account.decimals);
+      aggregateBalance[mint] = (aggregateBalance[mint] || 0) + balance;
+    }
   }
 
-  return swapResult.txid;
+  return aggregateBalance;
 }

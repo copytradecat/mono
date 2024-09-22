@@ -10,7 +10,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { wallet } = req.query;
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
   try {
     await connectDB();
@@ -20,15 +22,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const selectedWallet = user.wallets.find(w => w.publicKey === wallet);
-
-    if (!selectedWallet) {
-      return res.status(404).json({ error: 'Wallet not found' });
-    }
-
-    res.status(200).json({ channels: selectedWallet.connectedChannels });
+    res.status(200).json({ wallets: user.wallets });
   } catch (error) {
-    console.error('Failed to fetch channels:', error);
-    res.status(500).json({ error: 'Failed to fetch channels' });
+    console.error('Failed to fetch wallets:', error);
+    res.status(500).json({ error: 'Failed to fetch wallets' });
   }
 }

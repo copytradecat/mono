@@ -24,17 +24,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await connectDB();
 
     const user = await User.findOneAndUpdate(
-      { email: session.user.email },
+      { email: session.user.email, "wallets.publicKey": walletAddress },
       { 
-        $set: { 
-          [`connectedWallets.${channelId}`]: walletAddress
+        $addToSet: { 
+          "wallets.$.connectedChannels": channelId
         }
       },
-      { new: true, upsert: true }
+      { new: true }
     );
 
     if (!user) {
-      throw new Error('User not found or not updated');
+      throw new Error('User not found or wallet not updated');
     }
 
     res.status(200).json({ message: 'Wallet connected successfully', user });

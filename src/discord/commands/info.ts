@@ -1,34 +1,41 @@
 import { CommandInteraction } from "discord.js";
-import Channel from '../../models/Channel';
-import Trade from '../../models/Trade';
+import User from '../../models/User';
+import { getTokenBalances } from '../../services/jupiter.service';
+import { Connection, PublicKey } from '@solana/web3.js';
+
+const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 
 export async function handleInfo(interaction: CommandInteraction) {
   try {
-    const channel = await Channel.findOne({ guildId: interaction.guildId, channelId: interaction.channelId });
+    const user = await User.findOne({ discordId: interaction.user.id });
     
-    if (!channel) {
-      return interaction.reply("This channel is not set up for trading. An administrator must use `/ct setup` first.");
+    if (!user || user.wallets.length === 0) {
+      return interaction.reply("You don't have any wallets linked to your account. Please visit our web application to set up your wallets.");
     }
 
-    const recentTrades = await Trade.find({ channelId: interaction.channelId })
-      .sort({ createdAt: -1 })
-      .limit(5);
+    let infoMessage = "Your Wallet Information:\n\n";
 
-    let infoMessage = `Channel Status: Set up for trading\n`;
-    infoMessage += `Max Trade Amount: ${channel.settings.maxTradeAmount}\n\n`;
-    infoMessage += `Recent Trades:\n`;
+    for (const wallet of user.wallets) {
+      const publicKey = new PublicKey(wallet.publicKey);
+      const solBalance = await connection.getBalance(publicKey);
+      const tokenBalances = await getTokenBalances(wallet.publicKey);
 
-    if (recentTrades.length === 0) {
-      infoMessage += "No recent trades.";
-    } else {
-      recentTrades.forEach((trade, index) => {
-        infoMessage += `${index + 1}. Amount: ${trade.amount} ${trade.token}, TxID: ${trade.txid}\n`;
-      });
+      infoMessage += `Wallet: ${wallet.publicKey}\n`;
+      infoMessage += `SOL Balance: ${solBalance / 1e9} SOL\n`;
+      infoMessage += "Token Balances:\n";
+      
+      for (const [token, balance] of Object.entries(tokenBalances)) {
+        infoMessage += `  ${token}: ${balance}\n`;
+      }
+
+      infoMessage += `Connected Channels: ${wallet.connectedChannels.join(', ') || 'None'}\n\n`;
     }
 
-    await interaction.reply({ content: infoMessage, ephemeral: false });
+    infoMessage += `\nFor more details, visit your dashboard: ${process.env.NEXT_PUBLIC_WEBSITE_URL}/dashboard\n`;
+
+    await interaction.reply({ content: infoMessage, ephemeral: true });
   } catch (error) {
     console.error("Error in info command:", error);
-    await interaction.reply({ content: "An error occurred while fetching channel information.", ephemeral: true });
+    await interaction.reply({ content: "An error occurred while fetching your information.", ephemeral: true });
   }
 }
