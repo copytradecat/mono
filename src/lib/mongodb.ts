@@ -1,6 +1,8 @@
 import { MongoClient } from 'mongodb';
 import mongoose from 'mongoose';
+import dotenv from 'dotenv';
 
+dotenv.config({ path: ['.env.local', '.env'] });
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {
