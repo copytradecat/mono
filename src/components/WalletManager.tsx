@@ -49,10 +49,8 @@ export default function WalletManager() {
 
   const fetchBalances = async (pubKey: string) => {
     try {
-      const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
-      const solBalance = await connection.getBalance(new PublicKey(pubKey));
-      const tokenBalances = await getTokenBalances(pubKey);
-      setBalances({ SOL: solBalance / LAMPORTS_PER_SOL, ...tokenBalances });
+      const { balances, metadata } = await getTokenBalances(pubKey);
+      setBalances({ balances, metadata });
     } catch (error) {
       console.error('Error fetching balances:', error);
       setBalances({ error: 'Failed to fetch balances' });
@@ -64,6 +62,7 @@ export default function WalletManager() {
       const response = await fetch('/api/get-aggregate-balance');
       if (response.ok) {
         const data = await response.json();
+        // console.log("aggregateBalance data", data);
         setAggregateBalance(data.aggregateBalance);
       } else if (response.status === 429) {
         console.log('Rate limit reached. Retrying in 5 seconds...');
@@ -77,16 +76,18 @@ export default function WalletManager() {
     }
   };
 
-  const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
   return (
     <div className="bg-white shadow rounded-lg p-6">
       <h2 className="text-2xl font-bold mb-4">Wallet Manager</h2>
       <div className="mb-6">
         <h3 className="text-xl font-semibold mb-2">Aggregate Balance</h3>
-        {Object.entries(aggregateBalance).map(([token, balance]) => (
-          <p key={token} className="mb-1">{token}: {balance}</p>
-        ))}
+        {aggregateBalance.error ? (
+          <p className="text-red-500">{aggregateBalance.error}</p>
+        ) : (
+          Object.entries(aggregateBalance).map(([token, balance]) => (
+            <p key={token} className="mb-1">{token}: {balance}</p>
+          ))
+        )}
       </div>
       <select 
         onChange={(e) => setSelectedWallet(e.target.value)}
@@ -101,9 +102,16 @@ export default function WalletManager() {
       {selectedWallet && (
         <div>
           <h3 className="text-xl font-semibold mb-2">Balances for {selectedWallet}</h3>
-          {Object.entries(balances).map(([token, balance]) => (
-            <p key={token} className="mb-1">{token}: {balance}</p>
-          ))}
+          {balances.error ? (
+            <p className="text-red-500">{balances.error}</p>
+          ) : (
+            Object.entries(balances.balances || {}).map(([token, balance]) => (
+              <p key={token} className="mb-1">
+                {token === 'SOL' ? 'SOL' : balances.metadata[token]?.symbol || token}: {typeof balance === 'number' ? balance.toFixed(6) : balance} 
+                {token === 'SOL' ? ' SOL' : ''}
+              </p>
+            ))
+          )}
           <h3 className="text-xl font-semibold mt-4 mb-2">Connected Channels</h3>
           {wallets.find(w => w.publicKey === selectedWallet)?.connectedChannels.map((channel, index) => (
             <p key={index} className="mb-1">{channel}</p>

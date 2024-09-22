@@ -10,7 +10,7 @@ const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 // Create a rate limiter that allows 10 requests per second
 const limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' });
 
-export async function rateLimitedRequest<T>(fn: () => Promise<T>): Promise<T> {
+async function rateLimitedRequest<T>(fn: () => Promise<T>): Promise<T> {
   await limiter.removeTokens(1);
   return fn();
 }
@@ -23,25 +23,44 @@ export async function getTokenBalances(publicKey: string) {
     // Fetch SOL balance
     const solBalance = await rateLimitedRequest(() => connection.getBalance(pubKey));
 
-    // Fetch token accounts
+    // Fetch all token accounts
     const tokenAccounts = await rateLimitedRequest(() => 
       connection.getParsedTokenAccountsByOwner(pubKey, {
         programId: TOKEN_PROGRAM_ID
       })
     );
 
+    // Filter out accounts with zero balance
+    const nonZeroAccounts = tokenAccounts.value.filter(
+      account => account.account.data.parsed.info.tokenAmount.uiAmount > 0
+    );
+
+    // Batch token balance requests
+    const batchSize = 100; // Adjust this based on your rate limit
     const balances: { [key: string]: number } = {
       SOL: solBalance / LAMPORTS_PER_SOL
     };
 
-    for (const account of tokenAccounts.value) {
-      const mintAddress = account.account.data.parsed.info.mint;
-      const balance = account.account.data.parsed.info.tokenAmount.uiAmount;
-      balances[mintAddress] = balance;
+    for (let i = 0; i < nonZeroAccounts.length; i += batchSize) {
+      const batch = nonZeroAccounts.slice(i, i + batchSize);
+      const batchPromises = batch.map(account => 
+        rateLimitedRequest(() => connection.getTokenAccountBalance(account.pubkey))
+      );
+      const batchResults = await Promise.all(batchPromises);
+
+      batchResults.forEach((result, index) => {
+        const mintAddress = batch[index].account.data.parsed.info.mint;
+        balances[mintAddress] = result.value.uiAmount || 0;
+      });
+
+      // Add a small delay between batches to avoid rate limiting
+      if (i + batchSize < nonZeroAccounts.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
     }
 
-    // Fetch token metadata (you may need to implement this function)
-    const tokenMetadata = await getTokenMetadata(Object.keys(balances));
+    // Fetch token metadata for non-zero balances
+    const tokenMetadata = await getTokenMetadata(Object.keys(balances).filter(key => key !== 'SOL'));
 
     return { balances, metadata: tokenMetadata };
   } catch (error) {
@@ -50,24 +69,38 @@ export async function getTokenBalances(publicKey: string) {
   }
 }
 
+async function getTokenMetadata(mintAddresses: string[]) {
+  const metadata: { [key: string]: { symbol: string, name: string } } = {};
+  const metadataPromises = mintAddresses.map(async (address) => {
+    try {
+      const response = await fetch(`https://api.jup.ag/v4/token/${address}`);
+      if (response.ok) {
+        const data = await response.json();
+        metadata[address] = { symbol: data.symbol, name: data.name };
+      }
+    } catch (error) {
+      console.error(`Error fetching metadata for token ${address}:`, error);
+    }
+  });
+
+  await Promise.all(metadataPromises);
+  return metadata;
+}
+
 export async function getAggregateBalance(wallets: string[]) {
   const aggregateBalance: { [key: string]: number } = {};
 
   for (const wallet of wallets) {
     try {
-      const publicKey = new PublicKey(wallet);
-      const solBalance = await rateLimitedRequest(() => connection.getBalance(publicKey));
-      aggregateBalance['SOL'] = (aggregateBalance['SOL'] || 0) + solBalance / LAMPORTS_PER_SOL;
-
-      const tokenBalances = await getTokenBalances(wallet);
-      for (const [mint, balance] of Object.entries(tokenBalances)) {
-        aggregateBalance[mint] = (aggregateBalance[mint] || 0) + balance;
+      const { balances } = await getTokenBalances(wallet);
+      for (const [token, balance] of Object.entries(balances)) {
+        aggregateBalance[token] = (aggregateBalance[token] || 0) + balance;
       }
     } catch (error) {
       console.error(`Error fetching balance for wallet ${wallet}:`, error);
     }
     // Add a small delay between processing each wallet
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
 
   return aggregateBalance;
@@ -114,22 +147,4 @@ export async function getSwapTransaction(quoteResponse: any, userPublicKey: stri
 export async function executeSwap(connection: Connection, swapTransaction: string, signer: any): Promise<string> {
   const transaction = Transaction.from(Buffer.from(swapTransaction, 'base64'));
   return await connection.sendTransaction(transaction, [signer]);
-}
-
-async function getTokenMetadata(mintAddresses: string[]) {
-  // You can use the Solana Token List API or another service like Jupiter API to fetch token metadata
-  // This is a placeholder implementation
-  const metadata: { [key: string]: { symbol: string, name: string } } = {};
-  for (const address of mintAddresses) {
-    try {
-      const response = await fetch(`https://api.jup.ag/v4/token/${address}`);
-      if (response.ok) {
-        const data = await response.json();
-        metadata[address] = { symbol: data.symbol, name: data.name };
-      }
-    } catch (error) {
-      console.error(`Error fetching metadata for token ${address}:`, error);
-    }
-  }
-  return metadata;
 }
