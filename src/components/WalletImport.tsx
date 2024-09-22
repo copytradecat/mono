@@ -7,36 +7,45 @@ interface WalletImportProps {
 }
 
 export default function WalletImport({ onWalletAdded }: WalletImportProps) {
-  const [seed, setSeed] = useState('');
+  const [input, setInput] = useState('');
   const [publicKey, setPublicKey] = useState('');
+  const [importType, setImportType] = useState<'seed' | 'privateKey'>('seed');
 
   const handleImport = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      const keypair = Keypair.fromSecretKey(bs58.decode(seed));
+      let keypair: Keypair;
+      if (importType === 'seed') {
+        keypair = Keypair.fromSecretKey(bs58.decode(input));
+      } else {
+        // Assuming the private key is in base58 format
+        const privateKey = bs58.decode(input);
+        keypair = Keypair.fromSecretKey(privateKey);
+      }
       setPublicKey(keypair.publicKey.toBase58());
-      await saveWallet(keypair.publicKey.toBase58(), seed);
+      await saveWallet(keypair.publicKey.toBase58(), input, importType);
       onWalletAdded();
     } catch (error) {
-      console.error('Invalid seed phrase');
-      alert('Invalid seed phrase');
+      console.error('Invalid input:', error);
+      alert('Invalid input. Please check and try again.');
     }
   };
 
   const handleCreate = async () => {
     const keypair = Keypair.generate();
     setPublicKey(keypair.publicKey.toBase58());
-    setSeed(bs58.encode(keypair.secretKey));
-    await saveWallet(keypair.publicKey.toBase58(), bs58.encode(keypair.secretKey));
+    const seed = bs58.encode(keypair.secretKey);
+    setInput(seed);
+    await saveWallet(keypair.publicKey.toBase58(), seed, 'seed');
     onWalletAdded();
   };
 
-  const saveWallet = async (publicKey: string, privateKey: string) => {
+  const saveWallet = async (publicKey: string, secretData: string, type: 'seed' | 'privateKey') => {
     try {
       const response = await fetch('/api/save-wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicKey, privateKey }),
+        body: JSON.stringify({ publicKey, secretData, type }),
       });
 
       const data = await response.json();
@@ -45,7 +54,6 @@ export default function WalletImport({ onWalletAdded }: WalletImportProps) {
         console.log('Wallet saved successfully:', data);
         console.log('Saved wallet public key:', publicKey);
         alert('Wallet saved successfully!');
-        onWalletAdded();
       } else {
         console.error('Failed to save wallet:', data);
         alert(`Failed to save wallet. Error: ${data.error}`);
@@ -60,11 +68,15 @@ export default function WalletImport({ onWalletAdded }: WalletImportProps) {
     <div>
       <h2>Import or Create Wallet</h2>
       <form onSubmit={handleImport}>
+        <select value={importType} onChange={(e) => setImportType(e.target.value as 'seed' | 'privateKey')}>
+          <option value="seed">Seed Phrase</option>
+          <option value="privateKey">Private Key</option>
+        </select>
         <input
           type="text"
-          value={seed}
-          onChange={(e) => setSeed(e.target.value)}
-          placeholder="Enter seed phrase"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder={importType === 'seed' ? "Enter seed phrase" : "Enter private key"}
         />
         <button type="submit">Import Wallet</button>
       </form>

@@ -16,16 +16,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const { publicKey, privateKey } = req.body;
+    const { publicKey, secretData, type } = req.body;
 
     await connectDB();
-    const encryptedPrivateKey = encrypt(privateKey);
+    const encryptedSecretData = encrypt(secretData);
 
     const user = await User.findOneAndUpdate(
       { email: session.user.email },
       { 
         $addToSet: { 
-          wallets: { publicKey, encryptedPrivateKey, connectedChannels: [] } 
+          wallets: { 
+            publicKey, 
+            encryptedSecretData, 
+            secretType: type,
+            connectedChannels: [] 
+          } 
         } 
       },
       { new: true, upsert: true }

@@ -9,7 +9,7 @@ import NavMenu from '../components/NavMenu';
 // import '../styles/globals.css';
 type UnifiedSupportedProvider = 'solana-wallet-adapter' | 'walletconnect';
 function MyApp({ Component, pageProps }: AppProps) {
-  const network = WalletAdapterNetwork.Devnet;
+  const network = WalletAdapterNetwork.Mainnet
 
   const wallets = useMemo(
     () => [

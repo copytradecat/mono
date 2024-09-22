@@ -2,7 +2,8 @@ import mongoose from 'mongoose';
 
 const WalletSchema = new mongoose.Schema({
     publicKey: String,
-    encryptedPrivateKey: String,
+    encryptedSecretData: String,
+    secretType: { type: String, enum: ['seed', 'privateKey'] },
     connectedChannels: [String],
 });
 
