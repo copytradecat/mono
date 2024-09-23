@@ -31,7 +31,9 @@ export default function Dashboard() {
           <ChannelManager selectedWallet={selectedWallet} />
         </div>
         <div>
-          <TradingInterface selectedWallet={selectedWallet} />
+          {selectedWallet && (
+            <TradingInterface selectedWallet={selectedWallet} userId={session?.user?.email || ''} />
+          )}
           <BotSettings />
         </div>
       </div>

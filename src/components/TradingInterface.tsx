@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
 import { Connection, PublicKey, Transaction } from '@solana/web3.js';
 import { getQuote, getSwapTransaction, executeSwap } from '../services/jupiter.service';
+import axios from 'axios';
 
 interface TradingInterfaceProps {
   selectedWallet: string | null;
+  userId: string;
 }
 
-export default function TradingInterface({ selectedWallet }: TradingInterfaceProps) {
-  const [inputToken, setInputToken] = useState('');
-  const [outputToken, setOutputToken] = useState('');
-  const [amount, setAmount] = useState('');
-  const [quoteResult, setQuoteResult] = useState(null);
-  const [swapResult, setSwapResult] = useState(null);
+export default function TradingInterface({ selectedWallet, userId }: TradingInterfaceProps) {
+  const [inputToken, setInputToken] = useState('So11111111111111111111111111111111111111112');
+  const [outputToken, setOutputToken] = useState('jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v');
+  const [amount, setAmount] = useState('0.0000001');
+  const [quoteResult, setQuoteResult] = useState<any>(null);
+  const [swapResult, setSwapResult] = useState<string | null>(null);
 
   const handleGetQuote = async () => {
     if (!selectedWallet || !inputToken || !outputToken || !amount) {
@@ -24,7 +26,7 @@ export default function TradingInterface({ selectedWallet }: TradingInterfacePro
       setQuoteResult(quote);
     } catch (error) {
       console.error('Error getting quote:', error);
-      alert(`Failed to get quote: ${error.message}`);
+      alert(`Failed to get quote: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -35,16 +37,22 @@ export default function TradingInterface({ selectedWallet }: TradingInterfacePro
     }
 
     try {
-      const swapData = await getSwapTransaction(quoteResult, selectedWallet);
-      const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
-      const signature = await executeSwap(connection, swapData.swapTransaction, {
-        publicKey: new PublicKey(selectedWallet),
-        signTransaction,
+      const swapTransaction = await getSwapTransaction(quoteResult, selectedWallet);
+
+      // Send the serialized transaction to the signing service
+      const response = await axios.post('/api/sign-and-send', {
+        userId,
+        walletPublicKey: selectedWallet,
+        serializedTransaction: swapTransaction.swapTransaction,
       });
+
+      const { signature } = response.data;
       setSwapResult(signature);
+
+      // Optionally, you can save the transaction in your database or update the UI accordingly
     } catch (error) {
       console.error('Error executing swap:', error);
-      alert(`Failed to execute swap: ${error.message}`);
+      alert(`Failed to execute swap: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 

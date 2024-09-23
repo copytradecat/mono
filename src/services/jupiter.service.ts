@@ -4,12 +4,12 @@ import dotenv from 'dotenv';
 import { RateLimiter } from 'limiter';
 import { fetchTokenMetadata } from '@metaplex-foundation/umi';
 import { Transaction } from '@solana/web3.js';
-import { createJupiterApiClient } from '@jup-ag/api';
+import { createJupiterApiClient, QuoteGetRequest, QuoteResponse } from '@jup-ag/api';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
-const jupiterApiClient = createJupiterApiClient({ basePath: process.env.NEXT_PUBLIC_SOLANA_RPC_UR_INFURA! });
+const jupiterApiClient = createJupiterApiClient({ basePath: process.env.NEXT_PUBLIC_SOLANA_RPC_URL_INFURA! });
 
 // Create a rate limiter that allows 10 requests per second
 const limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' });
@@ -124,26 +124,41 @@ export async function getAggregateBalance(wallets: string[]) {
   return aggregateBalance;
 }
 
-export async function getQuote(inputToken: string, outputToken: string, amount: number): Promise<any> {
-  const quote = await jupiterApiClient.getQuote({
+export async function getQuote(inputToken: string, outputToken: string, amount: number): Promise<QuoteResponse> {
+  const params: QuoteGetRequest = {
     inputMint: inputToken,
     outputMint: outputToken,
     amount: Math.floor(amount * 1e9), // Convert to lamports
-    slippageBps: 50,
-  });
+    autoSlippage: true,
+    autoSlippageCollisionUsdValue: 1_000,
+    maxAutoSlippageBps: 1000, // 10%
+    minimizeSlippage: true,
+    onlyDirectRoutes: false,
+    asLegacyTransaction: false,
+  };
 
-  if (!quote) {
-    throw new Error('Failed to get quote');
+  try {
+    const quote = await jupiterApiClient.quoteGet(params);
+
+    if (!quote) {
+      throw new Error('Failed to get quote');
+    }
+
+    return quote;
+  } catch (error) {
+    console.error('Error getting quote:', error);
+    throw error;
   }
-
-  return quote;
 }
 
-export async function getSwapTransaction(quoteResponse: any, userPublicKey: string): Promise<any> {
-  const swapTransaction = await jupiterApiClient.getSwapTransaction({
-    quoteResponse,
-    userPublicKey,
-    wrapUnwrapSOL: true,
+export async function getSwapTransaction(quoteResponse: QuoteResponse, userPublicKey: string): Promise<any> {
+  const swapTransaction = await jupiterApiClient.swapPost({
+    swapRequest: {
+      quoteResponse,
+      userPublicKey,
+      dynamicComputeUnitLimit: true,
+      prioritizationFeeLamports: "auto",
+    },
   });
 
   if (!swapTransaction) {

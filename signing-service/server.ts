@@ -35,8 +35,11 @@ app.post('/sign-and-send', async (req, res) => {
     const transaction = Transaction.from(Buffer.from(serializedTransaction, 'base64'));
     transaction.partialSign(keypair);
 
-    const signature = await connection.sendRawTransaction(transaction.serialize());
-    await connection.confirmTransaction(signature);
+    const serializedTx = transaction.serialize();
+    const signature = await connection.sendRawTransaction(serializedTx);
+
+    // Optionally wait for confirmation
+    // await connection.confirmTransaction(signature);
 
     res.status(200).json({ signature });
   } catch (error) {

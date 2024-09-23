@@ -21,7 +21,14 @@ export async function handleTradeCommand(interaction: any, args: string[]) {
 
     const wallet = user.wallets[0]; // Assuming the first wallet is the default
 
-    const quoteData = await getQuote('So11111111111111111111111111111111111111112', token === 'SOL' ? 'So11111111111111111111111111111111111111112' : 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', amount * 1e9);
+    const quoteData = await getQuote(
+      'So11111111111111111111111111111111111111112', // SOL mint address
+      token === 'SOL'
+        ? 'So11111111111111111111111111111111111111112'
+        : 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC mint address
+      amount * 1e9
+    );
+
     const swapData = await getSwapTransaction(quoteData, wallet.publicKey);
 
     const signature = await signAndSendTransaction(user._id, wallet.publicKey, swapData.swapTransaction);

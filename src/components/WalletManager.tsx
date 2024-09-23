@@ -3,7 +3,7 @@ import { useSession } from 'next-auth/react';
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { getTokenBalances } from '../services/jupiter.service';
 import Link from 'next/link';
-import TradingInterface from './TradingInterface';
+import axios from 'axios';
 
 interface Wallet {
   publicKey: string;
@@ -20,7 +20,6 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [balances, setBalances] = useState<any>({});
   const [aggregateBalance, setAggregateBalance] = useState<AggregateBalance>({});
-  const [signTransaction, setSignTransaction] = useState<((transaction: Transaction) => Promise<Transaction>) | null>(null);
 
   useEffect(() => {
     if (session) {
@@ -32,20 +31,18 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
   useEffect(() => {
     if (selectedWallet) {
       fetchBalances(selectedWallet);
-      fetchSignTransaction(selectedWallet);
     }
   }, [selectedWallet]);
 
   const fetchWallets = async () => {
-    const response = await fetch('/api/get-wallets');
-    if (response.ok) {
-      const data = await response.json();
-      setWallets(data.wallets);
-      if (data.wallets.length > 0 && !selectedWallet) {
-        setSelectedWallet(data.wallets[0].publicKey);
+    try {
+      const response = await axios.get('/api/get-wallets');
+      setWallets(response.data.wallets);
+      if (response.data.wallets.length > 0 && !selectedWallet) {
+        setSelectedWallet(response.data.wallets[0].publicKey);
       }
-    } else {
-      console.error('Failed to fetch wallets');
+    } catch (error) {
+      console.error('Failed to fetch wallets:', error);
     }
   };
 
@@ -73,34 +70,11 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
 
   const fetchAggregateBalance = async () => {
     try {
-      const response = await fetch('/api/get-aggregate-balance');
-      if (response.ok) {
-        const data = await response.json();
-        // console.log("aggregateBalance data", data);
-        setAggregateBalance(data.aggregateBalance);
-      } else if (response.status === 429) {
-        console.log('Rate limit reached. Retrying in 5 seconds...');
-        setTimeout(fetchAggregateBalance, 5000);
-      } else {
-        throw new Error('Failed to fetch aggregate balance');
-      }
+      const response = await axios.get('/api/get-aggregate-balance');
+      setAggregateBalance(response.data.aggregateBalance);
     } catch (error) {
       console.error('Failed to fetch aggregate balance:', error);
       setAggregateBalance({ error: 'Failed to fetch aggregate balance' });
-    }
-  };
-
-  const fetchSignTransaction = async (publicKey: string) => {
-    try {
-      const response = await fetch(`/api/get-sign-transaction?publicKey=${publicKey}`);
-      if (response.ok) {
-        const { signTransaction } = await response.json();
-        setSignTransaction(() => new Function('return ' + signTransaction)());
-      } else {
-        console.error('Failed to fetch signTransaction function');
-      }
-    } catch (error) {
-      console.error('Error fetching signTransaction function:', error);
     }
   };
 
@@ -117,7 +91,7 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
           ))
         )}
       </div>
-      {selectedWallet && signTransaction && (
+      {selectedWallet && (
         <div>
           <h3 className="text-xl font-semibold mb-2">Balances for {selectedWallet}</h3>
           {balances.error ? (
@@ -138,9 +112,6 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
             View Detailed Information
           </Link>
         </div>
-      )}
-      {selectedWallet && signTransaction && (
-        <TradingInterface selectedWallet={selectedWallet} signTransaction={signTransaction} />
       )}
     </div>
   );
