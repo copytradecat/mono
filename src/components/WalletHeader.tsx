@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 
-export default function WalletHeader({ selectedWallet, setSelectedWallet }) {
+export default function WalletHeader({ selectedWallet, setSelectedWallet }: { selectedWallet: string | null, setSelectedWallet: (wallet: string | null) => void }) {
   const { data: session } = useSession();
-  const [wallets, setWallets] = useState([]);
+  const [wallets, setWallets] = useState<Array<{ publicKey: string }>>([]);
 
   useEffect(() => {
     if (session) {

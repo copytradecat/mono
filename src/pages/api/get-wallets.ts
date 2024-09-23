@@ -5,17 +5,14 @@ import User from '../../models/User';
 import { connectDB } from '../../lib/mongodb';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await getServerSession(req, res, authOptions);
-  if (!session) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
   try {
     await connectDB();
+    const session = await getServerSession(req, res, authOptions);
+
+    if (!session) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
     const user = await User.findOne({ email: session.user.email });
 
     if (!user) {

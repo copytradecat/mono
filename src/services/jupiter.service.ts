@@ -2,13 +2,14 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL, VersionedTransaction } from '@
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import dotenv from 'dotenv';
 import { RateLimiter } from 'limiter';
-import { Metadata } from '@metaplex-foundation/mpl-token-metadata';
-import fetch from 'node-fetch';
+import { fetchTokenMetadata } from '@metaplex-foundation/umi';
 import { Transaction } from '@solana/web3.js';
+import { createJupiterApiClient } from '@jup-ag/api';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
+const jupiterApiClient = createJupiterApiClient({ basePath: process.env.NEXT_PUBLIC_SOLANA_RPC_UR_INFURA! });
 
 // Create a rate limiter that allows 10 requests per second
 const limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' });
@@ -19,28 +20,28 @@ async function rateLimitedRequest<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 async function getTokenMetadata(mintAddresses: string[]) {
-  const metadata: { [key: string]: { symbol: string, name: string, uri: string, address: string } } = {};
+  const metadata: { [key: string]: { symbol: string, name: string, uri: string, address: string, decimals: number } } = {};
 
   const metadataPromises = mintAddresses.map(async (address) => {
     try {
       const mintPublicKey = new PublicKey(address);
-      const metadataPDA = await Metadata.getPDA(mintPublicKey);
-      const metadataAccount = await Metadata.load(connection, metadataPDA);
+      const metadataAccount = await fetchTokenMetadata(connection, mintPublicKey);
 
       metadata[address] = {
-        symbol: metadataAccount.data.symbol,
-        name: metadataAccount.data.name,
-        uri: metadataAccount.data.uri,
+        symbol: metadataAccount.symbol,
+        name: metadataAccount.name,
+        uri: metadataAccount.uri,
         address: address,
+        decimals: metadataAccount.decimals,
       };
     } catch (error) {
       console.error(`Error fetching metadata for token ${address}:`, error);
-      // Fallback to Jupiter API if Metaplex fails
+      // Fallback to Jupiter API if Umi fails
       try {
         const response = await fetch(`https://api.jup.ag/v4/token/${address}`);
         if (response.ok) {
           const data = await response.json();
-          metadata[address] = { symbol: data.symbol, name: data.name, uri: data.uri, address: address };
+          metadata[address] = { symbol: data.symbol, name: data.name, uri: data.uri, address: address, decimals: data.decimals };
         }
       } catch (fallbackError) {
         console.error(`Fallback error fetching metadata for token ${address}:`, fallbackError);
@@ -123,42 +124,33 @@ export async function getAggregateBalance(wallets: string[]) {
   return aggregateBalance;
 }
 
-
 export async function getQuote(inputToken: string, outputToken: string, amount: number): Promise<any> {
-  const quoteUrl = new URL('https://quote-api.jup.ag/v6/quote');
-  quoteUrl.searchParams.append('inputMint', inputToken);
-  quoteUrl.searchParams.append('outputMint', outputToken);
-  quoteUrl.searchParams.append('amount', Math.floor(amount * 1e9).toString()); // Convert to lamports
-  quoteUrl.searchParams.append('slippageBps', '50');
-
-  const response = await fetch(quoteUrl.toString(), {
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json' },
+  const quote = await jupiterApiClient.getQuote({
+    inputMint: inputToken,
+    outputMint: outputToken,
+    amount: Math.floor(amount * 1e9), // Convert to lamports
+    slippageBps: 50,
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to get quote: ${await response.text()}`);
+  if (!quote) {
+    throw new Error('Failed to get quote');
   }
 
-  return response.json();
+  return quote;
 }
 
 export async function getSwapTransaction(quoteResponse: any, userPublicKey: string): Promise<any> {
-  const response = await fetch('https://quote-api.jup.ag/v6/swap', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      quoteResponse,
-      userPublicKey,
-      wrapUnwrapSOL: true,
-    }),
+  const swapTransaction = await jupiterApiClient.getSwapTransaction({
+    quoteResponse,
+    userPublicKey,
+    wrapUnwrapSOL: true,
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to get swap transaction: ${await response.text()}`);
+  if (!swapTransaction) {
+    throw new Error('Failed to get swap transaction');
   }
 
-  return response.json();
+  return swapTransaction;
 }
 
 export async function executeSwap(connection: Connection, swapTransaction: string, signer: any): Promise<string> {

@@ -10,8 +10,8 @@ const nextConfig = {
     }
     return config;
   },
-  babel: {
-    plugins: [['styled-components', { ssr: true }]],
+  compiler: {
+    styledComponents: true,
   },
 };
 

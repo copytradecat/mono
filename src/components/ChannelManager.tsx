@@ -6,7 +6,7 @@ interface Channel {
   name: string;
 }
 
-export default function ChannelManager({ selectedWallet }) {
+export default function ChannelManager({ selectedWallet }: { selectedWallet: string | null }) {
   const { data: session } = useSession();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [connectedChannels, setConnectedChannels] = useState<string[]>([]);

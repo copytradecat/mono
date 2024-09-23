@@ -64,7 +64,7 @@ export default function WalletInfo() {
                 {Object.entries(balances[wallet.publicKey]?.balances || {}).map(([token, balance]) => (
                   token !== 'SOL' && (
                     <li key={token}>
-                      {balances[wallet.publicKey]?.metadata?.[token]?.symbol || token}: {Number(balance).toFixed(4)}
+                      {balances[wallet.publicKey]?.metadata?.[token]?.symbol || token}: {(balance / Math.pow(10, balances[wallet.publicKey]?.metadata?.[token]?.decimals || 0)).toFixed(4)}
                     </li>
                   )
                 ))}

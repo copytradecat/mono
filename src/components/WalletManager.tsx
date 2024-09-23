@@ -15,7 +15,7 @@ interface AggregateBalance {
   [key: string]: number;
 }
 
-export default function WalletManager({ selectedWallet, setSelectedWallet }) {
+export default function WalletManager({ selectedWallet, setSelectedWallet }: { selectedWallet: string | null, setSelectedWallet: (wallet: string | null) => void }) {
   const { data: session } = useSession();
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [balances, setBalances] = useState<any>({});
@@ -95,7 +95,7 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }) {
       const response = await fetch(`/api/get-sign-transaction?publicKey=${publicKey}`);
       if (response.ok) {
         const { signTransaction } = await response.json();
-        setSignTransaction(() => signTransaction);
+        setSignTransaction(() => new Function('return ' + signTransaction)());
       } else {
         console.error('Failed to fetch signTransaction function');
       }
@@ -117,17 +117,6 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }) {
           ))
         )}
       </div>
-      <select 
-        onChange={(e) => setSelectedWallet(e.target.value)}
-        className="w-full p-2 mb-4 border rounded"
-      >
-        <option value="">Select a wallet</option>
-        {wallets.map((wallet) => (
-          <option key={wallet.publicKey} value={wallet.publicKey}>
-            {wallet.publicKey}
-          </option>
-        ))}
-      </select>
       {selectedWallet && signTransaction && (
         <div>
           <h3 className="text-xl font-semibold mb-2">Balances for {selectedWallet}</h3>

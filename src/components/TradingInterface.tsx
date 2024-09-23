@@ -4,10 +4,9 @@ import { getQuote, getSwapTransaction, executeSwap } from '../services/jupiter.s
 
 interface TradingInterfaceProps {
   selectedWallet: string | null;
-  signTransaction: (transaction: Transaction) => Promise<Transaction>;
 }
 
-export default function TradingInterface({ selectedWallet, signTransaction }: TradingInterfaceProps) {
+export default function TradingInterface({ selectedWallet }: TradingInterfaceProps) {
   const [inputToken, setInputToken] = useState('');
   const [outputToken, setOutputToken] = useState('');
   const [amount, setAmount] = useState('');

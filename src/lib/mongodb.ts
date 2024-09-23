@@ -1,6 +1,17 @@
+import dotenv from 'dotenv';
 import { MongoClient } from 'mongodb';
 import mongoose from 'mongoose';
-import dotenv from 'dotenv';
+
+declare global {
+  var mongoose: {
+    conn: typeof mongoose | null;
+    promise: Promise<typeof mongoose> | null;
+  };
+}
+
+if (!global.mongoose) {
+  global.mongoose = { conn: null, promise: null };
+}
 
 dotenv.config({ path: ['.env.local', '.env'] });
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -27,17 +38,21 @@ export async function connectToDatabase() {
 }
 
 export async function connectDB() {
-  if (mongoose.connection.readyState >= 1) {
-    return;
+  if (global.mongoose.conn) {
+    return global.mongoose.conn;
   }
 
-  try {
-    await mongoose.connect(MONGODB_URI as string);
-    console.log('Connected to MongoDB');
-  } catch (error) {
-    console.error('Failed to connect to MongoDB:', error);
-    throw error;
+  if (!global.mongoose.promise) {
+    const opts = {
+      bufferCommands: false,
+    };
+
+    global.mongoose.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
+      return mongoose;
+    });
   }
+  global.mongoose.conn = await global.mongoose.promise;
+  return global.mongoose.conn;
 }
 
 export function disconnectDB() {
