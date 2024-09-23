@@ -23,7 +23,7 @@ export default function TradingInterface({ selectedWallet }: { selectedWallet: s
       setQuoteResult(quote);
     } catch (error) {
       console.error('Error getting quote:', error);
-      alert('Failed to get quote. Please try again.');
+      alert(`Failed to get quote: ${error.message}`);
     }
   };
 
@@ -43,7 +43,7 @@ export default function TradingInterface({ selectedWallet }: { selectedWallet: s
       setSwapResult(signature);
     } catch (error) {
       console.error('Error executing swap:', error);
-      alert('Failed to execute swap. Please try again.');
+      alert(`Failed to execute swap: ${error.message}`);
     }
   };
 

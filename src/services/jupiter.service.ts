@@ -2,6 +2,9 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import dotenv from 'dotenv';
 import { RateLimiter } from 'limiter';
+import { Metadata } from '@metaplex-foundation/mpl-token-metadata';
+import fetch from 'node-fetch';
+import { Transaction } from '@solana/web3.js';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -13,6 +16,40 @@ const limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' });
 async function rateLimitedRequest<T>(fn: () => Promise<T>): Promise<T> {
   await limiter.removeTokens(1);
   return fn();
+}
+
+async function getTokenMetadata(mintAddresses: string[]) {
+  const metadata: { [key: string]: { symbol: string, name: string, uri: string, address: string } } = {};
+
+  const metadataPromises = mintAddresses.map(async (address) => {
+    try {
+      const mintPublicKey = new PublicKey(address);
+      const metadataPDA = await Metadata.getPDA(mintPublicKey);
+      const metadataAccount = await Metadata.load(connection, metadataPDA);
+
+      metadata[address] = {
+        symbol: metadataAccount.data.symbol,
+        name: metadataAccount.data.name,
+        uri: metadataAccount.data.uri,
+        address: address,
+      };
+    } catch (error) {
+      console.error(`Error fetching metadata for token ${address}:`, error);
+      // Fallback to Jupiter API if Metaplex fails
+      try {
+        const response = await fetch(`https://api.jup.ag/v4/token/${address}`);
+        if (response.ok) {
+          const data = await response.json();
+          metadata[address] = { symbol: data.symbol, name: data.name, uri: data.uri, address: address };
+        }
+      } catch (fallbackError) {
+        console.error(`Fallback error fetching metadata for token ${address}:`, fallbackError);
+      }
+    }
+  });
+
+  await Promise.all(metadataPromises);
+  return metadata;
 }
 
 export async function getTokenBalances(publicKey: string) {
@@ -67,24 +104,6 @@ export async function getTokenBalances(publicKey: string) {
   }
 }
 
-async function getTokenMetadata(mintAddresses: string[]) {
-  const metadata: { [key: string]: { symbol: string, name: string, address: string } } = {};
-  const metadataPromises = mintAddresses.map(async (address) => {
-    try {
-      const response = await fetch(`https://api.jup.ag/v4/token/${address}`);
-      if (response.ok) {
-        const data = await response.json();
-        metadata[address] = { symbol: data.symbol, name: data.name, address: address };
-      }
-    } catch (error) {
-      console.error(`Error fetching metadata for token ${address}:`, error);
-    }
-  });
-
-  await Promise.all(metadataPromises);
-  return metadata;
-}
-
 export async function getAggregateBalance(wallets: string[]) {
   const aggregateBalance: { [key: string]: number } = {};
 
@@ -109,7 +128,7 @@ export async function getQuote(inputToken: string, outputToken: string, amount: 
   const quoteUrl = new URL('https://quote-api.jup.ag/v6/quote');
   quoteUrl.searchParams.append('inputMint', inputToken);
   quoteUrl.searchParams.append('outputMint', outputToken);
-  quoteUrl.searchParams.append('amount', amount.toString());
+  quoteUrl.searchParams.append('amount', Math.floor(amount * 1e9).toString()); // Convert to lamports
   quoteUrl.searchParams.append('slippageBps', '50');
 
   const response = await fetch(quoteUrl.toString(), {
