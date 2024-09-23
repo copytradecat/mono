@@ -2,7 +2,7 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL, VersionedTransaction } from '@
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import dotenv from 'dotenv';
 import { RateLimiter } from 'limiter';
-import { fetchTokenMetadata } from '@metaplex-foundation/umi';
+import { Metaplex, token } from '@metaplex-foundation/js';
 import { Transaction } from '@solana/web3.js';
 import { createJupiterApiClient, QuoteGetRequest, QuoteResponse } from '@jup-ag/api';
 
@@ -10,6 +10,7 @@ dotenv.config({ path: ['.env.local', '.env'] });
 
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 const jupiterApiClient = createJupiterApiClient({ basePath: process.env.NEXT_PUBLIC_SOLANA_RPC_URL_INFURA! });
+const metaplex = Metaplex.make(connection);
 
 // Create a rate limiter that allows 10 requests per second
 const limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' });
@@ -20,28 +21,34 @@ async function rateLimitedRequest<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 async function getTokenMetadata(mintAddresses: string[]) {
-  const metadata: { [key: string]: { symbol: string, name: string, uri: string, address: string, decimals: number } } = {};
+  const metadata: { [key: string]: { symbol: string; name: string; uri: string; address: string; decimals: number } } = {};
 
   const metadataPromises = mintAddresses.map(async (address) => {
     try {
       const mintPublicKey = new PublicKey(address);
-      const metadataAccount = await fetchTokenMetadata(connection, mintPublicKey);
+      const nft = await metaplex.nfts().findByMint({ mintAddress: mintPublicKey }).run();
 
       metadata[address] = {
-        symbol: metadataAccount.symbol,
-        name: metadataAccount.name,
-        uri: metadataAccount.uri,
+        symbol: nft.symbol,
+        name: nft.name,
+        uri: nft.uri,
         address: address,
-        decimals: metadataAccount.decimals,
+        decimals: nft.mint.decimals,
       };
     } catch (error) {
       console.error(`Error fetching metadata for token ${address}:`, error);
-      // Fallback to Jupiter API if Umi fails
+      // Fallback to Jupiter API if Metaplex fails
       try {
         const response = await fetch(`https://api.jup.ag/v4/token/${address}`);
         if (response.ok) {
           const data = await response.json();
-          metadata[address] = { symbol: data.symbol, name: data.name, uri: data.uri, address: address, decimals: data.decimals };
+          metadata[address] = {
+            symbol: data.symbol,
+            name: data.name,
+            uri: data.uri,
+            address: address,
+            decimals: data.decimals,
+          };
         }
       } catch (fallbackError) {
         console.error(`Fallback error fetching metadata for token ${address}:`, fallbackError);

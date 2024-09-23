@@ -2,13 +2,26 @@ import axios from 'axios';
 
 const SIGNING_SERVICE_URL = process.env.SIGNING_SERVICE_URL || 'http://localhost:3001';
 
-export async function signAndSendTransaction(userId: string, walletPublicKey: string, serializedTransaction: string): Promise<string> {
+export async function signAndSendTransaction(
+  userId: string,
+  walletPublicKey: string,
+  serializedTransaction: string,
+  token: string
+): Promise<string> {
   try {
-    const response = await axios.post(`${SIGNING_SERVICE_URL}/sign-and-send`, {
-      userId,
-      walletPublicKey,
-      serializedTransaction,
-    });
+    const response = await axios.post(
+      `${SIGNING_SERVICE_URL}/sign-and-send`,
+      {
+        userId,
+        walletPublicKey,
+        serializedTransaction,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
 
     return response.data.signature;
   } catch (error) {

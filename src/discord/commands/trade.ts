@@ -31,7 +31,11 @@ export async function handleTradeCommand(interaction: any, args: string[]) {
 
     const swapData = await getSwapTransaction(quoteData, wallet.publicKey);
 
-    const signature = await signAndSendTransaction(user._id, wallet.publicKey, swapData.swapTransaction);
+    const signature = await signAndSendTransaction(
+      user._id.toString(),
+      wallet.publicKey,
+      swapData.swapTransaction
+    );
 
     await Trade.create({
       user: userId,
