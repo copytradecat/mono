@@ -50,10 +50,22 @@ export default function WalletManager() {
   const fetchBalances = async (pubKey: string) => {
     try {
       const { balances, metadata } = await getTokenBalances(pubKey);
-      setBalances({ balances, metadata });
+      console.log("balances: ", balances);
+      console.log("metadata: ", metadata);
+      setBalances(prevBalances => ({
+        ...prevBalances,
+        [pubKey]: { balances, metadata, error: null }
+      }));
     } catch (error) {
       console.error('Error fetching balances:', error);
-      setBalances({ error: 'Failed to fetch balances' });
+      setBalances(prevBalances => ({
+        ...prevBalances,
+        [pubKey]: { 
+          balances: prevBalances[pubKey]?.balances || {}, 
+          metadata: prevBalances[pubKey]?.metadata || {},
+          error: 'Failed to fetch balances'
+        }
+      }));
     }
   };
 

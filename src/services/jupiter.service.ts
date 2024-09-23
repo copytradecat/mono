@@ -23,26 +23,23 @@ export async function getTokenBalances(publicKey: string) {
     // Fetch SOL balance
     const solBalance = await rateLimitedRequest(() => connection.getBalance(pubKey));
 
-    // Fetch all token accounts
+    // Fetch token accounts
     const tokenAccounts = await rateLimitedRequest(() => 
       connection.getParsedTokenAccountsByOwner(pubKey, {
         programId: TOKEN_PROGRAM_ID
       })
     );
 
-    // Filter out accounts with zero balance
-    const nonZeroAccounts = tokenAccounts.value.filter(
-      account => account.account.data.parsed.info.tokenAmount.uiAmount > 0
-    );
+    console.log("Token Accounts:", tokenAccounts);
 
-    // Batch token balance requests
-    const batchSize = 100; // Adjust this based on your rate limit
     const balances: { [key: string]: number } = {
       SOL: solBalance / LAMPORTS_PER_SOL
     };
 
-    for (let i = 0; i < nonZeroAccounts.length; i += batchSize) {
-      const batch = nonZeroAccounts.slice(i, i + batchSize);
+    // Batch token balance requests
+    const batchSize = 100;
+    for (let i = 0; i < tokenAccounts.value.length; i += batchSize) {
+      const batch = tokenAccounts.value.slice(i, i + batchSize);
       const batchPromises = batch.map(account => 
         rateLimitedRequest(() => connection.getTokenAccountBalance(account.pubkey))
       );
@@ -53,13 +50,14 @@ export async function getTokenBalances(publicKey: string) {
         balances[mintAddress] = result.value.uiAmount || 0;
       });
 
-      // Add a small delay between batches to avoid rate limiting
-      if (i + batchSize < nonZeroAccounts.length) {
+      console.log(`Batch ${i / batchSize + 1} Balances:`, balances);
+
+      if (i + batchSize < tokenAccounts.value.length) {
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
 
-    // Fetch token metadata for non-zero balances
+    // Fetch token metadata for all balances
     const tokenMetadata = await getTokenMetadata(Object.keys(balances).filter(key => key !== 'SOL'));
 
     return { balances, metadata: tokenMetadata };
@@ -70,13 +68,13 @@ export async function getTokenBalances(publicKey: string) {
 }
 
 async function getTokenMetadata(mintAddresses: string[]) {
-  const metadata: { [key: string]: { symbol: string, name: string } } = {};
+  const metadata: { [key: string]: { symbol: string, name: string, address: string } } = {};
   const metadataPromises = mintAddresses.map(async (address) => {
     try {
       const response = await fetch(`https://api.jup.ag/v4/token/${address}`);
       if (response.ok) {
         const data = await response.json();
-        metadata[address] = { symbol: data.symbol, name: data.name };
+        metadata[address] = { symbol: data.symbol, name: data.name, address: address };
       }
     } catch (error) {
       console.error(`Error fetching metadata for token ${address}:`, error);
