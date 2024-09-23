@@ -3,6 +3,7 @@ import { useSession } from 'next-auth/react';
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { getTokenBalances } from '../services/jupiter.service';
 import Link from 'next/link';
+import TradingInterface from './TradingInterface';
 
 interface Wallet {
   publicKey: string;
@@ -105,6 +106,7 @@ export default function WalletManager() {
         onChange={(e) => setSelectedWallet(e.target.value)}
         className="w-full p-2 mb-4 border rounded"
       >
+        <option value="">Select a wallet</option>
         {wallets.map((wallet) => (
           <option key={wallet.publicKey} value={wallet.publicKey}>
             {wallet.publicKey}
@@ -133,6 +135,7 @@ export default function WalletManager() {
           </Link>
         </div>
       )}
+      <TradingInterface selectedWallet={selectedWallet} />
     </div>
   );
 }
