@@ -6,22 +6,31 @@ interface Channel {
   name: string;
 }
 
-export default function ChannelManager() {
+export default function ChannelManager({ selectedWallet }) {
   const { data: session } = useSession();
   const [channels, setChannels] = useState<Channel[]>([]);
-  const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
+  const [connectedChannels, setConnectedChannels] = useState<string[]>([]);
 
   useEffect(() => {
     if (session && selectedWallet) {
       fetchChannels();
+      fetchConnectedChannels();
     }
   }, [session, selectedWallet]);
 
   const fetchChannels = async () => {
-    const response = await fetch(`/api/get-channels?wallet=${selectedWallet}`);
+    const response = await fetch('/api/get-channels');
     if (response.ok) {
       const data = await response.json();
       setChannels(data.channels);
+    }
+  };
+
+  const fetchConnectedChannels = async () => {
+    const response = await fetch(`/api/get-connected-channels?wallet=${selectedWallet}`);
+    if (response.ok) {
+      const data = await response.json();
+      setConnectedChannels(data.connectedChannels);
     }
   };
 
@@ -32,24 +41,41 @@ export default function ChannelManager() {
       body: JSON.stringify({ wallet: selectedWallet, channelId }),
     });
     if (response.ok) {
-      fetchChannels();
+      fetchConnectedChannels();
     }
   };
 
   return (
-    <div>
-      <h2>Channel Manager</h2>
-      <select onChange={(e) => setSelectedWallet(e.target.value)}>
-        {/* Populate with wallets */}
-      </select>
-      <ul>
-        {channels.map((channel) => (
-          <li key={channel.id}>
-            {channel.name}
-            <button onClick={() => connectChannel(channel.id)}>Connect</button>
-          </li>
-        ))}
-      </ul>
+    <div className="bg-white shadow rounded-lg p-6">
+      <h2 className="text-2xl font-bold mb-4">Channel Manager</h2>
+      {selectedWallet ? (
+        <div>
+          <h3 className="text-xl font-semibold mb-2">Connected Channels:</h3>
+          <ul className="mb-4">
+            {connectedChannels.map((channelId) => (
+              <li key={channelId}>{channelId}</li>
+            ))}
+          </ul>
+          <h3 className="text-xl font-semibold mb-2">Available Channels:</h3>
+          <ul>
+            {channels.map((channel) => (
+              <li key={channel.id} className="mb-2">
+                {channel.name}
+                {!connectedChannels.includes(channel.id) && (
+                  <button
+                    onClick={() => connectChannel(channel.id)}
+                    className="ml-2 bg-blue-500 text-white px-2 py-1 rounded text-sm"
+                  >
+                    Connect
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <p>Please select a wallet to manage channels.</p>
+      )}
     </div>
   );
 }

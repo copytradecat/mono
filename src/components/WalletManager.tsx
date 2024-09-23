@@ -15,12 +15,12 @@ interface AggregateBalance {
   [key: string]: number;
 }
 
-export default function WalletManager() {
+export default function WalletManager({ selectedWallet, setSelectedWallet }) {
   const { data: session } = useSession();
   const [wallets, setWallets] = useState<Wallet[]>([]);
-  const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
   const [balances, setBalances] = useState<any>({});
   const [aggregateBalance, setAggregateBalance] = useState<AggregateBalance>({});
+  const [signTransaction, setSignTransaction] = useState<((transaction: Transaction) => Promise<Transaction>) | null>(null);
 
   useEffect(() => {
     if (session) {
@@ -32,6 +32,7 @@ export default function WalletManager() {
   useEffect(() => {
     if (selectedWallet) {
       fetchBalances(selectedWallet);
+      fetchSignTransaction(selectedWallet);
     }
   }, [selectedWallet]);
 
@@ -40,7 +41,7 @@ export default function WalletManager() {
     if (response.ok) {
       const data = await response.json();
       setWallets(data.wallets);
-      if (data.wallets.length > 0) {
+      if (data.wallets.length > 0 && !selectedWallet) {
         setSelectedWallet(data.wallets[0].publicKey);
       }
     } else {
@@ -89,6 +90,20 @@ export default function WalletManager() {
     }
   };
 
+  const fetchSignTransaction = async (publicKey: string) => {
+    try {
+      const response = await fetch(`/api/get-sign-transaction?publicKey=${publicKey}`);
+      if (response.ok) {
+        const { signTransaction } = await response.json();
+        setSignTransaction(() => signTransaction);
+      } else {
+        console.error('Failed to fetch signTransaction function');
+      }
+    } catch (error) {
+      console.error('Error fetching signTransaction function:', error);
+    }
+  };
+
   return (
     <div className="bg-white shadow rounded-lg p-6">
       <h2 className="text-2xl font-bold mb-4">Wallet Manager</h2>
@@ -113,7 +128,7 @@ export default function WalletManager() {
           </option>
         ))}
       </select>
-      {selectedWallet && (
+      {selectedWallet && signTransaction && (
         <div>
           <h3 className="text-xl font-semibold mb-2">Balances for {selectedWallet}</h3>
           {balances.error ? (
@@ -135,7 +150,9 @@ export default function WalletManager() {
           </Link>
         </div>
       )}
-      <TradingInterface selectedWallet={selectedWallet} />
+      {selectedWallet && signTransaction && (
+        <TradingInterface selectedWallet={selectedWallet} signTransaction={signTransaction} />
+      )}
     </div>
   );
 }

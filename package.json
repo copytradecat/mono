@@ -4,13 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"next dev\" \"npm run bot:dev\"",
-    "build": "next build",
-    "start": "concurrently \"next start\" \"npm run bot:start\"",
+    "dev": "concurrently \"next dev\" \"npm run bot:dev\" \"npm run server:start\"",
+    "start": "concurrently \"next start\" \"npm run bot:start\" \"npm run server:start\"",
     "lint": "next lint",
+    "ui:build": "next build",
+    "ui:dev": "next dev",
     "bot:dev": "nodemon --watch src/discord --ext ts,json --exec npx tsx src/discord/bot.ts",
     "bot:start": "npx tsx src/discord/bot.ts",
-    "bot:test": "npx tsx src/discord/test-bot.ts"
+    "bot:test": "npx tsx src/discord/test-bot.ts",
+    "server:start": "tsc signing-service/server.ts && node signing-service/server.js",
+    "server:dev": "nodemon --watch signing-service --ext ts,json --exec npx tsx signing-service/server.ts"
   },
   "dependencies": {
     "@auth/core": "^0.35.0",
@@ -29,6 +32,7 @@
     "crypto-js": "^4.2.0",
     "discord.js": "^14.16.2",
     "dotenv": "^16.4.5",
+    "express": "^4.21.0",
     "limiter": "^2.1.0",
     "mongodb": "^6.9.0",
     "mongoose": "^8.6.2",

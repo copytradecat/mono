@@ -1,5 +1,6 @@
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
+import WalletHeader from '../components/WalletHeader';
 import WalletManager from '../components/WalletManager';
 import ChannelManager from '../components/ChannelManager';
 import TradingInterface from '../components/TradingInterface';
@@ -20,6 +21,7 @@ export default function Dashboard() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      <WalletHeader />
       <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div>

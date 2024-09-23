@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { useWallet } from '@solana/wallet-adapter-react';
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection, PublicKey, Transaction } from '@solana/web3.js';
 import { getQuote, getSwapTransaction, executeSwap } from '../services/jupiter.service';
 
-export default function TradingInterface({ selectedWallet }: { selectedWallet: string | null }) {
-  const { publicKey, signTransaction } = useWallet();
+interface TradingInterfaceProps {
+  selectedWallet: string | null;
+  signTransaction: (transaction: Transaction) => Promise<Transaction>;
+}
+
+export default function TradingInterface({ selectedWallet, signTransaction }: TradingInterfaceProps) {
   const [inputToken, setInputToken] = useState('');
   const [outputToken, setOutputToken] = useState('');
   const [amount, setAmount] = useState('');
@@ -28,8 +30,8 @@ export default function TradingInterface({ selectedWallet }: { selectedWallet: s
   };
 
   const handleSubmitSwap = async () => {
-    if (!selectedWallet || !quoteResult || !signTransaction) {
-      alert('Please select a wallet, get a quote first, and ensure wallet is connected');
+    if (!selectedWallet || !quoteResult) {
+      alert('Please select a wallet and get a quote first');
       return;
     }
 
@@ -38,10 +40,7 @@ export default function TradingInterface({ selectedWallet }: { selectedWallet: s
       const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
       const signature = await executeSwap(connection, swapData.swapTransaction, {
         publicKey: new PublicKey(selectedWallet),
-        secretKey: new Uint8Array(0), // This is a placeholder, as we don't have access to the secret key
-        sign: async (transaction: VersionedTransaction) => {
-          return await signTransaction(transaction);
-        },
+        signTransaction,
       });
       setSwapResult(signature);
     } catch (error) {

@@ -12,7 +12,7 @@ export async function handleBalance(userId: string, reply: (content: string) => 
       return reply("You don't have any wallets linked to your account.");
     }
     
-    const connection = new Connection(process.env.SOLANA_RPC_URL!);
+    const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
     
     const balancePromises = user.wallets.map(async (wallet: { publicAddress: string }) => {
       const publicKey = new PublicKey(wallet.publicAddress);

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useSession } from 'next-auth/react';
 import WalletConnection from '../components/WalletConnection';
+import WalletHeader from '../components/WalletHeader';
 
 export default function ConnectWallet() {
   const router = useRouter();
@@ -23,8 +24,9 @@ export default function ConnectWallet() {
   }
 
   return (
-    <div>
-      <h1>Connect Your Wallet</h1>
+    <div className="container mx-auto px-4 py-8">
+      <WalletHeader />
+      <h1 className="text-3xl font-bold mb-8">Connect Your Wallet</h1>
       <p>Channel ID: {channelId}</p>
       <WalletConnection channelId={channelId} />
     </div>
