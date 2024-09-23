@@ -28,8 +28,8 @@ export default function TradingInterface({ selectedWallet }: { selectedWallet: s
   };
 
   const handleSubmitSwap = async () => {
-    if (!selectedWallet || !quoteResult) {
-      alert('Please select a wallet and get a quote first');
+    if (!selectedWallet || !quoteResult || !signTransaction) {
+      alert('Please select a wallet, get a quote first, and ensure wallet is connected');
       return;
     }
 
@@ -38,7 +38,10 @@ export default function TradingInterface({ selectedWallet }: { selectedWallet: s
       const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
       const signature = await executeSwap(connection, swapData.swapTransaction, {
         publicKey: new PublicKey(selectedWallet),
-        signTransaction,
+        secretKey: new Uint8Array(0), // This is a placeholder, as we don't have access to the secret key
+        sign: async (transaction: VersionedTransaction) => {
+          return await signTransaction(transaction);
+        },
       });
       setSwapResult(signature);
     } catch (error) {

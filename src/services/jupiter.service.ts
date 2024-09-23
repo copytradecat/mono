@@ -1,4 +1,4 @@
-import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { Connection, PublicKey, LAMPORTS_PER_SOL, VersionedTransaction } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import dotenv from 'dotenv';
 import { RateLimiter } from 'limiter';
@@ -162,6 +162,11 @@ export async function getSwapTransaction(quoteResponse: any, userPublicKey: stri
 }
 
 export async function executeSwap(connection: Connection, swapTransaction: string, signer: any): Promise<string> {
-  const transaction = Transaction.from(Buffer.from(swapTransaction, 'base64'));
-  return await connection.sendTransaction(transaction, [signer]);
+  const { VersionedTransaction } = await import('@solana/web3.js');
+  const transaction = VersionedTransaction.deserialize(Buffer.from(swapTransaction, 'base64'));
+  if (!transaction.sign) {
+    throw new Error('Transaction is not a VersionedTransaction');
+  }
+  transaction.sign([signer]);
+  return await connection.sendTransaction(transaction);
 }
