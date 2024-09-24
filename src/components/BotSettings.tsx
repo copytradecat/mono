@@ -74,7 +74,9 @@ export default function BotSettings() {
     <div className="p-4 bg-white shadow rounded-lg">
       <h2 className="text-2xl font-bold mb-4">Bot Settings</h2>
       <div>
-
+        {settings ? 
+              <pre className="bg-gray-100 p-2 rounded">
+                {JSON.stringify(settings, null, 2)}</pre> : ''}
         <h3 className="text-xl font-semibold mb-2">Slippage Type</h3>
           <div>
             <button
