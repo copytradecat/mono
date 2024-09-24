@@ -142,7 +142,7 @@ export default function BotSettings() {
         </div>
         <h3 className="text-xl font-semibold mt-4 mb-2">Transaction Speed</h3>
         <div>
-          {['medium', 'high', 'veryHigh', 'auto', 'custom'].map((speed) => (
+          {['medium', 'high', 'veryHigh'].map((speed) => (
             <button
               key={speed}
               onClick={() => {

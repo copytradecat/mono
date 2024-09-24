@@ -180,9 +180,9 @@ export async function getSwapTransaction(
     wrapUnwrapSOL,
     asLegacyTransaction: false,
     dynamicComputeUnitLimit: true,
-    prioritizationFeeLamports: priorityFee === 'auto' ? 'auto' : priorityFee * LAMPORTS_PER_SOL,
-    ...(settings.slippageType === 'dynamic' && {dynamicSlippage: {maxBps:300}}),
+    // prioritizationFeeLamports: priorityFee === 'auto' ? 'auto' : priorityFee * LAMPORTS_PER_SOL,
     computeUnitPriceMicroLamports: transactionSpeed === 'medium' ? 0 : "auto",
+    ...(settings.slippageType === 'dynamic' && {dynamicSlippage: {maxBps:300}}),
   };
 
   const swapTransaction = await jupiterApiClient.swapPost({
