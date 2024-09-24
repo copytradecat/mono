@@ -9,15 +9,13 @@ const WalletSchema = new mongoose.Schema({
 
 const SettingsSchema = new mongoose.Schema({
     slippage: { type: Number, default: 3.0 },
+    slippageType: { type: String, enum: ['fixed', 'dynamic'], default: 'fixed' },
     smartMevProtection: { type: String, enum: ['fast', 'secure'], default: 'secure' },
-    setSpeed: { type: String, enum: ['default', 'auto'], default: 'default' },
+    setSpeed: { type: String, enum: ['default', 'fast'], default: 'default' },
     priorityFee: { type: Number, default: 0.01 },
-    briberyAmount: { type: Number, default: 0.01 },
     entryAmounts: { type: [Number], default: [0.05, 0.1, 0.24, 0.69, 0.8, 1] },
     exitPercentages: { type: [Number], default: [24, 33, 100] },
     wrapUnwrapSOL: { type: Boolean, default: true },
-    useSharedAccounts: { type: Boolean, default: true },
-    useTokenLedger: { type: Boolean, default: true },
 });
 
 const UserSchema = new mongoose.Schema({

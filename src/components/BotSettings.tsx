@@ -1,18 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 
-interface Settings {
+export interface Settings {
   slippage: number;
   slippageType: 'fixed' | 'dynamic';
-  smartMevProtection: 'fast' | 'secure';
-  setSpeed: 'default' | 'auto';
-  priorityFee: number;
-  briberyAmount: number; // Not used in transaction, but kept for bot logic
-  entryAmounts: number[]; // Not used in transaction, but kept for bot logic
-  exitPercentages: number[]; // Not used in transaction, but kept for bot logic
+  smartMevProtection: 'fast' | 'secure'; // Not implemented
+  setSpeed: 'default' | 'fast';
+  priorityFee: number; 
+  // bribery removed, not implemented
+  entryAmounts: number[]; // For bot logic, not used in transaction
+  exitPercentages: number[]; // For bot logic, not used in transaction
   wrapUnwrapSOL: boolean;
-  useSharedAccounts: boolean;
-  useTokenLedger: boolean;
 }
 
 const defaultSettings: Settings = {
@@ -21,12 +19,9 @@ const defaultSettings: Settings = {
   smartMevProtection: 'secure',
   setSpeed: 'default',
   priorityFee: 0.01,
-  briberyAmount: 0.01,
   entryAmounts: [0.05, 0.1, 0.24, 0.69, 0.8, 1],
   exitPercentages: [24, 33, 100],
-  wrapUnwrapSOL: true,
-  useSharedAccounts: true,
-  useTokenLedger: true
+  wrapUnwrapSOL: true
 };
 
 export default function BotSettings() {
@@ -152,7 +147,7 @@ export default function BotSettings() {
             onClick={() => updateSetting('setSpeed', 'auto')}
             className={`px-4 py-2 rounded ${settings.setSpeed === 'auto' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
           >
-            Auto
+            Fast
           </button>
         </div>
         <h3 className="text-xl font-semibold mt-4 mb-2">Priority Fee (SOL)</h3>
@@ -170,29 +165,6 @@ export default function BotSettings() {
           className="mr-2"
         />
         <label>Automatically wrap/unwrap SOL</label>
-        <h3 className="text-xl font-semibold mt-4 mb-2">Use Shared Accounts</h3>
-        <input
-          type="checkbox"
-          checked={settings.useSharedAccounts}
-          onChange={(e) => updateSetting('useSharedAccounts', e.target.checked)}
-          className="mr-2"
-        />
-        <label>Use shared accounts for better efficiency</label>
-        <h3 className="text-xl font-semibold mt-4 mb-2">Use Token Ledger</h3>
-        <input
-          type="checkbox"
-          checked={settings.useTokenLedger}
-          onChange={(e) => updateSetting('useTokenLedger', e.target.checked)}
-          className="mr-2"
-        />
-        <label>Use token ledger for tracking</label>
-        <h3 className="text-xl font-semibold mt-4 mb-2">Bribery Amount (SOL)</h3>
-        <input
-          type="number"
-          value={settings.briberyAmount}
-          onChange={(e) => updateSetting('briberyAmount', parseFloat(e.target.value))}
-          className="w-full p-2 border rounded"
-        />
         <h3 className="text-xl font-semibold mt-4 mb-2">Entry Amounts</h3>
         <div className="flex flex-wrap">
           {(settings.entryAmounts || []).map((value, index) => (

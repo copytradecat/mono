@@ -132,19 +132,26 @@ export async function getAggregateBalance(wallets: string[]) {
 }
 
 export async function getQuote(inputToken: string, outputToken: string, amount: number, slippageSettings: { type: 'fixed' | 'dynamic', value?: number }): Promise<QuoteResponse> {
-  const params: QuoteGetRequest = slippageSettings.type === 'fixed' ? {  // fixed slippage
+  const baseParams: QuoteGetRequest = {
     inputMint: inputToken,
     outputMint: outputToken,
     amount: Math.floor(amount * 1e9), // Convert to lamports
-    slippageBps: Math.floor(slippageSettings.value! * 100),
-  } : { // Dynamic Slippage
-    inputMint: inputToken,
-    outputMint: outputToken,
-    amount: Math.floor(amount * 1e9), // Convert to lamports
-    autoSlippage: true,
-    autoSlippageCollisionUsdValue: 1000,
-    onlyDirectRoutes: false,
   };
+
+  const params: QuoteGetRequest = slippageSettings.type === 'fixed' 
+    ? {
+        ...baseParams,
+        slippageBps: Math.floor(slippageSettings.value! * 100),
+      }
+    : {
+        ...baseParams,
+        autoSlippage: true,
+        autoSlippageCollisionUsdValue: 1_000,
+        maxAutoSlippageBps: 1000, // 10%
+        minimizeSlippage: true,
+        onlyDirectRoutes: false,
+        asLegacyTransaction: false,
+      };
 
   try {
     const quote = await jupiterApiClient.quoteGet(params);
@@ -161,17 +168,21 @@ export async function getQuote(inputToken: string, outputToken: string, amount: 
 }
 
 export async function getSwapTransaction(quoteResponse: QuoteResponse, userPublicKey: string, settings: any): Promise<any> {
+  const swapRequest = {
+    quoteResponse,
+    userPublicKey,
+    wrapUnwrapSOL: settings.wrapUnwrapSOL,
+    asLegacyTransaction: false,
+    dynamicComputeUnitLimit: true,
+    prioritizationFeeLamports: settings.priorityFee === 'auto' ? 'auto' : settings.priorityFee * LAMPORTS_PER_SOL,
+    ...(settings.swapSpeed === 'fast' && {computeUnitPriceMicroLamports: "auto"}),
+    ...(settings.slippageType === 'dynamic' && {dynamicSlippage: {maxBps:300}})
+    // feeAccount: settings.feeAccount,
+    // trackingAccount: trackingAccount.toBase58(),  // Use actual key
+  };
+
   const swapTransaction = await jupiterApiClient.swapPost({
-    swapRequest: {
-      quoteResponse,
-      userPublicKey,
-      wrapAndUnwrapSol: true,
-      dynamicComputeUnitLimit: true,
-      prioritizationFeeLamports: settings.priorityFee === 'auto' ? 'auto' : settings.priorityFee * LAMPORTS_PER_SOL,
-      useSharedAccounts: true, // Use shared accounts for better efficiency
-      // useTokenLedger: true, // Use token ledger for tracking
-      // feeAccount: settings.feeAccount, // Optional fee account
-    },
+    swapRequest,
   });
 
   if (!swapTransaction) {

@@ -2,20 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Connection, PublicKey, Transaction } from '@solana/web3.js';
 import { getQuote, getSwapTransaction, executeSwap } from '../services/jupiter.service';
 import axios from 'axios';
+import { Settings } from './BotSettings';
 
 interface TradingInterfaceProps {
   selectedWallet: string | null;
   userId: string;
-}
-
-interface Settings {
-  slippage: number;
-  smartMevProtection: 'fast' | 'secure';
-  setSpeed: 'default' | 'auto';
-  priorityFee: number;
-  briberyAmount: number;
-  entryAmounts: number[];
-  exitPercentages: number[];
 }
 
 export default function TradingInterface({ selectedWallet, userId }: TradingInterfaceProps) {
