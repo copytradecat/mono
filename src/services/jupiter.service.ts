@@ -168,13 +168,12 @@ export async function getSwapTransaction(quoteResponse: QuoteResponse, userPubli
     swapRequest: {
       quoteResponse,
       userPublicKey,
-      wrapUnwrapSOL: true, // Add this to automatically wrap/unwrap SOL
+      wrapAndUnwrapSol: true, // Add this to automatically wrap/unwrap SOL
       dynamicComputeUnitLimit: settings.setSpeed === 'auto',
       prioritizationFeeLamports: settings.priorityFee * LAMPORTS_PER_SOL,
       asLegacyTransaction: false, // Use versioned transactions
       useSharedAccounts: true, // Use shared accounts for better efficiency
       useTokenLedger: true, // Use token ledger for tracking
-      destinationWallet: settings.destinationWallet || userPublicKey, // Allow setting a different destination wallet
       feeAccount: settings.feeAccount, // Optional fee account
     },
   });

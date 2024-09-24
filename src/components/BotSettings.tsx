@@ -13,8 +13,6 @@ interface Settings {
   wrapUnwrapSOL: boolean;
   useSharedAccounts: boolean;
   useTokenLedger: boolean;
-  destinationWallet: string;
-  feeAccount: string;
 }
 
 const defaultSettings: Settings = {
@@ -28,9 +26,7 @@ const defaultSettings: Settings = {
   exitPercentages: [24, 33, 100],
   wrapUnwrapSOL: true,
   useSharedAccounts: true,
-  useTokenLedger: true,
-  destinationWallet: '',
-  feeAccount: '',
+  useTokenLedger: true
 };
 
 export default function BotSettings() {
@@ -166,22 +162,6 @@ export default function BotSettings() {
           className="mr-2"
         />
         <label>Use token ledger for tracking</label>
-        <h3 className="text-xl font-semibold mt-4 mb-2">Destination Wallet</h3>
-        <input
-          type="text"
-          value={settings.destinationWallet}
-          onChange={(e) => updateSetting('destinationWallet', e.target.value)}
-          className="w-full p-2 border rounded"
-          placeholder="Optional: Set a different destination wallet"
-        />
-        <h3 className="text-xl font-semibold mt-4 mb-2">Fee Account</h3>
-        <input
-          type="text"
-          value={settings.feeAccount}
-          onChange={(e) => updateSetting('feeAccount', e.target.value)}
-          className="w-full p-2 border rounded"
-          placeholder="Optional: Set a fee account"
-        />
         <h3 className="text-xl font-semibold mt-4 mb-2">Bribery Amount (SOL)</h3>
         <input
           type="number"

@@ -18,8 +18,6 @@ const SettingsSchema = new mongoose.Schema({
     wrapUnwrapSOL: { type: Boolean, default: true },
     useSharedAccounts: { type: Boolean, default: true },
     useTokenLedger: { type: Boolean, default: true },
-    destinationWallet: { type: String, default: '' },
-    feeAccount: { type: String, default: '' },
 });
 
 const UserSchema = new mongoose.Schema({
