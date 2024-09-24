@@ -12,7 +12,7 @@ interface TradingInterfaceProps {
 export default function TradingInterface({ selectedWallet, userId }: TradingInterfaceProps) {
   const [inputToken, setInputToken] = useState('So11111111111111111111111111111111111111112');
   const [outputToken, setOutputToken] = useState('jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v');
-  const [amount, setAmount] = useState('0.0000001');
+  const [amount, setAmount] = useState('0.0000008');
   const [quoteResult, setQuoteResult] = useState<any>(null);
   const [swapResult, setSwapResult] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
