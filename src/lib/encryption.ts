@@ -8,13 +8,16 @@ const IV_LENGTH = 16; // For AES, this is always 16
 
 function getEncryptionKey() {
   if (!ENCRYPTION_KEY) {
-    throw new Error('ENCRYPTION_SECRET is not set in environment variables');
+    throw new Error('ENCRYPTION_KEY is not set in environment variables');
   }
   // Ensure the key is exactly 32 bytes
   return Buffer.from(ENCRYPTION_KEY.padEnd(32, '0').slice(0, 32), 'utf-8');
 }
 
 export function encrypt(text: string): string {
+  if (typeof text !== 'string') {
+    throw new Error('Input must be a string');
+  }
   const key = getEncryptionKey();
   const iv = crypto.randomBytes(IV_LENGTH);
   const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);

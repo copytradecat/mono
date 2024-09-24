@@ -6,33 +6,32 @@ import { authOptions } from './auth/[...nextauth]';
 const SIGNING_SERVICE_URL = process.env.SIGNING_SERVICE_URL || 'http://localhost:3001';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  console.log('Received request in sign-and-send API route');
   const session = await getServerSession(req, res, authOptions);
+  console.log('Session:', JSON.stringify(session, null, 2));
+
   if (!session || !session.user) {
+    console.log('Unauthorized: No session or user');
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
   if (req.method === 'POST') {
     const { walletPublicKey, serializedTransaction } = req.body;
     const userId = session.user.id;
-    const token = session.user.encodedToken;
 
-    if (!userId || !token) {
-      console.error('User ID or token is missing from the session');
-      return res.status(400).json({ error: 'User ID or token is missing' });
-    }
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    console.log('User ID:', userId);
 
     try {
-      console.log('Sending request to signing service with userId:', userId);
+      console.log('Sending request to signing service');
+      const normalizedWalletPublicKey = walletPublicKey.toLowerCase();
       const response = await axios.post(`${SIGNING_SERVICE_URL}/sign-and-send`, {
         userId,
-        walletPublicKey,
+        walletPublicKey: normalizedWalletPublicKey,
         serializedTransaction,
-      }, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
       });
 
+      console.log('Response from signing service:', JSON.stringify(response.data, null, 2));
       res.status(200).json({ signature: response.data.signature });
     } catch (error) {
       console.error('Error signing and sending transaction:', error.response?.data || error.message);

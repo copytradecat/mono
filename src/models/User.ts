@@ -8,8 +8,8 @@ const WalletSchema = new mongoose.Schema({
 });
 
 const UserSchema = new mongoose.Schema({
-    email: { type: String, unique: true },
-    discordId: { type: String, required: true, unique: true },
+    email: { type: String, unique: true, sparse: true },
+    discordId: { type: String, unique: true, sparse: true },
     wallets: [WalletSchema],
     settings: {
         defaultWallet: String,

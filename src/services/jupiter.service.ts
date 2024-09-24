@@ -12,8 +12,8 @@ const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 const jupiterApiClient = createJupiterApiClient({ basePath: process.env.NEXT_PUBLIC_SOLANA_RPC_URL_INFURA! });
 const metaplex = Metaplex.make(connection);
 
-// Create a rate limiter that allows 10 requests per second
-const limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' });
+// Ensure the limiter is correctly set up
+const limiter = new RateLimiter({ tokensPerInterval: 5, interval: 'second' });
 
 async function rateLimitedRequest<T>(fn: () => Promise<T>): Promise<T> {
   await limiter.removeTokens(1);

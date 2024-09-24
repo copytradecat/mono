@@ -13,6 +13,9 @@ const nextConfig = {
   compiler: {
     styledComponents: true,
   },
+  env: {
+    ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,
+  },
 };
 
 export default nextConfig;

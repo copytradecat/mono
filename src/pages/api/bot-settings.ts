@@ -6,13 +6,24 @@ import { connectDB } from '../../lib/mongodb';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
+    const botApiKey = req.headers['x-bot-api-key'];
     const session = await getServerSession(req, res, authOptions);
-    if (!session) {
+
+    if (!session && botApiKey !== process.env.BOT_API_KEY) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
     await connectDB();
-    const user = await User.findOne({ email: session.user.email });
+    let user;
+
+    if (session) {
+      user = await User.findOne({ email: session.user.email });
+    } else {
+      // For bot requests, you might need to identify the user differently
+      // For example, using a userId passed in the request body
+      const { userId } = req.body;
+      user = await User.findOne({ _id: userId });
+    }
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });

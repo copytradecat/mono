@@ -8,6 +8,8 @@ import { encrypt } from '../../lib/encryption';
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     const session = await getServerSession(req, res, authOptions);
+    console.log('Session:', JSON.stringify(session, null, 2));
+
     if (!session) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -16,25 +18,61 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
     const { publicKey, secretData, type } = req.body;
+
+    console.log('Received wallet data:', { 
+      publicKey, 
+      type, 
+      secretDataLength: secretData?.length,
+      sessionUserId: session.user?.id,
+      sessionUserEmail: session.user?.email
+    });
+
+    if (!publicKey || !secretData || !type) {
+      return res.status(400).json({ error: 'Missing required fields', received: { publicKey: !!publicKey, secretData: !!secretData, type: !!type } });
+    }
+
+    if (typeof secretData !== 'string') {
+      return res.status(400).json({ error: 'Secret data must be a string', received: typeof secretData });
+    }
 
     await connectDB();
     const encryptedSecretData = encrypt(secretData);
 
+    const normalizedPublicKey = publicKey.toLowerCase();
+
+    console.log('Saving wallet for user:', session.user.id);
+    console.log('Wallet data:', {
+      publicKey: normalizedPublicKey,
+      secretType: type,
+    });
+
     const user = await User.findOneAndUpdate(
-      { email: session.user.email },
+      { 
+        $or: [
+          { email: session.user.email },
+          { discordId: session.user.id }
+        ]
+      },
       { 
         $addToSet: { 
           wallets: { 
-            publicKey, 
+            publicKey: normalizedPublicKey, 
             encryptedSecretData, 
             secretType: type,
             connectedChannels: [] 
           } 
-        } 
+        },
+        $setOnInsert: {
+          email: session.user.email,
+          discordId: session.user.id
+        }
       },
       { new: true, upsert: true }
     );
+
+    console.log('User after update:', JSON.stringify(user, null, 2));
 
     if (!user) {
       throw new Error('User not found or not updated');

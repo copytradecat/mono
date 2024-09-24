@@ -11,7 +11,7 @@ export default function WalletImport({ onWalletAdded }: WalletImportProps) {
   const [publicKey, setPublicKey] = useState('');
   const [importType, setImportType] = useState<'seed' | 'privateKey'>('seed');
 
-  const handleImport = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleImportWallet = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
       let keypair: Keypair;
@@ -22,8 +22,9 @@ export default function WalletImport({ onWalletAdded }: WalletImportProps) {
         const privateKey = bs58.decode(input);
         keypair = Keypair.fromSecretKey(privateKey);
       }
-      setPublicKey(keypair.publicKey.toBase58());
-      await saveWallet(keypair.publicKey.toBase58(), input, importType);
+      const publicKey = keypair.publicKey.toBase58();
+      await saveWallet(publicKey, input, importType);
+      setPublicKey(publicKey);
       onWalletAdded();
     } catch (error) {
       console.error('Invalid input:', error);
@@ -40,20 +41,24 @@ export default function WalletImport({ onWalletAdded }: WalletImportProps) {
     onWalletAdded();
   };
 
-  const saveWallet = async (publicKey: string, secretData: string, type: 'seed' | 'privateKey') => {
+  const saveWallet = async () => {
     try {
+      console.log('Saving wallet with public key:', publicKey);
+      console.log('Secret data length:', input.length);
+      console.log('Wallet type:', importType);
+
       const response = await fetch('/api/save-wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicKey, secretData, type }),
+        body: JSON.stringify({ publicKey, secretData: input, type: importType }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
         console.log('Wallet saved successfully:', data);
-        console.log('Saved wallet public key:', publicKey);
         alert('Wallet saved successfully!');
+        onWalletAdded();
       } else {
         console.error('Failed to save wallet:', data);
         alert(`Failed to save wallet. Error: ${data.error}`);

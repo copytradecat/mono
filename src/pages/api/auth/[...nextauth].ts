@@ -2,7 +2,6 @@ import NextAuth from 'next-auth';
 import DiscordProvider from 'next-auth/providers/discord';
 import GoogleProvider from 'next-auth/providers/google';
 import dotenv from 'dotenv';
-import jwt from 'jsonwebtoken';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -14,19 +13,7 @@ export const authOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user, account }) {
-      if (account && account.provider === 'discord') {
-        token.discordId = account.providerAccountId;
-      }
-      if (user) {
-        token.id = user.id;
-      }
-      // Generate JWT without adding another expiration
-      const encodedToken = jwt.sign(token, process.env.JWT_SECRET!);
-      token.encodedToken = encodedToken;
-      return token;
-    },
-    async session({ session, token }) {
+    async session({ session, token }: { session: any; token: any }) {
       if (session.user) {
         session.user = {
           ...session.user,
@@ -43,6 +30,12 @@ export const authOptions = {
         };
       }
       return session;
+    },
+    async jwt({ token, account }: { token: any; account: any }) {
+      if (account) {
+        token.discordId = account.providerAccountId;
+      }
+      return token;
     },
   },
   secret: process.env.JWT_SECRET,

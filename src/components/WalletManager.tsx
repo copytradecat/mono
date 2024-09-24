@@ -36,10 +36,13 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
 
   const fetchWallets = async () => {
     try {
-      const response = await axios.get('/api/get-wallets');
-      setWallets(response.data.wallets);
-      if (response.data.wallets.length > 0 && !selectedWallet) {
-        setSelectedWallet(response.data.wallets[0].publicKey);
+      const response = await axios.get('/api/get-wallets', {
+        params: { limit: 10 } // Limit the number of wallets fetched
+      });
+      const fetchedWallets = response.data.wallets.slice(0, 10); // Ensure we don't exceed 10 wallets
+      setWallets(fetchedWallets);
+      if (fetchedWallets.length > 0 && !selectedWallet) {
+        setSelectedWallet(fetchedWallets[0].publicKey);
       }
     } catch (error) {
       console.error('Failed to fetch wallets:', error);

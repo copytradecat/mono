@@ -89,6 +89,31 @@ export default function WalletManagement() {
     }
   };
 
+  const saveWallet = async (publicKey: string, secretData: string, type: 'seed' | 'privateKey') => {
+    try {
+      const response = await fetch('/api/save-wallet', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ publicKey, secretData, type }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save wallet');
+      }
+
+      const data = await response.json();
+      console.log('Wallet saved successfully:', data);
+      // Refresh the wallet list
+      fetchWallets();
+    } catch (error) {
+      console.error('Error saving wallet:', error);
+      // Handle the error (e.g., show an error message to the user)
+    }
+  };
+
   return (
     <div>
       <h1>Wallet Management</h1>
