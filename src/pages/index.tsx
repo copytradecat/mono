@@ -12,8 +12,8 @@ export default function Home() {
       <SignInInterface />
       {session && (
         <>
-          <AccountSettings />
-          <WalletConnection />
+          {/* <AccountSettings /> */}
+          {/* <WalletConnection /> */}
         </>
       )}
     </div>
