@@ -9,7 +9,7 @@ export default function SignInInterface() {
   const { data: session } = useSession();
   const { connected, connect, publicKey } = useWallet();
   const [walletSeed, setWalletSeed] = useState('');
-  const [publicAddress, setPublicAddress] = useState('');
+  const [publicAddress, setPublicAddress] = useState();
   const [showPrivateKey, setShowPrivateKey] = useState(false);
   const [walletCreated, setWalletCreated] = useState(false);
   const [storedWallets, setStoredWallets] = useState<any[]>([]);
@@ -32,26 +32,29 @@ export default function SignInInterface() {
     const newKeypair = Keypair.generate();
     const seed = bs58.encode(newKeypair.secretKey);
     setWalletSeed(seed);
-    setPublicAddress(newKeypair.publicKey.toBase58());
+    setPublicAddress(newKeypair.publicKey);
     setWalletCreated(true);
   };
 
   const handleSaveWallet = async () => {
     if (!session || !walletSeed) return;
 
-    const encryptedSeed = encrypt(walletSeed);
-
     const response = await fetch('/api/save-wallet', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ encryptedSeed, publicAddress }),
+      body: JSON.stringify({
+        publicKey: publicAddress,
+        secretData: walletSeed,
+        type: 'seed',
+      }),
     });
 
     if (response.ok) {
       alert('Wallet saved successfully!');
       fetchStoredWallets();
     } else {
-      alert('Failed to save wallet');
+      const errorData = await response.json();
+      alert(`Failed to save wallet: ${errorData.error}`);
     }
   };
 
@@ -105,7 +108,7 @@ export default function SignInInterface() {
       {!walletCreated && <button onClick={handleCreateWallet}>Create New Wallet</button>}
       {walletCreated && (
         <div>
-          <p>Public Address: {publicAddress}</p>
+          <p>Public Address: {publicAddress?.toString()}</p>
           <button onClick={() => setShowPrivateKey(!showPrivateKey)}>
             {showPrivateKey ? 'Hide' : 'Reveal'} Private Key
           </button>

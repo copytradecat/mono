@@ -16,11 +16,12 @@ app.post('/sign-and-send', async (req, res) => {
   console.log('Received request in signing service');
   console.log('Request body:', JSON.stringify(req.body, null, 2));
 
-  const { userId, walletPublicKey, serializedTransaction } = req.body;
-
   try {
     console.log('Connecting to database');
     await connectDB();
+
+    const { userId, walletPublicKey, serializedTransaction } = req.body;
+
     console.log('Finding user');
     const user = await User.findOne({ discordId: userId });
     console.log('User found:', user ? 'Yes' : 'No');
@@ -36,7 +37,7 @@ app.post('/sign-and-send', async (req, res) => {
     console.log('Wallet public key to find:', walletPublicKey);
 
     const wallet = user.wallets.find((w) => 
-      w.publicKey.toLowerCase() === walletPublicKey.toLowerCase()
+      w.publicKey === walletPublicKey
     );
 
     if (!wallet) {

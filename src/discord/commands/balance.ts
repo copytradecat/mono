@@ -14,10 +14,10 @@ export async function handleBalance(userId: string, reply: (content: string) => 
     
     const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
     
-    const balancePromises = user.wallets.map(async (wallet: { publicAddress: string }) => {
-      const publicKey = new PublicKey(wallet.publicAddress);
+    const balancePromises = user.wallets.map(async (wallet: { publicKey: string }) => {
+      const publicKey = new PublicKey(wallet.publicKey);
       const balance = await rateLimitedRequest(() => connection.getBalance(publicKey));
-      return `${wallet.publicAddress}: ${balance / LAMPORTS_PER_SOL} SOL`;
+      return `${wallet.publicKey}: ${balance / LAMPORTS_PER_SOL} SOL`;
     });
     
     const balances = await Promise.all(balancePromises);

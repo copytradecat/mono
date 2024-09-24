@@ -41,31 +41,28 @@ export default function WalletImport({ onWalletAdded }: WalletImportProps) {
     onWalletAdded();
   };
 
-  const saveWallet = async () => {
+  const saveWallet = async (publicKey: string, secretData: string, type: 'seed' | 'privateKey') => {
     try {
-      console.log('Saving wallet with public key:', publicKey);
-      console.log('Secret data length:', input.length);
-      console.log('Wallet type:', importType);
-
       const response = await fetch('/api/save-wallet', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicKey, secretData: input, type: importType }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ publicKey, secretData, type }),
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        console.log('Wallet saved successfully:', data);
-        alert('Wallet saved successfully!');
-        onWalletAdded();
-      } else {
-        console.error('Failed to save wallet:', data);
-        alert(`Failed to save wallet. Error: ${data.error}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save wallet');
       }
+
+      const data = await response.json();
+      console.log('Wallet saved successfully:', data);
+      // Refresh the wallet list
+      fetchWallets();
     } catch (error) {
       console.error('Error saving wallet:', error);
-      alert(`An error occurred while saving the wallet: ${error instanceof Error ? error.message : String(error)}`);
+      // Handle the error (e.g., show an error message to the user)
     }
   };
 

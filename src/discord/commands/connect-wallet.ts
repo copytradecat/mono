@@ -20,7 +20,7 @@ export async function handleConnectWallet(interaction: CommandInteraction) {
     // For now, we'll just display the available wallets
 
     const walletList = user.wallets.map((wallet, index) => 
-      `${index + 1}. ${wallet.publicAddress}`
+      `${index + 1}. ${wallet.publicKey}`
     ).join('\n');
 
     await interaction.reply({

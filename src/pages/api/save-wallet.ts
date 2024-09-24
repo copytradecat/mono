@@ -9,6 +9,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const session = await getServerSession(req, res, authOptions);
     console.log('Session:', JSON.stringify(session, null, 2));
+    console.log('Session user:', JSON.stringify(session.user, null, 2));
 
     if (!session) {
       return res.status(401).json({ error: 'Unauthorized' });
@@ -40,29 +41,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await connectDB();
     const encryptedSecretData = encrypt(secretData);
 
-    const normalizedPublicKey = publicKey.toLowerCase();
+    const normalizedPublicKey = publicKey;
 
-    console.log('Saving wallet for user:', session.user.id);
-    console.log('Wallet data:', {
-      publicKey: normalizedPublicKey,
-      secretType: type,
+    await connectDB();
+
+    const existingUser = await User.findOne({ 
+      discordId: session.user.id, 
+      'wallets.publicKey': normalizedPublicKey 
     });
 
+    if (existingUser) {
+      return res.status(400).json({ error: 'Wallet already exists' });
+    }
+
     const user = await User.findOneAndUpdate(
-      { 
-        $or: [
-          { email: session.user.email },
-          { discordId: session.user.id }
-        ]
-      },
-      { 
-        $addToSet: { 
-          wallets: { 
-            publicKey: normalizedPublicKey, 
-            encryptedSecretData, 
+      { discordId: session.user.id },
+      {
+        $push: {
+          wallets: {
+            publicKey: normalizedPublicKey,
+            encryptedSecretData,
             secretType: type,
-            connectedChannels: [] 
-          } 
+            connectedChannels: []
+          }
         },
         $setOnInsert: {
           email: session.user.email,

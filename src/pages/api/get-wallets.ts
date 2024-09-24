@@ -13,16 +13,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const user = await User.findOne({ email: session.user.email }).select('wallets');
-    
+    const user = await User.findOne({ discordId: session.user.id }).select('wallets');
+
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Only send necessary wallet data
     const simplifiedWallets = user.wallets.map(wallet => ({
       publicKey: wallet.publicKey,
-      // Include other necessary fields, but keep it minimal
+      connectedChannels: wallet.connectedChannels || [],
     }));
 
     res.status(200).json({ wallets: simplifiedWallets });

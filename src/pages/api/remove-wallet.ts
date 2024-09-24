@@ -23,11 +23,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     await connectDB();
     const user = await User.findOneAndUpdate(
-      { email: session.user.email },
+      { discordId: session.user.id },
       { 
         $pull: { 
-          wallets: { publicKey: publicKey },
-          connectedWallets: { walletAddress: publicKey }
+          wallets: { publicKey: publicKey }
         }
       },
       { new: true }

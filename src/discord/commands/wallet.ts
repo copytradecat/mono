@@ -8,8 +8,8 @@ export async function handleWallet(userId: string, reply: (content: string) => P
       return reply("You don't have any wallets linked to your account.");
     }
     
-    const walletInfo = user.wallets.map((wallet: { publicAddress: any; }, index: number) => 
-      `Wallet ${index + 1}: ${wallet.publicAddress}`
+    const walletInfo = user.wallets.map((wallet: { publicKey: any; }, index: number) => 
+      `Wallet ${index + 1}: ${wallet.publicKey}`
     ).join('\n');
     
     reply(`Your linked wallets:\n${walletInfo}`);

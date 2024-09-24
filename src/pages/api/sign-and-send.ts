@@ -17,14 +17,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'POST') {
     const { walletPublicKey, serializedTransaction } = req.body;
-    const userId = session.user.id;
+    const userId = session.user.id; // Should be the discordId
 
     console.log('Request body:', JSON.stringify(req.body, null, 2));
     console.log('User ID:', userId);
 
     try {
       console.log('Sending request to signing service');
-      const normalizedWalletPublicKey = walletPublicKey.toLowerCase();
+      const normalizedWalletPublicKey = walletPublicKey;
       const response = await axios.post(`${SIGNING_SERVICE_URL}/sign-and-send`, {
         userId,
         walletPublicKey: normalizedWalletPublicKey,

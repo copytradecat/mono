@@ -15,7 +15,7 @@ export async function handleProfile(interaction: CommandInteraction) {
       return interaction.reply("You haven't connected any wallets yet. Please visit our website to connect your wallet.");
     }
 
-    const walletAddress = user.wallets[0].publicAddress;
+    const walletAddress = user.wallets[0].publicKey;
     const publicKey = new PublicKey(walletAddress);
 
     const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {

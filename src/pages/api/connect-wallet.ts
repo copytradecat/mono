@@ -14,9 +14,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { walletAddress, channelId } = req.body;
+  const { publicKey, channelId } = req.body;
 
-  if (!walletAddress || !channelId) {
+  if (!publicKey || !channelId) {
     return res.status(400).json({ error: 'Missing required parameters' });
   }
 
@@ -24,10 +24,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await connectDB();
 
     const user = await User.findOneAndUpdate(
-      { email: session.user.email, "wallets.publicKey": walletAddress },
+      { discordId: session.user.id, 'wallets.publicKey': publicKey },
       { 
         $addToSet: { 
-          "wallets.$.connectedChannels": channelId
+          'wallets.$.connectedChannels': channelId
         }
       },
       { new: true }

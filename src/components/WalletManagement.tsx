@@ -36,12 +36,16 @@ export default function WalletManagement() {
   }, [selectedWallet]);
 
   const fetchWallets = async () => {
-    const response = await fetch('/api/get-wallets');
-    if (response.ok) {
-      const data = await response.json();
-      setWallets(data.wallets);
-    } else {
-      console.error('Failed to fetch wallets');
+    try {
+      const response = await fetch('/api/get-wallets');
+      if (response.ok) {
+        const data = await response.json();
+        setWallets(data.wallets);
+      } else {
+        console.error('Failed to fetch wallets');
+      }
+    } catch (error) {
+      console.error('Error fetching wallets:', error);
     }
   };
 
