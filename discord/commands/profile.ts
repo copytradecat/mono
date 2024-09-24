@@ -1,10 +1,10 @@
 import { CommandInteraction } from "discord.js";
-import User from '../../models/User';
+import User from '../../src/models/User';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import dotenv from 'dotenv';
 
-dotenv.config({ path: ['.env.local', '.env'] });
+dotenv.config({ path: ['../.env.local', '../.env'] });
 
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 

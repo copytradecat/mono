@@ -1,8 +1,8 @@
 import { CommandInteraction } from "discord.js";
-import User from '../../models/User';
+import User from '../../src/models/User';
 import dotenv from 'dotenv';
 
-dotenv.config({ path: ['.env.local', '.env'] });
+dotenv.config({ path: ['../.env.local', '../.env'] });
 
 export async function handleConnectWallet(interaction: CommandInteraction) {
   const userId = interaction.user.id;

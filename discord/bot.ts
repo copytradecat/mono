@@ -2,10 +2,10 @@ import { Client, GatewayIntentBits, Partials, REST, Routes } from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
 import { handleCommand } from './commands/index.js';
 import mongoose from 'mongoose';
-import { connectDB } from '../lib/mongodb.js';
+import { connectDB } from '../src/lib/mongodb.js';
 import dotenv from 'dotenv';
 
-dotenv.config({ path: ['.env.local', '.env'] });
+dotenv.config({ path: ['../.env.local', '../.env'] });
 
 const client = new Client({
   intents: [

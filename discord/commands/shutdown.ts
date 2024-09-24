@@ -1,5 +1,5 @@
 import { CommandInteraction, PermissionFlagsBits } from "discord.js";
-import Channel from '../../models/Channel';
+import Channel from '../../src/models/Channel';
 
 export async function handleShutdown(interaction: CommandInteraction) {
   if (!interaction.guild || !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {

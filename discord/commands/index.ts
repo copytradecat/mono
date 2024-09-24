@@ -1,5 +1,5 @@
 import { Message, CommandInteraction } from "discord.js";
-import Channel from '../../models/Channel';
+import Channel from '../../src/models/Channel';
 import { handleHelp } from "./help.js";
 import { handleRegister } from "./register.js";
 import { handleSetup } from "./setup.js";

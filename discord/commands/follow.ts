@@ -1,5 +1,5 @@
-import User from '../../models/User';
-import Follow from '../../models/Follow';
+import User from '../../src/models/User';
+import Follow from '../../src/models/Follow';
 
 export async function handleFollow(userId: string, args: string[], reply: (content: string) => Promise<void>) {
   if (args.length < 1) {

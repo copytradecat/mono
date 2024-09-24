@@ -1,5 +1,5 @@
 import { CommandInteraction, TextChannel, PermissionFlagsBits } from "discord.js";
-import Channel from '../../models/Channel';
+import Channel from '../../src/models/Channel';
 
 export async function handleSetup(interaction: CommandInteraction) {
   if (!interaction.guild || !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {

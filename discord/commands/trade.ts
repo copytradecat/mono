@@ -1,7 +1,7 @@
-import { signAndSendTransaction } from '../../services/signing.service';
-import { getQuote, getSwapTransaction } from '../../services/jupiter.service';
-import User from '../../models/User';
-import Trade from '../../models/Trade';
+import { signAndSendTransaction } from '../../src/services/signing.service';
+import { getQuote, getSwapTransaction } from '../../src/services/jupiter.service';
+import User from '../../src/models/User';
+import Trade from '../../src/models/Trade';
 
 export async function handleTradeCommand(interaction: any, args: string[]) {
   if (args.length < 2) {

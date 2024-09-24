@@ -1,8 +1,8 @@
 import { CommandInteraction } from "discord.js";
-import User from '../../models/User';
-import { getTokenBalances } from '../../services/jupiter.service';
+import User from '../../src/models/User';
+import { getTokenBalances } from '../../src/services/jupiter.service';
 import { Connection, PublicKey } from '@solana/web3.js';
-import { rateLimitedRequest } from '../../services/jupiter.service';
+import { rateLimitedRequest } from '../../src/services/jupiter.service';
 
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 

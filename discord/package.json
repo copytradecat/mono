@@ -1,0 +1,20 @@
+{
+  "name": "discord",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon --watch src/discord --ext ts,json --exec npx tsx bot.ts",
+    "start": "npx tsx bot.ts",
+    "test": "npx tsx test-bot.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@solana/web3.js": "^1.95.3",
+    "discord.js": "^14.16.2",
+    "dotenv": "^16.4.5",
+    "nodemon": "^3.1.7"
+  }
+}

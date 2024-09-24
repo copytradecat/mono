@@ -1,5 +1,5 @@
 import { Message } from "discord.js";
-import User from '../../models/User';
+import User from '../../src/models/User';
 
 export async function handleSettings(message: Message) {
   try {
