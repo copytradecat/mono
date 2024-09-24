@@ -44,9 +44,12 @@ export default function TradingInterface({ selectedWallet, userId }: TradingInte
       alert('Please select a wallet, fill in all fields, and ensure settings are loaded');
       return;
     }
-
+  
     try {
-      const quote = await getQuote(inputToken, outputToken, parseFloat(amount), settings.slippage);
+      const slippageSettings = settings.slippageType === 'fixed' 
+        ? { type: 'fixed' as const, value: settings.slippage }
+        : { type: 'dynamic' as const };
+      const quote = await getQuote(inputToken, outputToken, parseFloat(amount), slippageSettings);
       setQuoteResult(quote);
     } catch (error) {
       console.error('Error getting quote:', error);

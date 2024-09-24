@@ -131,14 +131,15 @@ export async function getAggregateBalance(wallets: string[]) {
   return aggregateBalance;
 }
 
-export async function getQuote(inputToken: string, outputToken: string, amount: number, slippage: number): Promise<QuoteResponse> {
+export async function getQuote(inputToken: string, outputToken: string, amount: number, slippageSettings: { type: 'fixed' | 'dynamic', value?: number }): Promise<QuoteResponse> {
   const params: QuoteGetRequest = {
     inputMint: inputToken,
     outputMint: outputToken,
     amount: Math.floor(amount),
-    slippageBps: Math.floor(slippage * 100),
+    slippageBps: slippageSettings.type === 'fixed' ? Math.floor(slippageSettings.value! * 100) : undefined,
     onlyDirectRoutes: false,
     asLegacyTransaction: false,
+    dynamicSlippage: slippageSettings.type === 'dynamic',
   };
 
   try {

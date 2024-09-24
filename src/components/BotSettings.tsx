@@ -3,6 +3,7 @@ import { useSession } from 'next-auth/react';
 
 interface Settings {
   slippage: number;
+  slippageType: 'fixed' | 'dynamic';
   smartMevProtection: 'fast' | 'secure';
   setSpeed: 'default' | 'auto';
   priorityFee: number;
@@ -18,6 +19,7 @@ interface Settings {
 
 const defaultSettings: Settings = {
   slippage: 3.0,
+  slippageType: 'fixed',
   smartMevProtection: 'secure',
   setSpeed: 'default',
   priorityFee: 0.01,
@@ -34,6 +36,7 @@ const defaultSettings: Settings = {
 export default function BotSettings() {
   const { data: session } = useSession();
   const [settings, setSettings] = useState<Settings>(defaultSettings);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (session) {
@@ -49,22 +52,23 @@ export default function BotSettings() {
     }
   };
 
-  const updateSetting = async (setting: string, value: any) => {
-    if (!settings) return;
+  const updateSetting = (setting: keyof Settings, value: any) => {
+    setSettings(prev => ({ ...prev, [setting]: value }));
+  };
 
-    const updatedSettings = {
-      ...settings,
-      [setting]: value,
-    };
-
+  const handleSaveSettings = async () => {
+    setIsLoading(true);
     const response = await fetch('/api/bot-settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ settings: updatedSettings }),
+      body: JSON.stringify({ settings }),
     });
 
+    setIsLoading(false);
     if (response.ok) {
-      setSettings(updatedSettings);
+      alert('Settings saved successfully');
+    } else {
+      alert('Failed to save settings');
     }
   };
 
@@ -74,13 +78,33 @@ export default function BotSettings() {
     <div className="p-4 bg-white shadow rounded-lg">
       <h2 className="text-2xl font-bold mb-4">Bot Settings</h2>
       <div>
-        <h3 className="text-xl font-semibold mb-2">Slippage (%)</h3>
-        <input
-          type="number"
-          value={settings.slippage}
-          onChange={(e) => updateSetting('slippage', parseFloat(e.target.value))}
-          className="w-full p-2 border rounded"
-        />
+
+        <h3 className="text-xl font-semibold mb-2">Slippage Type</h3>
+          <div>
+            <button
+              onClick={() => updateSetting('slippageType', 'fixed')}
+              className={`mr-2 px-4 py-2 rounded ${settings.slippageType === 'fixed' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+            >
+              Fixed
+            </button>
+            <button
+              onClick={() => updateSetting('slippageType', 'dynamic')}
+              className={`px-4 py-2 rounded ${settings.slippageType === 'dynamic' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+            >
+              Dynamic
+            </button>
+          </div>
+          {settings.slippageType === 'fixed' && (
+            <>
+              <h3 className="text-xl font-semibold mt-4 mb-2">Slippage (%)</h3>
+              <input
+                type="number"
+                value={settings.slippage}
+                onChange={(e) => updateSetting('slippage', parseFloat(e.target.value))}
+                className="w-full p-2 border rounded"
+              />
+            </>
+          )}
         <h3 className="text-xl font-semibold mt-4 mb-2">Smart-MEV Protection</h3>
         <div>
           <button
@@ -197,6 +221,13 @@ export default function BotSettings() {
             />
           ))}
         </div>
+        <button
+          onClick={handleSaveSettings}
+          disabled={isLoading}
+          className="mt-6 bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+        >
+          {isLoading ? 'Saving...' : 'Save Settings'}
+        </button>
       </div>
     </div>
   );
