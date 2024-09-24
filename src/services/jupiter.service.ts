@@ -135,18 +135,15 @@ export async function getQuote(inputToken: string, outputToken: string, amount: 
   const params: QuoteGetRequest = slippageSettings.type === 'fixed' ? {  // fixed slippage
     inputMint: inputToken,
     outputMint: outputToken,
-    amount: Math.floor(amount), // Convert to lamports
+    amount: Math.floor(amount * 1e9), // Convert to lamports
     slippageBps: Math.floor(slippageSettings.value! * 100),
   } : { // Dynamic Slippage
     inputMint: inputToken,
     outputMint: outputToken,
     amount: Math.floor(amount * 1e9), // Convert to lamports
     autoSlippage: true,
-    autoSlippageCollisionUsdValue: 1_000,
-    maxAutoSlippageBps: 1000, // 10%
-    minimizeSlippage: true,
+    autoSlippageCollisionUsdValue: 1000,
     onlyDirectRoutes: false,
-    asLegacyTransaction: false,
   };
 
   try {
@@ -168,13 +165,12 @@ export async function getSwapTransaction(quoteResponse: QuoteResponse, userPubli
     swapRequest: {
       quoteResponse,
       userPublicKey,
-      wrapAndUnwrapSol: true, // Add this to automatically wrap/unwrap SOL
-      dynamicComputeUnitLimit: settings.setSpeed === 'auto',
-      prioritizationFeeLamports: settings.priorityFee * LAMPORTS_PER_SOL,
-      asLegacyTransaction: false, // Use versioned transactions
+      wrapAndUnwrapSol: true,
+      dynamicComputeUnitLimit: true,
+      prioritizationFeeLamports: settings.priorityFee === 'auto' ? 'auto' : settings.priorityFee * LAMPORTS_PER_SOL,
       useSharedAccounts: true, // Use shared accounts for better efficiency
-      useTokenLedger: true, // Use token ledger for tracking
-      feeAccount: settings.feeAccount, // Optional fee account
+      // useTokenLedger: true, // Use token ledger for tracking
+      // feeAccount: settings.feeAccount, // Optional fee account
     },
   });
 

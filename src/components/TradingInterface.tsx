@@ -75,13 +75,13 @@ export default function TradingInterface({ selectedWallet, userId }: TradingInte
       const { signature } = response.data;
       setSwapResult(signature);
 
-      // Record the trade
-      await axios.post('/api/execute-trade', {
-        publicKey: selectedWallet,
-        txid: signature,
-        amount: parseFloat(amount),
-        token: outputToken,
-      });
+      // TODO: Record the trade
+      // await axios.post('/api/execute-trade', {
+      //   publicKey: selectedWallet,
+      //   txid: signature,
+      //   amount: parseFloat(amount),
+      //   token: outputToken,
+      // });
     } catch (error) {
       console.error('Error executing swap:', error);
       alert(`Failed to execute swap: ${error instanceof Error ? error.message : 'Unknown error'}`);
