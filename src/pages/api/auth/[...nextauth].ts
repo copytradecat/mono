@@ -3,7 +3,7 @@ import DiscordProvider from 'next-auth/providers/discord';
 import GoogleProvider from 'next-auth/providers/google';
 import dotenv from 'dotenv';
 import { JWT } from 'next-auth/jwt';
-import connectDB from '../../../lib/mongodb';
+import { connectDB } from '../../../lib/mongodb';
 import User from '../../../models/User';
 
 dotenv.config({ path: '.env.local' });
