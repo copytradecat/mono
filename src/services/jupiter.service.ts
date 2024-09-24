@@ -174,31 +174,15 @@ export async function getSwapTransaction(
   settings: Settings
 ): Promise<any> {
   const { transactionSpeed, priorityFee, wrapUnwrapSOL } = settings;
-
-  let computeUnitPriceMicroLamports: string | undefined | number;
-
-  if (transactionSpeed === 'medium') {
-    computeUnitPriceMicroLamports = 0;
-  } else if (['high', 'veryHigh'].includes(transactionSpeed)) {
-    computeUnitPriceMicroLamports = "auto";
-  } else if (transactionSpeed === 'custom' && priorityFee !== 'auto') {
-    // if (priorityFee < 0.01) {
-      computeUnitPriceMicroLamports = "auto";
-    // } else {
-      // Convert SOL to micro-lamports
-      // computeUnitPriceMicroLamports = (priorityFee * 1e9 * 1e6).toString();
-    // }
-  }
-
   const swapRequest = {
     quoteResponse,
     userPublicKey,
     wrapUnwrapSOL,
     asLegacyTransaction: false,
     dynamicComputeUnitLimit: true,
-    prioritizationFeeLamports: settings.priorityFee === 'auto' ? 'auto' : settings.priorityFee * LAMPORTS_PER_SOL,
+    prioritizationFeeLamports: priorityFee === 'auto' ? 'auto' : priorityFee * LAMPORTS_PER_SOL,
     ...(settings.slippageType === 'dynamic' && {dynamicSlippage: {maxBps:300}}),
-    computeUnitPriceMicroLamports,
+    computeUnitPriceMicroLamports: transactionSpeed === 'medium' ? 0 : "auto",
   };
 
   const swapTransaction = await jupiterApiClient.swapPost({
