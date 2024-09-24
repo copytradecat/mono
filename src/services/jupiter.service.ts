@@ -1,7 +1,7 @@
 import { Connection, PublicKey, LAMPORTS_PER_SOL, VersionedTransaction } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import dotenv from 'dotenv';
-import { RateLimiter } from 'limiter';
+import Limiter from 'limiter';
 import { Metaplex, token } from '@metaplex-foundation/js';
 import { Transaction } from '@solana/web3.js';
 import { createJupiterApiClient, QuoteGetRequest, QuoteResponse } from '@jup-ag/api';
@@ -14,9 +14,10 @@ const jupiterApiClient = createJupiterApiClient({ basePath: process.env.NEXT_PUB
 const metaplex = Metaplex.make(connection);
 
 // Ensure the limiter is correctly set up
+const { RateLimiter } = Limiter;
 const limiter = new RateLimiter({ tokensPerInterval: 5, interval: 'second' });
 
-async function rateLimitedRequest<T>(fn: () => Promise<T>): Promise<T> {
+export async function rateLimitedRequest<T>(fn: () => Promise<T>): Promise<T> {
   await limiter.removeTokens(1);
   return fn();
 }
