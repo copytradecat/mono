@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon --watch src/discord --ext ts,json --exec npx tsx bot.ts",
+    "dev": "nodemon --watch . --ext ts,json --exec npx tsx bot.ts",
     "start": "npx tsx bot.ts",
     "test": "npx tsx test-bot.ts"
   },
