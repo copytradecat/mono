@@ -1,9 +1,10 @@
 import express from 'express';
-import { Connection, Transaction, Keypair } from '@solana/web3.js';
+import { Connection, Transaction, Keypair, VersionedMessage, VersionedTransaction } from '@solana/web3.js';
 import { decrypt } from '../src/lib/encryption';
 import User from '../src/models/User';
 import { connectDB } from '../src/lib/mongodb';
 import dotenv from 'dotenv';
+import bs58 from 'bs58'; // Make sure to import bs58 if not already imported
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -56,16 +57,18 @@ app.post('/sign-and-send', async (req, res) => {
     const decryptedSecretData = decrypt(wallet.encryptedSecretData);
     console.log('Decrypted secret data length:', decryptedSecretData.length);
 
-    const keypair = Keypair.fromSecretKey(Buffer.from(decryptedSecretData, 'base64'));
+    // Corrected line: Use bs58.decode instead of Buffer.from with 'base64'
+    const keypair = Keypair.fromSecretKey(bs58.decode(decryptedSecretData));
     console.log('Generated keypair public key:', keypair.publicKey.toBase58());
 
     console.log('Deserializing transaction');
-    const transaction = Transaction.from(Buffer.from(serializedTransaction, 'base64'));
+    const transaction = VersionedTransaction.deserialize(Buffer.from(serializedTransaction, 'base64'));
+
     console.log('Partially signing transaction');
-    transaction.partialSign(keypair);
+    transaction.sign([keypair]);
 
     console.log('Sending raw transaction');
-    const signature = await connection.sendRawTransaction(transaction.serialize());
+    const signature = await connection.sendTransaction(transaction);
     console.log('Confirming transaction');
     await connection.confirmTransaction(signature, 'confirmed');
 

@@ -43,7 +43,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const normalizedPublicKey = publicKey;
 
-    await connectDB();
 
     const existingUser = await User.findOne({ 
       discordId: session.user.id, 
