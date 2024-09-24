@@ -56,6 +56,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const user = await User.findOneAndUpdate(
       { discordId: session.user.id },
       {
+        $set: {
+          email: session.user.email, // Ensure email is updated
+        },
         $push: {
           wallets: {
             publicKey: normalizedPublicKey,
@@ -65,8 +68,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }
         },
         $setOnInsert: {
-          email: session.user.email,
-          discordId: session.user.id
+          discordId: session.user.id,
         }
       },
       { new: true, upsert: true }
