@@ -33,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { settings } = req.body;
       user.settings = settings;
       await user.save();
-      res.status(200).json({ message: 'Settings updated successfully' });
+      res.status(200).json({ message: 'Settings updated successfully', settings: user.settings });
     } else {
       res.status(405).json({ error: 'Method not allowed' });
     }

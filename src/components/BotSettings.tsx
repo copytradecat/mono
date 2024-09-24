@@ -56,17 +56,25 @@ export default function BotSettings() {
 
   const handleSaveSettings = async () => {
     setIsLoading(true);
-    const response = await fetch('/api/bot-settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ settings }),
-    });
+    try {
+      const response = await fetch('/api/bot-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings }),
+      });
 
-    setIsLoading(false);
-    if (response.ok) {
+      if (!response.ok) {
+        throw new Error('Failed to save settings');
+      }
+
+      const data = await response.json();
+      setFetchedSettings(data.settings);
       alert('Settings saved successfully');
-    } else {
+    } catch (error) {
+      console.error('Error saving settings:', error);
       alert('Failed to save settings');
+    } finally {
+      setIsLoading(false);
     }
   };
 
