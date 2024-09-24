@@ -21,6 +21,7 @@ const SettingsSchema = new mongoose.Schema({
 const UserSchema = new mongoose.Schema({
     email: { type: String, unique: true, sparse: true },
     discordId: { type: String, unique: true, sparse: true },
+    name: { type: String },
     wallets: [WalletSchema],
     settings: { type: SettingsSchema, default: () => ({}) },
 });

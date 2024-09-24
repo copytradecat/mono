@@ -27,18 +27,17 @@ export const authOptions = {
       if (session.user) {
         session.user = {
           ...session.user,
-          id: token.discordId as string,
-          discordId: token.discordId as string,
+          name: token.discordId as string,
           email: token.email || session.user.email,
-        };
+        } as Session['user'];
 
         // Update user record to include email
         await connectDB();
-        if (session.user && session.user.id) {
+        if (session.user && session.user.name) {
           await User.findOneAndUpdate(
-            { discordId: session.user.id },
-            { $set: { email: session.user.email } },
-            { upsert: false } // User should already exist
+            { name: session.user.name },
+            { $set: { email: session.user.email, name: session.user.name, discordId: session.user.name } },
+            { upsert: false }
           );
         }
         return session;

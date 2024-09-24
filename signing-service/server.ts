@@ -24,7 +24,7 @@ app.post('/sign-and-send', async (req, res) => {
     const { userId, walletPublicKey, serializedTransaction } = req.body;
 
     console.log('Finding user');
-    const user = await User.findOne({ discordId: userId });
+    const user = await User.findOne({ name: userId });
     console.log('User found:', user ? 'Yes' : 'No');
     console.log('User data:', JSON.stringify(user, null, 2));
 

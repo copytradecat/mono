@@ -13,7 +13,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const user = await User.findOne({ discordId: session.user.id }).select('wallets');
+    const user = await User.findOne({ name: session.user.name }).select('wallets');
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });

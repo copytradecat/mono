@@ -16,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await connectDB();
     let user;
     if (session && session.user) {
-      user = await User.findOne({ discordId: session.user.discordId });
+      user = await User.findOne({ name: session.user.name });
     } else {
       const { userId } = req.body;
       user = await User.findOne({ _id: userId });

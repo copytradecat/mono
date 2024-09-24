@@ -10,7 +10,7 @@ const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 
 export async function handleProfile(interaction: CommandInteraction) {
   try {
-    const user = await User.findOne({ discordId: interaction.user.id });
+    const user = await User.findOne({ name: interaction.user.id });
     if (!user || !user.wallets || user.wallets.length === 0) {
       return interaction.reply("You haven't connected any wallets yet. Please visit our website to connect your wallet.");
     }

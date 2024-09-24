@@ -17,7 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     await connectDB();
-    const user = await User.findOne({ discordId: session.user.id });
+    const user = await User.findOne({ name: session.user.name });
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });

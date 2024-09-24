@@ -7,8 +7,14 @@ dotenv.config({ path: ['.env.local', '.env'] });
 export async function handleRegister(userId: string, channelId: string, reply: (content: string) => Promise<void>) {
   try {
     const user = await User.findOneAndUpdate(
-      { discordId: userId },
-      { $setOnInsert: { settings: { maxTradeAmount: 100 } } },
+      { name: userId },
+      { 
+        $setOnInsert: { 
+          name: userId,
+          discordId: userId,
+          settings: { maxTradeAmount: 100 } 
+        } 
+      },
       { upsert: true, new: true }
     );
 

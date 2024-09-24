@@ -3,7 +3,7 @@ import User from '../../models/User';
 
 export async function handleWallet(userId: string, reply: (content: string) => Promise<void>) {
   try {
-    const user = await User.findOne({ discordId: userId });
+    const user = await User.findOne({ name: userId });
     if (!user || user.wallets.length === 0) {
       return reply("You don't have any wallets linked to your account.");
     }

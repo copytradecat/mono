@@ -13,7 +13,7 @@ export async function handleTradeCommand(interaction: any, args: string[]) {
   const userId = interaction.user?.id || interaction.author.id;
 
   try {
-    const user = await User.findOne({ discordId: userId });
+    const user = await User.findOne({ name: userId });
 
     if (!user || user.wallets.length === 0) {
       return interaction.reply('You need to set up your wallet first.');

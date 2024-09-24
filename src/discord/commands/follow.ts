@@ -9,7 +9,7 @@ export async function handleFollow(userId: string, args: string[], reply: (conte
   const traderAddress = args[0];
   
   try {
-    const user = await User.findOne({ discordId: userId });
+    const user = await User.findOne({ name: userId });
     if (!user) {
       return reply("You need to register first. Use `.ct register` to get started.");
     }
@@ -34,7 +34,7 @@ export async function handleUnfollow(userId: string, args: string[], reply: (con
   const traderAddress = args[0];
   
   try {
-    const user = await User.findOne({ discordId: userId });
+    const user = await User.findOne({ name: userId });
     if (!user) {
       return reply("You need to register first. Use `.ct register` to get started.");
     }
@@ -54,7 +54,7 @@ export async function handleUnfollow(userId: string, args: string[], reply: (con
 
 export async function handleList(userId: string, reply: (content: string) => Promise<void>) {
   try {
-    const user = await User.findOne({ discordId: userId });
+    const user = await User.findOne({ name: userId });
     if (!user) {
       return reply("You need to register first. Use `.ct register` to get started.");
     }
