@@ -69,7 +69,7 @@ export default function WalletImport({ onWalletAdded }: WalletImportProps) {
   return (
     <div>
       <h2>Import or Create Wallet</h2>
-      <form onSubmit={handleImport}>
+      <form onSubmit={handleImportWallet}>
         <select value={importType} onChange={(e) => setImportType(e.target.value as 'seed' | 'privateKey')}>
           <option value="seed">Seed Phrase</option>
           <option value="privateKey">Private Key</option>
