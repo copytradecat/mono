@@ -32,6 +32,7 @@ const defaultSettings: Settings = {
 export default function BotSettings() {
   const { data: session } = useSession();
   const [settings, setSettings] = useState<Settings>(defaultSettings);
+  const [fetchedSettings, setFetchedSettings] = useState<Settings>();
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -45,6 +46,7 @@ export default function BotSettings() {
     if (response.ok) {
       const data = await response.json();
       setSettings({ ...defaultSettings, ...data.settings });
+      setFetchedSettings({ ...defaultSettings, ...data.settings });
     }
   };
 
@@ -75,8 +77,20 @@ export default function BotSettings() {
       <h2 className="text-2xl font-bold mb-4">Bot Settings</h2>
       <div>
         {settings ? 
-              <pre className="bg-gray-100 p-2 rounded">
-                {JSON.stringify(settings, null, 2)}</pre> : ''}
+        (<table>
+          <tbody>
+            <tr>
+              <td>Saved Settings</td>
+              <td>Unsaved Settings</td>
+            </tr>
+            <tr>
+              <td><pre className="bg-gray-100 p-2 rounded">
+              {JSON.stringify(fetchedSettings, null, 2)}</pre></td>
+              <td><pre className="bg-gray-100 p-2 rounded">
+              {JSON.stringify(settings, null, 2)}</pre></td>
+            </tr>
+          </tbody>
+        </table>) : ''}
         <h3 className="text-xl font-semibold mb-2">Slippage Type</h3>
           <div>
             <button
