@@ -19,8 +19,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (session) {
       user = await User.findOne({ email: session.user.email });
     } else {
-      // For bot requests, you might need to identify the user differently
-      // For example, using a userId passed in the request body
       const { userId } = req.body;
       user = await User.findOne({ _id: userId });
     }
@@ -33,7 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.status(200).json({ settings: user.settings });
     } else if (req.method === 'POST') {
       const { settings } = req.body;
-      user.settings = { ...user.settings, ...settings };
+      user.settings = settings;
       await user.save();
       res.status(200).json({ message: 'Settings updated successfully' });
     } else {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Connection, PublicKey, Transaction } from '@solana/web3.js';
 import { getQuote, getSwapTransaction, executeSwap } from '../services/jupiter.service';
 import axios from 'axios';
@@ -8,21 +8,45 @@ interface TradingInterfaceProps {
   userId: string;
 }
 
+interface Settings {
+  slippage: number;
+  smartMevProtection: 'fast' | 'secure';
+  setSpeed: 'default' | 'auto';
+  priorityFee: number;
+  briberyAmount: number;
+  entryAmounts: number[];
+  exitPercentages: number[];
+}
+
 export default function TradingInterface({ selectedWallet, userId }: TradingInterfaceProps) {
   const [inputToken, setInputToken] = useState('So11111111111111111111111111111111111111112');
-  const [outputToken, setOutputToken] = useState('jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v');
-  const [amount, setAmount] = useState('0.0000001');
+  const [outputToken, setOutputToken] = useState('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+  const [amount, setAmount] = useState('0.1');
   const [quoteResult, setQuoteResult] = useState<any>(null);
   const [swapResult, setSwapResult] = useState<string | null>(null);
+  const [settings, setSettings] = useState<Settings | null>(null);
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const response = await axios.get('/api/bot-settings');
+      setSettings(response.data.settings);
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+    }
+  };
 
   const handleGetQuote = async () => {
-    if (!selectedWallet || !inputToken || !outputToken || !amount) {
-      alert('Please select a wallet and fill in all fields');
+    if (!selectedWallet || !inputToken || !outputToken || !amount || !settings) {
+      alert('Please select a wallet, fill in all fields, and ensure settings are loaded');
       return;
     }
 
     try {
-      const quote = await getQuote(inputToken, outputToken, parseFloat(amount));
+      const quote = await getQuote(inputToken, outputToken, parseFloat(amount), settings.slippage);
       setQuoteResult(quote);
     } catch (error) {
       console.error('Error getting quote:', error);
@@ -31,15 +55,14 @@ export default function TradingInterface({ selectedWallet, userId }: TradingInte
   };
 
   const handleSubmitSwap = async () => {
-    if (!selectedWallet || !quoteResult) {
-      alert('Please select a wallet and get a quote first');
+    if (!selectedWallet || !quoteResult || !settings) {
+      alert('Please select a wallet, get a quote first, and ensure settings are loaded');
       return;
     }
 
     try {
-      const swapTransaction = await getSwapTransaction(quoteResult, selectedWallet);
+      const swapTransaction = await getSwapTransaction(quoteResult, selectedWallet, settings);
 
-      // Send the serialized transaction to the signing service
       const response = await axios.post('/api/sign-and-send', {
         userId,
         walletPublicKey: selectedWallet,
@@ -49,7 +72,13 @@ export default function TradingInterface({ selectedWallet, userId }: TradingInte
       const { signature } = response.data;
       setSwapResult(signature);
 
-      // Optionally, you can save the transaction in your database or update the UI accordingly
+      // Record the trade
+      await axios.post('/api/execute-trade', {
+        publicKey: selectedWallet,
+        txid: signature,
+        amount: parseFloat(amount),
+        token: outputToken,
+      });
     } catch (error) {
       console.error('Error executing swap:', error);
       alert(`Failed to execute swap: ${error instanceof Error ? error.message : 'Unknown error'}`);

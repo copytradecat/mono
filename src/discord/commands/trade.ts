@@ -26,10 +26,11 @@ export async function handleTradeCommand(interaction: any, args: string[]) {
       token === 'SOL'
         ? 'So11111111111111111111111111111111111111112'
         : 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC mint address
-      amount * 1e9
+      amount * 1e9,
+      user.settings.slippage
     );
 
-    const swapData = await getSwapTransaction(quoteData, wallet.publicKey);
+    const swapData = await getSwapTransaction(quoteData, wallet.publicKey, user.settings);
 
     const signature = await signAndSendTransaction(
       user._id.toString(),
@@ -38,7 +39,8 @@ export async function handleTradeCommand(interaction: any, args: string[]) {
     );
 
     await Trade.create({
-      user: userId,
+      userId: userId,
+      walletAddress: wallet.publicKey,
       txid: signature,
       amount,
       token,

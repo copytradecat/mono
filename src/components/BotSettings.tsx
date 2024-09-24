@@ -2,15 +2,38 @@ import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 
 interface Settings {
-  maxTradeAmount: number;
-  // Add other settings as needed
+  slippage: number;
+  smartMevProtection: 'fast' | 'secure';
+  setSpeed: 'default' | 'auto';
+  priorityFee: number;
+  briberyAmount: number; // Not used in transaction, but kept for bot logic
+  entryAmounts: number[]; // Not used in transaction, but kept for bot logic
+  exitPercentages: number[]; // Not used in transaction, but kept for bot logic
+  wrapUnwrapSOL: boolean;
+  useSharedAccounts: boolean;
+  useTokenLedger: boolean;
+  destinationWallet: string;
+  feeAccount: string;
 }
+
+const defaultSettings: Settings = {
+  slippage: 3.0,
+  smartMevProtection: 'secure',
+  setSpeed: 'default',
+  priorityFee: 0.01,
+  briberyAmount: 0.01,
+  entryAmounts: [0.05, 0.1, 0.24, 0.69, 0.8, 1],
+  exitPercentages: [24, 33, 100],
+  wrapUnwrapSOL: true,
+  useSharedAccounts: true,
+  useTokenLedger: true,
+  destinationWallet: '',
+  feeAccount: '',
+};
 
 export default function BotSettings() {
   const { data: session } = useSession();
-  const [settings, setSettings] = useState<Settings | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedSettings, setEditedSettings] = useState<Settings | null>(null);
+  const [settings, setSettings] = useState<Settings>(defaultSettings);
 
   useEffect(() => {
     if (session) {
@@ -22,28 +45,27 @@ export default function BotSettings() {
     const response = await fetch('/api/bot-settings');
     if (response.ok) {
       const data = await response.json();
-      setSettings(data.settings);
-      setEditedSettings(data.settings);
+      setSettings({ ...defaultSettings, ...data.settings });
     }
   };
 
-  const updateSetting = async () => {
-    if (!editedSettings) return;
+  const updateSetting = async (setting: string, value: any) => {
+    if (!settings) return;
+
+    const updatedSettings = {
+      ...settings,
+      [setting]: value,
+    };
 
     const response = await fetch('/api/bot-settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ settings: editedSettings }),
+      body: JSON.stringify({ settings: updatedSettings }),
     });
 
     if (response.ok) {
-      setSettings(editedSettings);
-      setIsEditing(false);
+      setSettings(updatedSettings);
     }
-  };
-
-  const handleInputChange = (setting: keyof Settings, value: number | string) => {
-    setEditedSettings(prev => prev ? { ...prev, [setting]: value } : null);
   };
 
   if (!settings) return <div>Loading settings...</div>;
@@ -51,32 +73,131 @@ export default function BotSettings() {
   return (
     <div className="p-4 bg-white shadow rounded-lg">
       <h2 className="text-2xl font-bold mb-4">Bot Settings</h2>
-      {isEditing ? (
-        <>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700">Max Trade Amount:</label>
-            <input 
-              type="number" 
-              value={editedSettings?.maxTradeAmount} 
-              onChange={(e) => handleInputChange('maxTradeAmount', parseInt(e.target.value, 10))}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+      <div>
+        <h3 className="text-xl font-semibold mb-2">Slippage (%)</h3>
+        <input
+          type="number"
+          value={settings.slippage}
+          onChange={(e) => updateSetting('slippage', parseFloat(e.target.value))}
+          className="w-full p-2 border rounded"
+        />
+        <h3 className="text-xl font-semibold mt-4 mb-2">Smart-MEV Protection</h3>
+        <div>
+          <button
+            onClick={() => updateSetting('smartMevProtection', 'fast')}
+            className={`mr-2 px-4 py-2 rounded ${settings.smartMevProtection === 'fast' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+          >
+            Fast
+          </button>
+          <button
+            onClick={() => updateSetting('smartMevProtection', 'secure')}
+            className={`px-4 py-2 rounded ${settings.smartMevProtection === 'secure' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+          >
+            Secure
+          </button>
+        </div>
+        <h3 className="text-xl font-semibold mt-4 mb-2">Set Speed</h3>
+        <div>
+          <button
+            onClick={() => updateSetting('setSpeed', 'default')}
+            className={`mr-2 px-4 py-2 rounded ${settings.setSpeed === 'default' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+          >
+            Default
+          </button>
+          <button
+            onClick={() => updateSetting('setSpeed', 'auto')}
+            className={`px-4 py-2 rounded ${settings.setSpeed === 'auto' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+          >
+            Auto
+          </button>
+        </div>
+        <h3 className="text-xl font-semibold mt-4 mb-2">Priority Fee (SOL)</h3>
+        <input
+          type="number"
+          value={settings.priorityFee}
+          onChange={(e) => updateSetting('priorityFee', parseFloat(e.target.value))}
+          className="w-full p-2 border rounded"
+        />
+        <h3 className="text-xl font-semibold mt-4 mb-2">Wrap/Unwrap SOL</h3>
+        <input
+          type="checkbox"
+          checked={settings.wrapUnwrapSOL}
+          onChange={(e) => updateSetting('wrapUnwrapSOL', e.target.checked)}
+          className="mr-2"
+        />
+        <label>Automatically wrap/unwrap SOL</label>
+        <h3 className="text-xl font-semibold mt-4 mb-2">Use Shared Accounts</h3>
+        <input
+          type="checkbox"
+          checked={settings.useSharedAccounts}
+          onChange={(e) => updateSetting('useSharedAccounts', e.target.checked)}
+          className="mr-2"
+        />
+        <label>Use shared accounts for better efficiency</label>
+        <h3 className="text-xl font-semibold mt-4 mb-2">Use Token Ledger</h3>
+        <input
+          type="checkbox"
+          checked={settings.useTokenLedger}
+          onChange={(e) => updateSetting('useTokenLedger', e.target.checked)}
+          className="mr-2"
+        />
+        <label>Use token ledger for tracking</label>
+        <h3 className="text-xl font-semibold mt-4 mb-2">Destination Wallet</h3>
+        <input
+          type="text"
+          value={settings.destinationWallet}
+          onChange={(e) => updateSetting('destinationWallet', e.target.value)}
+          className="w-full p-2 border rounded"
+          placeholder="Optional: Set a different destination wallet"
+        />
+        <h3 className="text-xl font-semibold mt-4 mb-2">Fee Account</h3>
+        <input
+          type="text"
+          value={settings.feeAccount}
+          onChange={(e) => updateSetting('feeAccount', e.target.value)}
+          className="w-full p-2 border rounded"
+          placeholder="Optional: Set a fee account"
+        />
+        <h3 className="text-xl font-semibold mt-4 mb-2">Bribery Amount (SOL)</h3>
+        <input
+          type="number"
+          value={settings.briberyAmount}
+          onChange={(e) => updateSetting('briberyAmount', parseFloat(e.target.value))}
+          className="w-full p-2 border rounded"
+        />
+        <h3 className="text-xl font-semibold mt-4 mb-2">Entry Amounts</h3>
+        <div className="flex flex-wrap">
+          {(settings.entryAmounts || []).map((value, index) => (
+            <input
+              key={index}
+              type="number"
+              value={value}
+              onChange={(e) => {
+                const newEntryAmounts = [...(settings.entryAmounts || [])];
+                newEntryAmounts[index] = parseFloat(e.target.value);
+                updateSetting('entryAmounts', newEntryAmounts);
+              }}
+              className="w-1/6 p-2 border rounded mr-2 mb-2"
             />
-          </div>
-          {/* Add more settings inputs as needed */}
-          <div className="flex justify-end space-x-2">
-            <button onClick={() => setIsEditing(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">Cancel</button>
-            <button onClick={updateSetting} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Save</button>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="mb-4">
-            <span className="font-medium">Max Trade Amount:</span> {settings.maxTradeAmount}
-          </div>
-          {/* Display more settings here */}
-          <button onClick={() => setIsEditing(true)} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Edit Settings</button>
-        </>
-      )}
+          ))}
+        </div>
+        <h3 className="text-xl font-semibold mt-4 mb-2">Exit Percentages</h3>
+        <div className="flex flex-wrap">
+          {(settings.exitPercentages || []).map((value, index) => (
+            <input
+              key={index}
+              type="number"
+              value={value}
+              onChange={(e) => {
+                const newExitPercentages = [...(settings.exitPercentages || [])];
+                newExitPercentages[index] = parseFloat(e.target.value);
+                updateSetting('exitPercentages', newExitPercentages);
+              }}
+              className="w-1/6 p-2 border rounded mr-2 mb-2"
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

@@ -131,15 +131,12 @@ export async function getAggregateBalance(wallets: string[]) {
   return aggregateBalance;
 }
 
-export async function getQuote(inputToken: string, outputToken: string, amount: number): Promise<QuoteResponse> {
+export async function getQuote(inputToken: string, outputToken: string, amount: number, slippage: number): Promise<QuoteResponse> {
   const params: QuoteGetRequest = {
     inputMint: inputToken,
     outputMint: outputToken,
-    amount: Math.floor(amount * 1e9), // Convert to lamports
-    autoSlippage: true,
-    autoSlippageCollisionUsdValue: 1_000,
-    maxAutoSlippageBps: 1000, // 10%
-    minimizeSlippage: true,
+    amount: Math.floor(amount),
+    slippageBps: Math.floor(slippage * 100),
     onlyDirectRoutes: false,
     asLegacyTransaction: false,
   };
@@ -158,13 +155,19 @@ export async function getQuote(inputToken: string, outputToken: string, amount: 
   }
 }
 
-export async function getSwapTransaction(quoteResponse: QuoteResponse, userPublicKey: string): Promise<any> {
+export async function getSwapTransaction(quoteResponse: QuoteResponse, userPublicKey: string, settings: any): Promise<any> {
   const swapTransaction = await jupiterApiClient.swapPost({
     swapRequest: {
       quoteResponse,
       userPublicKey,
-      dynamicComputeUnitLimit: true,
-      prioritizationFeeLamports: "auto",
+      wrapUnwrapSOL: true, // Add this to automatically wrap/unwrap SOL
+      dynamicComputeUnitLimit: settings.setSpeed === 'auto',
+      prioritizationFeeLamports: settings.priorityFee * LAMPORTS_PER_SOL,
+      asLegacyTransaction: false, // Use versioned transactions
+      useSharedAccounts: true, // Use shared accounts for better efficiency
+      useTokenLedger: true, // Use token ledger for tracking
+      destinationWallet: settings.destinationWallet || userPublicKey, // Allow setting a different destination wallet
+      feeAccount: settings.feeAccount, // Optional fee account
     },
   });
 
