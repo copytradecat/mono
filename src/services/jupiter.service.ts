@@ -143,7 +143,7 @@ export async function getQuote(inputToken: string, outputToken: string, amount: 
   const params: QuoteGetRequest = slippageSettings.type === 'fixed' 
     ? {
         ...baseParams,
-        slippageBps: Math.floor(slippageSettings.value! * 100),
+        slippageBps: Math.floor(slippageSettings.value!),
       }
     : {
         ...baseParams,

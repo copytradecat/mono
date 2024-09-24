@@ -116,7 +116,7 @@ export default function BotSettings() {
           </div>
           {settings.slippageType === 'fixed' && (
             <>
-              <h3 className="text-xl font-semibold mt-4 mb-2">Slippage (%)</h3>
+              <h3 className="text-xl font-semibold mt-4 mb-2">Slippage Bips (100 bips = 1% slippage)</h3>
               <input
                 type="number"
                 value={settings.slippage}
