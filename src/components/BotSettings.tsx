@@ -5,8 +5,8 @@ export interface Settings {
   slippage: number;
   slippageType: 'fixed' | 'dynamic';
   smartMevProtection: 'fast' | 'secure'; // Not implemented
-  setSpeed: 'default' | 'fast';
-  priorityFee: number; 
+  priorityFee: number | 'auto'; 
+  transactionSpeed: 'medium' | 'high' | 'veryHigh' | 'custom' | 'auto';
   // bribery removed, not implemented
   entryAmounts: number[]; // For bot logic, not used in transaction
   exitPercentages: number[]; // For bot logic, not used in transaction
@@ -17,11 +17,11 @@ const defaultSettings: Settings = {
   slippage: 3.0,
   slippageType: 'fixed',
   smartMevProtection: 'secure',
-  setSpeed: 'default',
-  priorityFee: 0.01,
+  transactionSpeed: 'medium',
+  priorityFee: 'auto',
   entryAmounts: [0.05, 0.1, 0.24, 0.69, 0.8, 1],
   exitPercentages: [24, 33, 100],
-  wrapUnwrapSOL: true
+  wrapUnwrapSOL: true,
 };
 
 export default function BotSettings() {
@@ -46,7 +46,7 @@ export default function BotSettings() {
   };
 
   const updateSetting = (setting: keyof Settings, value: any) => {
-    setSettings(prev => ({ ...prev, [setting]: value }));
+    setSettings((prev) => ({ ...prev, [setting]: value }));
   };
 
   const handleSaveSettings = async () => {
@@ -73,27 +73,32 @@ export default function BotSettings() {
     }
   };
 
-  if (!settings) return <div>Loading settings...</div>;
-
   return (
     <div className="p-4 bg-white shadow rounded-lg">
       <h2 className="text-2xl font-bold mb-4">Bot Settings</h2>
       <div>
-        {settings ? 
-        (<table>
+        <table>
           <tbody>
             <tr>
               <td>Saved Settings</td>
               <td>Unsaved Settings</td>
             </tr>
             <tr>
-              <td><pre className="bg-gray-100 p-2 rounded">
-              {JSON.stringify(fetchedSettings, null, 2)}</pre></td>
-              <td><pre className="bg-gray-100 p-2 rounded">
-              {JSON.stringify(settings, null, 2)}</pre></td>
+              <td>
+                <pre className="bg-gray-100 p-2 rounded">
+                  {JSON.stringify(fetchedSettings, null, 2)}
+                </pre>
+              </td>
+              <td>
+                <pre className="bg-gray-100 p-2 rounded">
+                  {JSON.stringify(settings, null, 2)}
+                </pre>
+              </td>
             </tr>
           </tbody>
-        </table>) : ''}
+        </table>
+
+        {/* Slippage Type */}
         <h3 className="text-xl font-semibold mb-2">Slippage Type</h3>
           <div>
             <button
@@ -135,28 +140,36 @@ export default function BotSettings() {
             Secure
           </button>
         </div>
-        <h3 className="text-xl font-semibold mt-4 mb-2">Set Speed</h3>
+        <h3 className="text-xl font-semibold mt-4 mb-2">Transaction Speed</h3>
         <div>
-          <button
-            onClick={() => updateSetting('setSpeed', 'default')}
-            className={`mr-2 px-4 py-2 rounded ${settings.setSpeed === 'default' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
-          >
-            Default
-          </button>
-          <button
-            onClick={() => updateSetting('setSpeed', 'auto')}
-            className={`px-4 py-2 rounded ${settings.setSpeed === 'auto' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
-          >
-            Fast
-          </button>
+          {['medium', 'high', 'veryHigh', 'auto', 'custom'].map((speed) => (
+            <button
+              key={speed}
+              onClick={() => {
+                updateSetting('transactionSpeed', speed as Settings['transactionSpeed']);
+                if (speed !== 'custom') {
+                  updateSetting('priorityFee', 'auto');
+                }
+              }}
+              className={`mr-2 px-4 py-2 rounded ${
+                settings.transactionSpeed === speed ? 'bg-blue-500 text-white' : 'bg-gray-200'
+              }`}
+            >
+              {speed.charAt(0).toUpperCase() + speed.slice(1)}
+            </button>
+          ))}
         </div>
-        <h3 className="text-xl font-semibold mt-4 mb-2">Priority Fee (SOL)</h3>
-        <input
-          type="number"
-          value={settings.priorityFee}
-          onChange={(e) => updateSetting('priorityFee', parseFloat(e.target.value))}
-          className="w-full p-2 border rounded"
-        />
+        {settings.transactionSpeed === 'custom' && (
+          <>
+            <h3 className="text-xl font-semibold mt-4 mb-2">Custom Priority Fee (in SOL)</h3>
+            <input
+              type="number"
+              value={settings.priorityFee === 'auto' ? '' : settings.priorityFee}
+              onChange={(e) => updateSetting('priorityFee', parseFloat(e.target.value))}
+              className="w-full p-2 border rounded"
+            />
+          </>
+        )}
         <h3 className="text-xl font-semibold mt-4 mb-2">Wrap/Unwrap SOL</h3>
         <input
           type="checkbox"

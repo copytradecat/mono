@@ -30,13 +30,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.status(200).json({ settings: user.settings });
     } else if (req.method === 'POST') {
       const { settings } = req.body;
+
+      // Validate transactionSpeed
+      if (
+        !['medium', 'high', 'veryHigh', 'custom', 'auto'].includes(settings.transactionSpeed)
+      ) {
+        return res.status(400).json({ error: 'Invalid transactionSpeed value' });
+      }
+
+      // Validate priorityFee
+      if (
+        settings.transactionSpeed === 'custom' &&
+        (typeof settings.priorityFee !== 'number' || isNaN(settings.priorityFee))
+      ) {
+        return res.status(400).json({ error: 'Invalid priorityFee value' });
+      }
+
       user.settings = settings;
       await user.save();
       res.status(200).json({ message: 'Settings updated successfully', settings: user.settings });
     } else {
       res.status(405).json({ error: 'Method not allowed' });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to handle bot settings:', error);
     res.status(500).json({ error: 'Internal server error' });
   }

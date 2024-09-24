@@ -73,7 +73,7 @@ export default function TradingInterface({ selectedWallet, userId }: TradingInte
       //   amount: parseFloat(amount),
       //   token: outputToken,
       // });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error executing swap:', error);
       alert(`Failed to execute swap: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }

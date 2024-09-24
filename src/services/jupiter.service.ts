@@ -5,6 +5,7 @@ import { RateLimiter } from 'limiter';
 import { Metaplex, token } from '@metaplex-foundation/js';
 import { Transaction } from '@solana/web3.js';
 import { createJupiterApiClient, QuoteGetRequest, QuoteResponse } from '@jup-ag/api';
+import { Settings } from '../components/BotSettings';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -167,18 +168,37 @@ export async function getQuote(inputToken: string, outputToken: string, amount: 
   }
 }
 
-export async function getSwapTransaction(quoteResponse: QuoteResponse, userPublicKey: string, settings: any): Promise<any> {
+export async function getSwapTransaction(
+  quoteResponse: QuoteResponse,
+  userPublicKey: string,
+  settings: Settings
+): Promise<any> {
+  const { transactionSpeed, priorityFee, wrapUnwrapSOL } = settings;
+
+  let computeUnitPriceMicroLamports: string | undefined | number;
+
+  if (transactionSpeed === 'medium') {
+    computeUnitPriceMicroLamports = 0;
+  } else if (['high', 'veryHigh'].includes(transactionSpeed)) {
+    computeUnitPriceMicroLamports = "auto";
+  } else if (transactionSpeed === 'custom' && priorityFee !== 'auto') {
+    // if (priorityFee < 0.01) {
+      computeUnitPriceMicroLamports = "auto";
+    // } else {
+      // Convert SOL to micro-lamports
+      // computeUnitPriceMicroLamports = (priorityFee * 1e9 * 1e6).toString();
+    // }
+  }
+
   const swapRequest = {
     quoteResponse,
     userPublicKey,
-    wrapUnwrapSOL: settings.wrapUnwrapSOL,
+    wrapUnwrapSOL,
     asLegacyTransaction: false,
     dynamicComputeUnitLimit: true,
     prioritizationFeeLamports: settings.priorityFee === 'auto' ? 'auto' : settings.priorityFee * LAMPORTS_PER_SOL,
-    ...(settings.swapSpeed === 'fast' && {computeUnitPriceMicroLamports: "auto"}),
-    ...(settings.slippageType === 'dynamic' && {dynamicSlippage: {maxBps:300}})
-    // feeAccount: settings.feeAccount,
-    // trackingAccount: trackingAccount.toBase58(),  // Use actual key
+    ...(settings.slippageType === 'dynamic' && {dynamicSlippage: {maxBps:300}}),
+    computeUnitPriceMicroLamports,
   };
 
   const swapTransaction = await jupiterApiClient.swapPost({
