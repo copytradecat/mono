@@ -1,9 +1,7 @@
 import { CommandInteraction, MessageReaction, User, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ComponentType } from 'discord.js';
-import { getUser, getBalance, createSwapPreview, executeSwap, recordTrade } from './swap-base';
+import { getUser, getBalance, createSwapPreview, executeSwap, recordTrade, swapTime } from './swap-base';
 import { getSwapTransaction, getTokenInfo } from '../../src/services/jupiter.service';
 import { defaultSettings } from '../../src/components/BotSettings';
-
-const swapTime = 5000;
 
 export async function handleBuyCommand(interaction: CommandInteraction) {
   const tokenAddress = interaction.options.getString('token', true);
@@ -11,7 +9,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
 
   try {
     const user = await getUser(userId);
-    await interaction.deferReply({ ephemeral: false });
+    await interaction.deferReply({ ephemeral: true });
 
     const wallet = user.wallets[0];
     const inputToken = 'So11111111111111111111111111111111111111112'; // SOL mint address
@@ -114,18 +112,30 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
           });
 
           cancelCollector.on('end', async (collected) => {
+            // Remove the trashcan emoji and the cancellation message
+            const trashReaction = swapPreviewMessage.reactions.cache.get('🗑️');
+            if (trashReaction) {
+              await trashReaction.remove();
+            }
+            await swapPreviewMessage.edit({
+              content: swapPreview.split('\n').slice(0, -1).join('\n'),
+              components: []
+            });
+
             if (collected.size === 0) {
               try {
                 const swapData = await getSwapTransaction(quoteData, wallet.publicKey, settings);
                 console.log('Swap Data:', swapData);
-                const signature = await executeSwap(userId, wallet.publicKey, swapData.swapTransaction);
-                await recordTrade(userId, wallet.publicKey, signature, selectedAmount, tokenAddress);
-                await interaction.followUp({ content: `Buy order executed successfully. Transaction ID: ${signature}`, ephemeral: true });
-              } catch (error) {
-                console.error('Buy execution failed:', error);
-                if (error instanceof Error && 'logs' in error) {
-                  console.error('Transaction logs:', error.logs);
+                const swapResult = await executeSwap(userId, wallet.publicKey, swapData.swapTransaction);
+                if (swapResult.success) {
+                  await recordTrade(userId, wallet.publicKey, swapResult.signature, selectedAmount, tokenAddress);
+                  await interaction.followUp({ content: `Buy order executed successfully. Transaction ID: ${swapResult.signature}`, ephemeral: true });
+                } else {
+                  const errorMessage = `Failed to execute buy order. Reason: ${swapResult.transactionMessage}`;
+                  await interaction.followUp({ content: errorMessage, ephemeral: true });
                 }
+              } catch (error) {
+                console.error('Error executing swap:', error);
                 await interaction.followUp({ content: 'Failed to execute buy order. Please try again later.', ephemeral: true });
               }
             }

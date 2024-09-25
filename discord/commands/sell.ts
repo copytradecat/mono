@@ -1,11 +1,11 @@
-import { CommandInteraction, MessageReaction, User } from 'discord.js';
+import { CommandInteraction, MessageReaction, User, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ComponentType } from 'discord.js';
 import { getSwapTransaction } from '../../src/services/jupiter.service';
-import { getUser, createSwapPreview, executeSwap, recordTrade, createMessageCollector } from './swap-base';
+import { getUser, createSwapPreview, executeSwap, recordTrade, createMessageCollector, swapTime } from './swap-base';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { rateLimitedRequest } from '../../src/services/jupiter.service';
 import { defaultSettings } from '../../src/components/BotSettings';
-import { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder } from 'discord.js';
+import { getTokenInfo } from '../../src/services/jupiter.service';
 
 const EXIT_PERCENTAGES = [0.24, 0.33, 1];
 const REACTION_EMOJIS = ['1️⃣', '2️⃣', '3️⃣'];
@@ -16,19 +16,19 @@ export async function handleSellCommand(interaction: CommandInteraction) {
   const tokenAddress = interaction.options.getString('token', true);
   const userId = interaction.user.id;
 
+  await interaction.deferReply({ ephemeral: true });
+
   try {
     const user = await getUser(userId);
-    await interaction.deferReply({ ephemeral: false });
-
     const wallet = user.wallets[0];
     const outputToken = 'So11111111111111111111111111111111111111112'; // SOL mint address
 
     const exitPercentages = user.settings.exitPercentages || EXIT_PERCENTAGES;
     const settings = user.settings || defaultSettings;
-    const reactionEmojis = REACTION_EMOJIS.slice(0, exitPercentages.length);
 
-    // Fetch token balance
+    // Fetch token balance and info
     const { balance: tokenBalance, decimals } = await getTokenBalance(wallet.publicKey, tokenAddress);
+    const tokenInfo = await getTokenInfo(tokenAddress);
 
     if (tokenBalance === 0) {
       await interaction.editReply("You don't have any balance for this token.");
@@ -39,7 +39,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
       .setCustomId('exit_percentage')
       .setPlaceholder('Select your exit percentage')
       .addOptions(
-        exitPercentages.map((percentage, index) => 
+        exitPercentages.map((percentage) => 
           new StringSelectMenuOptionBuilder()
             .setLabel(`${percentage}% of your balance`)
             .setValue(percentage.toString())
@@ -57,7 +57,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
     const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
 
     const response = await interaction.editReply({
-      content: `Select your exit percentage for selling ${tokenAddress}:`,
+      content: `Select your exit percentage for selling ${tokenInfo.symbol}:`,
       components: [row],
     });
 
@@ -95,8 +95,6 @@ export async function handleSellCommand(interaction: CommandInteraction) {
         }
 
         const amount = tokenBalance * (exitPercentage / 100);
-
-        // Adjust the amount based on token decimals
         const adjustedAmount = Math.floor(amount * 10 ** decimals);
 
         try {
@@ -110,7 +108,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
           const cancelFilter = (reaction: MessageReaction, user: User) => 
             reaction.emoji.name === '🗑️' && user.id === userId;
 
-          const cancelCollector = createMessageCollector(swapPreviewMessage, cancelFilter, 5000);
+          const cancelCollector = swapPreviewMessage.createReactionCollector({ filter: cancelFilter, time: swapTime });
 
           cancelCollector.on('collect', async () => {
             cancelCollector.stop();
@@ -118,18 +116,30 @@ export async function handleSellCommand(interaction: CommandInteraction) {
           });
 
           cancelCollector.on('end', async (collected) => {
+            // Remove the trashcan emoji and the cancellation message
+            const trashReaction = swapPreviewMessage.reactions.cache.get('🗑️');
+            if (trashReaction) {
+              await trashReaction.remove();
+            }
+            await swapPreviewMessage.edit({
+              content: swapPreview.split('\n').slice(0, -1).join('\n'),
+              components: []
+            });
+
             if (collected.size === 0) {
               try {
                 const swapData = await getSwapTransaction(quoteData, wallet.publicKey, settings);
                 console.log('Swap Data:', swapData);
-                const signature = await executeSwap(userId, wallet.publicKey, swapData.swapTransaction);
-                await recordTrade(userId, wallet.publicKey, signature, amount, tokenAddress);
-                await interaction.followUp({ content: `Sell order executed successfully. Transaction ID: ${signature}`, ephemeral: true });
+                const swapResult = await executeSwap(userId, wallet.publicKey, swapData.swapTransaction);
+                if (swapResult.success) {
+                  await recordTrade(userId, wallet.publicKey, swapResult.signature, amount, tokenAddress);
+                  await interaction.followUp({ content: `Sell order executed successfully. Transaction ID: ${swapResult.signature}`, ephemeral: true });
+                } else {
+                  const errorMessage = `Failed to execute sell order. Reason: ${swapResult.transactionMessage}`;
+                  await interaction.followUp({ content: errorMessage, ephemeral: true });
+                }
               } catch (error) {
                 console.error('Sell execution failed:', error);
-                if (error instanceof Error && 'logs' in error) {
-                  console.error('Transaction logs:', error.logs);
-                }
                 await interaction.followUp({ content: 'Failed to execute sell order. Please try again later.', ephemeral: true });
               }
             }
@@ -143,7 +153,6 @@ export async function handleSellCommand(interaction: CommandInteraction) {
       console.error('Sell order timed out. Please try again.', error);
       await interaction.followUp({ content: 'Sell order timed out. Please try again.', ephemeral: true });
     }
-
   } catch (error) {
     console.error('Error in handleSellCommand:', error);
     interaction.followUp({ content: 'An error occurred while processing your sell order.', ephemeral: true });
@@ -168,7 +177,7 @@ async function getTokenBalance(walletAddress: string, tokenAddress: string): Pro
   const balance = tokenAccount.tokenAmount.uiAmount;
   const decimals = tokenAccount.tokenAmount.decimals;
 
-  // console.log('Token Account Info:', tokenAccount);
+  console.log('Token Account Info:', tokenAccount);
 
   return { balance, decimals };
 }

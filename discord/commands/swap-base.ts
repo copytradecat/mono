@@ -10,7 +10,7 @@ import dotenv from 'dotenv';
 dotenv.config({ path: ['../../.env.local', '../../.env'] });
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
-const swapTime = 5000;
+export const swapTime = 5000; // 5 seconds // time to cancel the transaction
 
 export async function getUser(userId: string) {
   const user = await UserAccount.findOne({ name: userId });
@@ -53,13 +53,22 @@ React with 🗑️ within ${swapTime/1000} seconds to cancel the transaction.`
 }
 
 export async function executeSwap(userId: string, walletPublicKey: string, swapTransaction: string) {
-  const response = await axios.post(`${API_BASE_URL}/sign-and-send`, {
-    userId,
-    walletPublicKey,
-    serializedTransaction: swapTransaction,
-  });
+  try {
+    const response = await axios.post(`${API_BASE_URL}/sign-and-send`, {
+      userId,
+      walletPublicKey,
+      serializedTransaction: swapTransaction,
+    });
 
-  return response.data.signature;
+    return { success: true, signature: response.data.signature };
+  } catch (error) {
+    console.error('Swap execution failed:', error);
+    return { 
+      success: false, 
+      error: error.response?.data?.error || 'Unknown error',
+      transactionMessage: error.response?.data?.transactionMessage || 'No additional information'
+    };
+  }
 }
 
 export async function recordTrade(userId: string, walletAddress: string, signature: string, amount: number, token: string) {
