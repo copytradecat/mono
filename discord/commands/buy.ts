@@ -1,9 +1,8 @@
-import { CommandInteraction, MessageReaction, User } from 'discord.js';
-import { getUser, getBalance, createSwapPreview, executeSwap, recordTrade, createMessageCollector } from './swap-base';
+import { CommandInteraction, MessageReaction, User, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ComponentType } from 'discord.js';
+import { getUser, getBalance, createSwapPreview, executeSwap, recordTrade } from './swap-base';
 import { getSwapTransaction, getTokenInfo } from '../../src/services/jupiter.service';
+import { defaultSettings } from '../../src/components/BotSettings';
 
-const ENTRY_SIZES = [0.05, 0.1, 0.25, 0.5, 1];
-const REACTION_EMOJIS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'];
 const swapTime = 5000;
 
 export async function handleBuyCommand(interaction: CommandInteraction) {
@@ -17,103 +16,128 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
     const wallet = user.wallets[0];
     const inputToken = 'So11111111111111111111111111111111111111112'; // SOL mint address
 
-    const entryAmounts = user.settings.entryAmounts || ENTRY_SIZES;
-    const settings = user.settings;
-    const reactionEmojis = REACTION_EMOJIS.slice(0, entryAmounts.length);
+    const entryAmounts = user.settings.entryAmounts || [0.05, 0.1, 0.25, 0.5, 1];
+    const settings = user.settings || defaultSettings;
 
     const balance = await getBalance(wallet.publicKey);
 
-    const previewMessage = await interaction.editReply({
-      content: `Select your entry size for buying ${tokenAddress}:\n` +
-        entryAmounts.map((size, index) => {
-          const amount = size;
-          return `${reactionEmojis[index]}: ${amount} SOL`;
-        }).join('\n') +
-        '\nReact with 🚫 to cancel the transaction.',
-      fetchReply: true
+    const select = new StringSelectMenuBuilder()
+      .setCustomId('entry_amount')
+      .setPlaceholder('Select an entry amount')
+      .addOptions(
+        entryAmounts.map((amount, index) => 
+          new StringSelectMenuOptionBuilder()
+            .setLabel(`${amount} SOL`)
+            .setValue(amount.toString())
+        )
+      )
+      .addOptions([
+        new StringSelectMenuOptionBuilder()
+          .setLabel('Custom amount')
+          .setValue('custom'),
+        new StringSelectMenuOptionBuilder()
+          .setLabel('Cancel')
+          .setValue('cancel')
+      ]);
+
+    const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
+
+    const response = await interaction.editReply({
+      content: `Select your entry size for buying ${tokenAddress}:`,
+      components: [row],
     });
 
-    for (const emoji of [...reactionEmojis, '🚫']) {
-      await previewMessage.react(emoji);
-    }
+    try {
+      const collectorFilter = (i: { user: { id: string; }; }) => i.user.id === interaction.user.id;
+      const confirmation = await response.awaitMessageComponent({ filter: collectorFilter, time: 60000 });
 
-    const filter = (reaction: MessageReaction, user: User) => 
-      [...reactionEmojis, '🚫'].includes(reaction.emoji.name!) && user.id === userId;
+      if (confirmation.customId === 'entry_amount') {
+        if (confirmation.values[0] === 'cancel') {
+          await interaction.followUp({ content: 'Buy order cancelled.', ephemeral: true });
+          return;
+        }
 
-    const collector = createMessageCollector(previewMessage, filter, 60000);
-
-    collector.on('collect', async (reaction, user) => {
-      collector.stop();
-      if (reaction.emoji.name === '🚫') {
-        await interaction.followUp({ content: 'Transaction cancelled.', ephemeral: true });
-        return;
-      }
-
-      const sizeIndex = reactionEmojis.indexOf(reaction.emoji.name!);
-      const entrySize = entryAmounts[sizeIndex];
-
-      // Fetch token info
-      const tokenInfo = await getTokenInfo(inputToken);
-      const amount = entrySize;
-      let requiredBalance = amount;
-
-      if(inputToken === 'So11111111111111111111111111111111111111112') {
-        requiredBalance = amount + (5000000 / 1e9 ); // Add 0.005 SOL for transaction fees (only for SOL)
-      } 
-      if (balance < requiredBalance) {
-        await interaction.followUp({ content: `Insufficient balance. You need at least ${requiredBalance} ${tokenInfo.symbol} for this transaction.`, ephemeral: true });
-        return;
-      }
-
-      // Adjust the amount based on token decimals
-      const adjustedAmount = Math.floor(amount * 10 ** tokenInfo.decimals);
-
-      try {
-        const { quoteData, swapPreview } = await createSwapPreview(adjustedAmount, inputToken, tokenAddress, settings);
-
-        console.log('Quote Data:', quoteData);
-
-        const swapPreviewMessage = await interaction.followUp({ content: swapPreview, fetchReply: true });
-        await swapPreviewMessage.react('🗑️');
-
-        const cancelFilter = (reaction: MessageReaction, user: User) => 
-          reaction.emoji.name === '🗑️' && user.id === userId;
-
-        const cancelCollector = createMessageCollector(swapPreviewMessage, cancelFilter, swapTime);
-
-        cancelCollector.on('collect', async () => {
-          cancelCollector.stop();
-          await interaction.followUp({ content: 'Transaction cancelled.', ephemeral: true });
-        });
-
-        cancelCollector.on('end', async (collected) => {
-          if (collected.size === 0) {
-            try {
-              const swapData = await getSwapTransaction(quoteData, wallet.publicKey, settings);
-              console.log('Swap Data:', swapData);
-              const signature = await executeSwap(userId, wallet.publicKey, swapData.swapTransaction);
-              await recordTrade(userId, wallet.publicKey, signature, amount / 10 ** tokenInfo.decimals, tokenAddress);
-              await interaction.followUp({ content: `Buy order executed successfully. Transaction ID: ${signature}`, ephemeral: true });
-            } catch (error) {
-              console.error('Buy execution failed:', error);
-              if (error instanceof Error && 'logs' in error) {
-                console.error('Transaction logs:', error.logs);
-              }
-              await interaction.followUp({ content: 'Failed to execute buy order. Please try again later.', ephemeral: true });
+        let selectedAmount: number;
+        if (confirmation.values[0] === 'custom') {
+          await interaction.followUp({ content: 'Please enter the custom amount in SOL:', ephemeral: true });
+          try {
+            const customAmountResponse = await interaction.channel!.awaitMessages({
+              filter: (m) => m.author.id === interaction.user.id,
+              max: 1,
+              time: 30000,
+              errors: ['time']
+            });
+            selectedAmount = parseFloat(customAmountResponse.first()!.content);
+            if (isNaN(selectedAmount) || selectedAmount <= 0) {
+              await interaction.followUp({ content: 'Invalid amount. Buy order cancelled.', ephemeral: true });
+              return;
             }
+          } catch (error) {
+            await interaction.followUp({ content: 'No amount provided. Buy order cancelled.', ephemeral: true });
+            return;
           }
-        });
-      } catch (error) {
-        console.error('Error getting quote:', error);
-        await interaction.followUp({ content: 'Failed to get quote. Please try again later.', ephemeral: true });
-      }
-    });
+        } else {
+          selectedAmount = parseFloat(confirmation.values[0]);
+        }
 
-    collector.on('end', collected => {
-      if (collected.size === 0) {
-        interaction.followUp({ content: 'Buy order timed out. Please try again.', ephemeral: true });
+        // Fetch token info
+        const tokenInfo = await getTokenInfo(inputToken);
+        let requiredBalance = selectedAmount;
+
+        if (inputToken === 'So11111111111111111111111111111111111111112') {
+          requiredBalance = selectedAmount + (5000000 / 1e9); // Add 0.005 SOL for transaction fees (only for SOL)
+        }
+        if (balance < requiredBalance) {
+          await interaction.followUp({ content: `Insufficient balance. You need at least ${requiredBalance} ${tokenInfo.symbol} for this transaction.`, ephemeral: true });
+          return;
+        }
+
+        // Adjust the amount based on token decimals
+        const adjustedAmount = Math.floor(selectedAmount * 10 ** tokenInfo.decimals);
+
+        try {
+          const { quoteData, swapPreview } = await createSwapPreview(adjustedAmount, inputToken, tokenAddress, settings);
+
+          console.log('Quote Data:', quoteData);
+
+          const swapPreviewMessage = await interaction.followUp({ content: swapPreview, fetchReply: true });
+          await swapPreviewMessage.react('🗑️');
+
+          const cancelFilter = (reaction: MessageReaction, user: User) => 
+            reaction.emoji.name === '🗑️' && user.id === userId;
+
+          const cancelCollector = swapPreviewMessage.createReactionCollector({ filter: cancelFilter, time: swapTime });
+
+          cancelCollector.on('collect', async () => {
+            cancelCollector.stop();
+            await interaction.followUp({ content: 'Transaction cancelled.', ephemeral: true });
+          });
+
+          cancelCollector.on('end', async (collected) => {
+            if (collected.size === 0) {
+              try {
+                const swapData = await getSwapTransaction(quoteData, wallet.publicKey, settings);
+                console.log('Swap Data:', swapData);
+                const signature = await executeSwap(userId, wallet.publicKey, swapData.swapTransaction);
+                await recordTrade(userId, wallet.publicKey, signature, selectedAmount, tokenAddress);
+                await interaction.followUp({ content: `Buy order executed successfully. Transaction ID: ${signature}`, ephemeral: true });
+              } catch (error) {
+                console.error('Buy execution failed:', error);
+                if (error instanceof Error && 'logs' in error) {
+                  console.error('Transaction logs:', error.logs);
+                }
+                await interaction.followUp({ content: 'Failed to execute buy order. Please try again later.', ephemeral: true });
+              }
+            }
+          });
+        } catch (error) {
+          console.error('Error getting quote:', error);
+          await interaction.followUp({ content: 'Failed to get quote. Please try again later.', ephemeral: true });
+        }
       }
-    });
+    } catch (e) {
+      await interaction.followUp({ content: 'Buy order timed out or was cancelled. Please try again.', ephemeral: true });
+    }
 
   } catch (error) {
     console.error('Error in handleBuyCommand:', error);
