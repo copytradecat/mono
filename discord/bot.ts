@@ -36,6 +36,12 @@ const commands = [
           .setDescription('Token address to buy')
           .setRequired(true)
       ))
+    .addSubcommand(subcommand => subcommand.setName('sell').setDescription('Place a sell order')
+      .addStringOption(option => 
+        option.setName('token')
+          .setDescription('Token address to sell')
+          .setRequired(true)
+      ))
     .addSubcommand(subcommand => subcommand.setName('follow').setDescription('Start copying trades from a specific address')
       .addStringOption(option => option.setName('address').setDescription('Trader address to follow').setRequired(true)))
     .addSubcommand(subcommand => subcommand.setName('unfollow').setDescription('Stop copying trades from a specific address')

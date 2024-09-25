@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Connection, PublicKey, Transaction } from '@solana/web3.js';
-import { getQuote, getSwapTransaction, executeSwap } from '../services/jupiter.service';
+import { getQuote, getSwapTransaction, executeSwap, getTokenInfo } from '../services/jupiter.service';
 import axios from 'axios';
 import { Settings } from './BotSettings';
 
@@ -40,7 +40,8 @@ export default function TradingInterface({ selectedWallet, userId }: TradingInte
       const slippageSettings = settings.slippageType === 'fixed' 
         ? { type: 'fixed' as const, value: settings.slippage }
         : { type: 'dynamic' as const };
-      const quote = await getQuote(inputToken, outputToken, parseFloat(amount), slippageSettings);
+        const inputTokenDecimals = await getTokenInfo(inputToken);
+      const quote = await getQuote(inputToken, outputToken, parseFloat(amount) * (10 ** inputTokenDecimals.decimals), slippageSettings);
       setQuoteResult(quote);
     } catch (error) {
       console.error('Error getting quote:', error);

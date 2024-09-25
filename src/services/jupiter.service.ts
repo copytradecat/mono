@@ -62,6 +62,28 @@ async function getTokenMetadata(mintAddresses: string[]) {
   return metadata;
 }
 
+
+export async function getTokenInfo(tokenAddress: string) {
+  if (tokenAddress === 'So11111111111111111111111111111111111111112') {
+    return {"address":"So11111111111111111111111111111111111111112","name":"Wrapped SOL","symbol":"SOL","decimals":9,"logoURI":"https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png","tags":["verified","community","strict"],"daily_volume":119732114.11683102,"created_at":"2024-04-26T10:56:58.893768Z","freeze_authority":null,"mint_authority":null,"permanent_delegate":null,"minted_at":null,"extensions":{"coingeckoId":"wrapped-solana"}};
+  }
+  try {
+    const response = await fetch(`https://api.jup.ag/tokens/v1/${tokenAddress}`,
+      { method: 'GET', headers: {accept: 'application/json'}});
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch token info for ${tokenAddress}
+        \nResponse status: ${response.status}`);
+    }
+    const data = await response.json();
+    console.log(data);
+    return data;
+  } catch (error) {
+    console.error(error.message);
+  }
+
+}
+
 export async function getTokenBalances(publicKey: string) {
   try {
     const pubKey = new PublicKey(publicKey);
@@ -137,7 +159,7 @@ export async function getQuote(inputToken: string, outputToken: string, amount: 
   const baseParams: QuoteGetRequest = {
     inputMint: inputToken,
     outputMint: outputToken,
-    amount: Math.floor(amount * 1e9), // Convert to lamports
+    amount: amount,
   };
 
   const params: QuoteGetRequest = slippageSettings.type === 'fixed' 

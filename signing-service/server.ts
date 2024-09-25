@@ -68,7 +68,7 @@ app.post('/sign-and-send', async (req, res) => {
     transaction.sign([keypair]);
 
     try {
-      // console.log('Sending raw transaction');
+      console.log('Sending raw transaction');
       const signature = await connection.sendTransaction(transaction);
       // console.log('Confirming transaction');
       await connection.confirmTransaction(signature, 'confirmed');
@@ -77,7 +77,7 @@ app.post('/sign-and-send', async (req, res) => {
       res.status(200).json({ signature });
     } catch (error) {
       console.error('Error signing and sending transaction:', error);
-      if (error instanceof Error && 'logs' in error) {
+      if (error.logs) {
         console.error('Transaction logs:', error.logs);
       }
       res.status(500).json({ error: 'Failed to sign and send transaction', logs: error.logs });
