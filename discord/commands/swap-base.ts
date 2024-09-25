@@ -25,30 +25,42 @@ export async function getBalance(publicKey: string) {
   return await connection.getBalance(new PublicKey(publicKey));
 }
 
-export async function createSwapPreview(amount: number, inputToken: string, outputToken: string, settings: Settings) {
+export async function createSwapPreview(
+  amount: number,
+  inputToken: string,
+  outputToken: string,
+  settings: Settings
+) {
   const quoteData = await getQuote(
     inputToken,
     outputToken,
     amount,
-    settings.slippageType === 'fixed' 
-      ? { type: 'fixed' as const, value: settings.slippage }
-      : { type: 'dynamic' as const }
+    settings.slippageType === 'fixed'
+      ? { type: 'fixed', value: settings.slippage }
+      : { type: 'dynamic' }
   );
   const inputTokenInfo = await getTokenInfo(inputToken);
   const outputTokenInfo = await getTokenInfo(outputToken);
 
-  const estimatedOutput = quoteData.outAmount / 10 ** outputTokenInfo.decimals; // Assuming output token has 9 decimals
-  return {
-    quoteData,
-    swapPreview: `Swap Preview:
-From: ${(amount / 10 ** inputTokenInfo.decimals)} ${inputToken === 'So11111111111111111111111111111111111111112' ? 'SOL' : inputToken}
-To: ${estimatedOutput} ${outputToken === 'So11111111111111111111111111111111111111112' ? 'SOL' : outputToken}
+  const estimatedOutput = quoteData.outAmount / 10 ** outputTokenInfo.decimals;
+
+  const swapPreview = `Swap Preview:
+From: ${(amount / 10 ** inputTokenInfo.decimals)} ${inputTokenInfo.symbol}
+To: ${estimatedOutput} ${outputTokenInfo.symbol}
 Price Impact: ${(quoteData.priceImpactPct * 100)}%
-Slippage: ${settings.slippageType === 'fixed' ? `${settings.slippage/100}%` : 'Dynamic'}
+Slippage: ${
+    settings.slippageType === 'fixed' ? `${settings.slippage / 100}%` : 'Dynamic'
+  }
 Transaction Speed: ${settings.transactionSpeed}
 Smart-MEV Protection: ${settings.smartMevProtection}
-Wrap/Unwrap SOL: ${settings.wrapUnwrapSOL ? 'Enabled' : 'Disabled'}
-React with 🗑️ within ${swapTime/1000} seconds to cancel the transaction.`
+Wrap/Unwrap SOL: ${settings.wrapUnwrapSOL ? 'Enabled' : 'Disabled'}`;
+
+  return {
+    quoteData,
+    swapPreview,
+    estimatedOutput,
+    inputTokenInfo,
+    outputTokenInfo,
   };
 }
 
