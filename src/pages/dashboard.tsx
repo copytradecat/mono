@@ -32,7 +32,7 @@ export default function Dashboard() {
         </div>
         <div>
           {selectedWallet && (
-            <TradingInterface selectedWallet={selectedWallet} userId={session?.user?.email || ''} />
+            <TradingInterface selectedWallet={selectedWallet} userId={session?.user?.name || ''} />
           )}
           <BotSettings />
         </div>

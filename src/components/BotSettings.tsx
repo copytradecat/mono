@@ -13,7 +13,7 @@ export interface Settings {
   wrapUnwrapSOL: boolean;
 }
 
-const defaultSettings: Settings = {
+export const defaultSettings: Settings = {
   slippage: 3.0,
   slippageType: 'fixed',
   smartMevProtection: 'secure',

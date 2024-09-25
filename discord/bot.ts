@@ -13,10 +13,12 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.DirectMessages,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessageReactions,
+    GatewayIntentBits.DirectMessageReactions,
     GatewayIntentBits.GuildPresences,
     GatewayIntentBits.GuildMembers,
   ],
-  partials: [Partials.Channel, Partials.Message],
+  partials: [Partials.Channel, Partials.Message, Partials.Reaction],
 });
 
 const commands = [
@@ -28,6 +30,12 @@ const commands = [
     .addSubcommand(subcommand => subcommand.setName('trade').setDescription('Execute a trade')
       .addNumberOption(option => option.setName('amount').setDescription('Trade amount').setRequired(true))
       .addStringOption(option => option.setName('token').setDescription('Token to trade').setRequired(true)))
+    .addSubcommand(subcommand => subcommand.setName('buy').setDescription('Place a buy order')
+      .addStringOption(option => 
+        option.setName('token')
+          .setDescription('Token address to buy')
+          .setRequired(true)
+      ))
     .addSubcommand(subcommand => subcommand.setName('follow').setDescription('Start copying trades from a specific address')
       .addStringOption(option => option.setName('address').setDescription('Trader address to follow').setRequired(true)))
     .addSubcommand(subcommand => subcommand.setName('unfollow').setDescription('Stop copying trades from a specific address')
@@ -37,6 +45,9 @@ const commands = [
     .addSubcommand(subcommand => subcommand.setName('set').setDescription('Update a specific setting')
       .addStringOption(option => option.setName('setting').setDescription('Setting to update').setRequired(true))
       .addStringOption(option => option.setName('value').setDescription('New value for the setting').setRequired(true)))
+    .addSubcommand(subcommand => subcommand.setName('setup').setDescription('Initialize the CopyTradeCat bot for this server'))
+    .addSubcommand(subcommand => subcommand.setName('info').setDescription('Display channel status and recent trades'))
+    .addSubcommand(subcommand => subcommand.setName('shutdown').setDescription('Disable the CopyTradeCat bot for this server'))
     .addSubcommand(subcommand => subcommand.setName('profile').setDescription('Display your wallet information and token balances')),
 ];
 

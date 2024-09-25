@@ -26,7 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       publicKey, 
       type, 
       secretDataLength: secretData?.length,
-      sessionUserId: session.user?.id,
+      sessionUserId: session.user?.name,
       sessionUserEmail: session.user?.email
     });
 

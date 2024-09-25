@@ -18,7 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     await connectDB();
-    const user = await User.findOne({ name: session?.user?.id });
+    const user = await User.findOne({ name: session?.user?.name });
 
     if (!user || !user.encryptedSeed) {
       return res.status(404).json({ error: 'Wallet not found' });

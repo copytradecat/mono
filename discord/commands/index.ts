@@ -13,6 +13,7 @@ import { handleInfo } from "./info.js";
 import { handleShutdown } from "./shutdown.js";
 import { handleProfile } from "./profile.js";
 import { TextChannel } from "discord.js";
+import { handleBuyCommand } from "./buy.js";
 
 export async function handleCommand(interaction: Message | CommandInteraction, command?: string, args?: string[]) {
   let channelId: string;
@@ -88,6 +89,9 @@ export async function handleCommand(interaction: Message | CommandInteraction, c
         break;
       case 'profile':
         await handleProfile(interaction as CommandInteraction);
+        break;
+      case 'buy':
+        await handleBuyCommand(interaction as CommandInteraction);
         break;
       default:
         reply("Unknown command. Use `.ct help` or `/ct help` for a list of available commands.");
