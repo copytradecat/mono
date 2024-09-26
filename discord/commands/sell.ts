@@ -79,15 +79,15 @@ export async function handleSellCommand(interaction: CommandInteraction) {
         await confirmation.deferUpdate();
 
         if (confirmation.values[0] === 'cancel') {
-          await interaction.followUp({ content: 'Sell order cancelled.', ephemeral: true });
+          await interaction.editReply({ content: 'Sell order cancelled.', components: [] });
           return;
         }
 
         let exitPercentage: number;
         if (confirmation.values[0] === 'custom') {
-          await interaction.followUp({
+          await interaction.editReply({
             content: 'Please enter the custom exit percentage:',
-            ephemeral: true,
+            components: [],
           });
           try {
             const customPercentageResponse = await interaction.channel!.awaitMessages({
@@ -98,16 +98,16 @@ export async function handleSellCommand(interaction: CommandInteraction) {
             });
             exitPercentage = parseFloat(customPercentageResponse.first()!.content);
             if (isNaN(exitPercentage) || exitPercentage <= 0 || exitPercentage > 100) {
-              await interaction.followUp({
+              await interaction.editReply({
                 content: 'Invalid percentage. Sell order cancelled.',
-                ephemeral: true,
+                components: [],
               });
               return;
             }
           } catch (error) {
-            await interaction.followUp({
+            await interaction.editReply({
               content: 'No percentage provided. Sell order cancelled.',
-              ephemeral: true,
+              components: [],
             });
             return;
           }
@@ -139,83 +139,119 @@ export async function handleSellCommand(interaction: CommandInteraction) {
 
         const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(cancelButton);
 
-        // Send the swap preview (ephemeral) with the cancel button
-        const swapPreviewMessage = await interaction.followUp({
-          content: swapPreview,
+        await interaction.editReply({
+          content: `${swapPreview}\n\nClick cancel within 5 seconds to cancel the swap.`,
           components: [buttonRow],
-          ephemeral: true,
         });
 
-        // Set up an interaction collector for the cancel button
-        const buttonCollector = swapPreviewMessage.createMessageComponentCollector({
-          componentType: ComponentType.Button,
-          time: swapTime,
-        });
-
-        let transactionCancelled = false;
-
-        buttonCollector.on('collect', async (btnInteraction) => {
-          if (btnInteraction.customId === 'cancel_swap' && btnInteraction.user.id === userId) {
-            transactionCancelled = true;
-            buttonCollector.stop();
-            await btnInteraction.reply({ content: 'Transaction cancelled.', ephemeral: true });
-          } else {
-            await btnInteraction.reply({ content: 'You cannot use this button.', ephemeral: true });
-          }
-        });
-
-        buttonCollector.on('end', async () => {
-          // Remove the cancel button
-          await swapPreviewMessage.edit({
-            content: swapPreview,
-            components: [],
+        try {
+          const buttonCollector = (await interaction.fetchReply()).createMessageComponentCollector({
+            componentType: ComponentType.Button,
+            time: swapTime,
           });
 
-          if (transactionCancelled) {
-            // Transaction was cancelled by the user
-            return;
-          } else {
-            // Proceed with executing the swap
-            try {
-              const swapData = await getSwapTransaction(quoteData, wallet.publicKey, settings);
-              console.log('Swap Data:', swapData);
+          let transactionCancelled = false;
 
-              const swapResult = await executeSwap(userId, wallet.publicKey, swapData.swapTransaction);
-              if (swapResult.success) {
-                await recordTrade(userId, wallet.publicKey, swapResult.signature, amount, tokenAddress);
-
-                const successMessage = `**${interaction.user.username}** sold **${(
-                  amount
-                )} ${tokenInfo.symbol}** for **${estimatedOutput} SOL**.
-Transaction ID: ${swapResult.signature}`;
-
-                await interaction.channel?.send(successMessage);
-              } else {
-                const errorMessage = `Failed to execute sell order. Reason: ${swapResult.transactionMessage}`;
-                await interaction.followUp({ content: errorMessage, ephemeral: true });
+          buttonCollector.on('collect', async (btnInteraction) => {
+            if (btnInteraction.customId === 'cancel_swap' && btnInteraction.user.id === userId) {
+              transactionCancelled = true;
+              buttonCollector.stop();
+              try {
+                await btnInteraction.update({
+                  content: 'Transaction cancelled.',
+                  components: [],
+                });
+              } catch (error) {
+                console.error('Error updating button interaction:', error);
+                await interaction.followUp({
+                  content: 'Transaction cancelled.',
+                  ephemeral: true,
+                });
               }
-            } catch (error) {
-              console.error('Error executing swap:', error);
-              await interaction.followUp({
-                content: 'Failed to execute sell order. Please try again later.',
-                ephemeral: true,
-              });
+            } else {
+              await btnInteraction.reply({ content: 'You cannot use this button.', ephemeral: true });
             }
-          }
-        });
+          });
+
+          buttonCollector.on('end', async () => {
+            if (!transactionCancelled) {
+              try {
+                await interaction.editReply({
+                  content: 'Processing your swap...',
+                  components: [],
+                });
+
+                const swapData = await getSwapTransaction(quoteData, wallet.publicKey, settings);
+                const swapResult = await executeSwap(userId, wallet.publicKey, swapData.swapTransaction);
+
+                if (swapResult.success) {
+                  await recordTrade(userId, wallet.publicKey, swapResult.signature, amount, tokenAddress);
+
+                  await interaction.editReply({
+                    content: `Swap Complete!\n\nSold: ${amount} ${tokenInfo.symbol}\nReceived: ${estimatedOutput} SOL\nTransaction ID: [${swapResult.signature}](https://solscan.io/tx/${swapResult.signature})`,
+                    components: [],
+                  });
+
+                  const publicMessage = `**${interaction.user.username}** sold **${amount} ${tokenInfo.symbol}** for **${estimatedOutput} SOL**`;
+                  await interaction.channel?.send(publicMessage);
+                } else {
+                  const errorMessage = `Failed to execute sell order. Reason: ${swapResult.transactionMessage}\n\nError details: ${swapResult.error}`;
+                  try {
+                    await interaction.editReply({
+                      content: errorMessage,
+                      components: [],
+                    });
+                  } catch (replyError) {
+                    console.error('Error editing reply:', replyError);
+                    await interaction.followUp({
+                      content: errorMessage,
+                      ephemeral: true,
+                    });
+                  }
+                }
+              } catch (error: any) {
+                console.error('Error executing swap:', error);
+                let errorMessage = 'Failed to execute sell order. Please try again later.';
+                if (error.message.includes('TransactionExpiredTimeoutError')) {
+                  const match = error.message.match(/Check signature ([a-zA-Z0-9]+)/);
+                  const signature = match ? match[1] : 'unknown';
+                  errorMessage = `Transaction timed out. It is unknown if it succeeded or failed. Check signature ${signature} using the Solana Explorer or CLI tools.`;
+                }
+                try {
+                  await interaction.editReply({
+                    content: errorMessage,
+                    components: [],
+                  });
+                } catch (replyError) {
+                  console.error('Error editing reply:', replyError);
+                  await interaction.followUp({
+                    content: errorMessage,
+                    ephemeral: true,
+                  });
+                }
+              }
+            }
+          });
+        } catch (error) {
+          console.error('Error in button collector:', error);
+          await interaction.followUp({
+            content: 'An error occurred while processing your sell order.',
+            ephemeral: true,
+          });
+        }
       }
     } catch (error) {
       console.error('Sell order timed out or was cancelled:', error);
-      await interaction.followUp({
+      await interaction.editReply({
         content: 'Sell order timed out or was cancelled. Please try again.',
-        ephemeral: true,
+        components: [],
       });
     }
   } catch (error) {
     console.error('Error in handleSellCommand:', error);
-    await interaction.followUp({
+    await interaction.editReply({
       content: 'An error occurred while processing your sell order.',
-      ephemeral: true,
+      components: [],
     });
   }
 }
