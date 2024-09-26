@@ -186,11 +186,12 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                     : 'Custom';
 
                   await interaction.editReply({
-                    content: `Swap Complete!\n\nBought: ${estimatedOutput} ${outputTokenInfo.symbol}\nUsing: ${selectedAmount} ${tokenInfo.symbol}\nTransaction ID: ${swapResult.signature}`,
+                    content: `Swap Complete!\n\nBought: ${estimatedOutput} ${outputTokenInfo.symbol}\nUsing: ${selectedAmount} ${tokenInfo.symbol}\nTransaction ID: [${swapResult.signature}](https://solscan.io/tx/${swapResult.signature})`,
                     components: [],
                   });
 
-                  const publicMessage = `**${interaction.user.username}** bought **${selectedAmount} ${tokenInfo.symbol}** worth of **${outputTokenInfo.symbol}**`;
+                  // if(settings.private) const publicMessage = `**${interaction.user.username}** bought **${selectedAmount} ${tokenInfo.symbol}** worth of **${outputTokenInfo.symbol}**`;
+                  const publicMessage = `**${interaction.user.username}** bought a **${selectionIndex}** amount of **${outputTokenInfo.symbol}**`;
                   await interaction.channel?.send(publicMessage);
                 } else {
                   const errorMessage = `Failed to execute buy order. Reason: ${swapResult.transactionMessage}\n\nError details: ${swapResult.error}`;
