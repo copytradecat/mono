@@ -19,8 +19,8 @@ export const defaultSettings: Settings = {
   smartMevProtection: 'secure',
   transactionSpeed: 'medium',
   priorityFee: 'auto',
-  entryAmounts: [0.05, 0.1, 0.24, 0.69, 0.8, 1],
-  exitPercentages: [24, 33, 100],
+  entryAmounts: [0.05, 0.1, 0.42069, 1, 2.4, 10],
+  exitPercentages: [10, 20, 50, 100],
   wrapUnwrapSOL: true,
 };
 
