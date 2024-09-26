@@ -17,9 +17,10 @@ import {
 } from './swap-base';
 import { getSwapTransaction, getTokenInfo } from '../../src/services/jupiter.service';
 import { defaultSettings } from '../../src/components/BotSettings';
+import { truncatedString } from '../../src/lib/utils';
 
 export async function handleBuyCommand(interaction: CommandInteraction) {
-  const tokenAddress = interaction.options.getString('token', true);
+  const outputTokenAddress = interaction.options.getString('token', true);
   const userId = interaction.user.id;
 
   await interaction.deferReply({ ephemeral: true });
@@ -28,6 +29,8 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
     const user = await getUser(userId);
     const wallet = user.wallets[0];
     const inputToken = 'So11111111111111111111111111111111111111112'; // SOL mint address
+    const inputTokenInfo = await getTokenInfo(inputToken);
+    const outputTokenInfo = await getTokenInfo(outputTokenAddress);
     const entryAmounts = user.settings.entryAmounts || [0.05, 0.1, 0.25, 0.5, 1];
     const settings = user.settings || defaultSettings;
 
@@ -51,7 +54,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
     const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
 
     const response = await interaction.editReply({
-      content: `Select your entry size for buying ${tokenAddress}:`,
+      content: `Select your entry size for buying ${outputTokenInfo.symbol} ([${truncatedString(outputTokenAddress, 4)}](<https://solscan.io/token/${outputTokenAddress}>)):`,
       components: [row],
     });
 
@@ -102,8 +105,6 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
           selectedAmount = parseFloat(confirmation.values[0]);
         }
 
-        const tokenInfo = await getTokenInfo(inputToken);
-        const outputTokenInfo = await getTokenInfo(tokenAddress);
         let requiredBalance = selectedAmount;
 
         if (inputToken === 'So11111111111111111111111111111111111111112') {
@@ -111,18 +112,18 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
         }
         if (balance < requiredBalance) {
           await interaction.editReply({
-            content: `Insufficient balance. You need at least ${requiredBalance} ${tokenInfo.symbol} for this transaction.`,
+            content: `Insufficient balance. You need at least ${requiredBalance} ${inputTokenInfo.symbol} for this transaction.`,
             components: [],
           });
           return;
         }
 
-        const adjustedAmount = Math.floor(selectedAmount * 10 ** tokenInfo.decimals);
+        const adjustedAmount = Math.floor(selectedAmount * 10 ** inputTokenInfo.decimals);
 
         const { quoteData, swapPreview, estimatedOutput } = await createSwapPreview(
           adjustedAmount,
           inputToken,
-          tokenAddress,
+          outputTokenAddress,
           settings
         );
 
@@ -179,19 +180,19 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                 const swapResult = await executeSwap(userId, wallet.publicKey, swapData.swapTransaction);
 
                 if (swapResult.success) {
-                  await recordTrade(userId, wallet.publicKey, swapResult.signature, selectedAmount, tokenAddress);
+                  await recordTrade(userId, wallet.publicKey, swapResult.signature, selectedAmount, outputTokenAddress);
 
                   const selectionIndex = entryAmounts.indexOf(selectedAmount) !== -1 
-                    ? ['Small', 'Medium', 'Large', 'Very Large', 'Massive', 'MEGAMOON'][Math.floor(entryAmounts.indexOf(selectedAmount) / 2)]
+                    ? ['small 🤏', 'medium ✊', 'Large 🤲', 'Very Large 🙌', 'Massive 🦍', 'MEGAMOON 🌝'][Math.floor(entryAmounts.indexOf(selectedAmount) / 2)]
                     : 'Custom';
 
                   await interaction.editReply({
-                    content: `Swap Complete!\n\nBought: ${estimatedOutput} ${outputTokenInfo.symbol}\nUsing: ${selectedAmount} ${tokenInfo.symbol}\nTransaction ID: [${swapResult.signature}](https://solscan.io/tx/${swapResult.signature})`,
+                    content: `Swap Complete!\n\nBought: ${estimatedOutput} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>)\nUsing: ${selectedAmount} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputToken}>)\nTransaction ID: [${truncatedString(swapResult.signature, 4)}](<https://solscan.io/tx/${swapResult.signature}>)`,
                     components: [],
                   });
 
-                  // if(settings.private) const publicMessage = `**${interaction.user.username}** bought **${selectedAmount} ${tokenInfo.symbol}** worth of **${outputTokenInfo.symbol}**`;
-                  const publicMessage = `**${interaction.user.username}** bought a **${selectionIndex}** amount of **${outputTokenInfo.symbol}**`;
+                  // if(settings.private) const publicMessage = `**${interaction.user.username}** bought **${selectedAmount} ${inputTokenInfo.symbol}** worth of **${outputTokenInfo.symbol}**`;
+                  const publicMessage = `**${interaction.user.username}** bought a **${selectionIndex}** amount of **[${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>)** at **${estimatedOutput/selectedAmount} ${outputTokenInfo.symbol}/${inputTokenInfo.symbol}**`;
                   await interaction.channel?.send(publicMessage);
                 } else {
                   const errorMessage = `Failed to execute buy order. Reason: ${swapResult.transactionMessage}\n\nError details: ${swapResult.error}`;

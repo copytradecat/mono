@@ -42,12 +42,13 @@ export async function createSwapPreview(
   );
   const inputTokenInfo = await getTokenInfo(inputToken);
   const outputTokenInfo = await getTokenInfo(outputToken);
+  console.log("quoteData", quoteData);
 
   const estimatedOutput = quoteData.outAmount / 10 ** outputTokenInfo.decimals;
 
   const swapPreview = `Swap Preview:
-From: ${(amount / 10 ** inputTokenInfo.decimals)} ${inputTokenInfo.symbol}
-To: ${estimatedOutput} ${outputTokenInfo.symbol}
+From: ${(amount / 10 ** inputTokenInfo.decimals)} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenInfo.address}>)
+To: ${estimatedOutput} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenInfo.address}>)
 Price Impact: ${(quoteData.priceImpactPct * 100)}%
 Slippage: ${
     settings.slippageType === 'fixed' ? `${settings.slippage / 100}%` : 'Dynamic'

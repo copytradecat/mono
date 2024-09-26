@@ -18,13 +18,14 @@ import {
 import { Connection, PublicKey } from '@solana/web3.js';
 import { rateLimitedRequest, getTokenInfo } from '../../src/services/jupiter.service';
 import { defaultSettings } from '../../src/components/BotSettings';
+import { truncatedString } from '../../src/lib/utils';
 
 const EXIT_PERCENTAGES = [25, 50, 100]; // Adjust as needed
 
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 
 export async function handleSellCommand(interaction: CommandInteraction) {
-  const tokenAddress = interaction.options.getString('token', true);
+  const inputTokenAddress = interaction.options.getString('token', true);
   const userId = interaction.user.id;
 
   await interaction.deferReply({ ephemeral: true });
@@ -38,8 +39,8 @@ export async function handleSellCommand(interaction: CommandInteraction) {
     const settings = user.settings || defaultSettings;
 
     // Fetch token balance and info
-    const { balance: tokenBalance, decimals } = await getTokenBalance(wallet.publicKey, tokenAddress);
-    const tokenInfo = await getTokenInfo(tokenAddress);
+    const { balance: tokenBalance, decimals } = await getTokenBalance(wallet.publicKey, inputTokenAddress);
+    const inputTokenInfo = await getTokenInfo(inputTokenAddress);
 
     if (tokenBalance === 0) {
       await interaction.editReply("You don't have any balance for this token.");
@@ -64,7 +65,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
     const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
 
     const response = await interaction.editReply({
-      content: `Select your exit percentage for selling ${tokenInfo.symbol}:`,
+      content: `Select your exit percentage for selling ${inputTokenInfo.symbol} ([${truncatedString(inputTokenAddress, 4)}](<https://solscan.io/token/${inputTokenAddress}>)):`,
       components: [row],
     });
 
@@ -86,7 +87,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
         let exitPercentage: number;
         if (confirmation.values[0] === 'custom') {
           await interaction.editReply({
-            content: 'Please enter the custom exit percentage:',
+            content: 'Please enter the custom exit percentage (enter 20 for 20%):',
             components: [],
           });
           try {
@@ -120,13 +121,13 @@ export async function handleSellCommand(interaction: CommandInteraction) {
 
         // Remove the selection menu
         await interaction.editReply({
-          content: `You have chosen to sell **${exitPercentage}%** of your **${tokenInfo.symbol}** balance.`,
+          content: `You have chosen to sell **${exitPercentage}%** of your **${inputTokenInfo.symbol}** balance.`,
           components: [],
         });
 
         const { quoteData, swapPreview, estimatedOutput } = await createSwapPreview(
           adjustedAmount,
-          tokenAddress,
+          inputTokenAddress,
           outputToken,
           settings
         );
@@ -185,14 +186,14 @@ export async function handleSellCommand(interaction: CommandInteraction) {
                 const swapResult = await executeSwap(userId, wallet.publicKey, swapData.swapTransaction);
 
                 if (swapResult.success) {
-                  await recordTrade(userId, wallet.publicKey, swapResult.signature, amount, tokenAddress);
+                  await recordTrade(userId, wallet.publicKey, swapResult.signature, amount, inputTokenAddress);
 
                   await interaction.editReply({
-                    content: `Swap Complete!\n\nSold: ${amount} ${tokenInfo.symbol}\nReceived: ${estimatedOutput} SOL\nTransaction ID: [${swapResult.signature}](https://solscan.io/tx/${swapResult.signature})`,
+                    content: `Swap Complete!\n\nSold: ${amount} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenAddress}>)\nReceived: ${estimatedOutput} [SOL](<https://solscan.io/token/${outputToken}>)\nTransaction ID: [${truncatedString(swapResult.signature, 4)}](<https://solscan.io/tx/${swapResult.signature}>)`,
                     components: [],
                   });
 
-                  const publicMessage = `**${interaction.user.username}** sold **${amount} ${tokenInfo.symbol}** for **${estimatedOutput} SOL**`;
+                  const publicMessage = `**${interaction.user.username}** sold **${exitPercentage}% of [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenAddress}>)** position at **${amount/estimatedOutput} ${inputTokenInfo.symbol}/SOL**`;
                   await interaction.channel?.send(publicMessage);
                 } else {
                   const errorMessage = `Failed to execute sell order. Reason: ${swapResult.transactionMessage}\n\nError details: ${swapResult.error}`;
@@ -257,12 +258,12 @@ export async function handleSellCommand(interaction: CommandInteraction) {
 }
 
 // Helper function to get token balance and decimals
-async function getTokenBalance(walletAddress: string, tokenAddress: string): Promise<{
+async function getTokenBalance(walletAddress: string, inputTokenAddress: string): Promise<{
   balance: number;
   decimals: number;
 }> {
   const walletPublicKey = new PublicKey(walletAddress);
-  const tokenPublicKey = new PublicKey(tokenAddress);
+  const tokenPublicKey = new PublicKey(inputTokenAddress);
 
   const tokenAccounts = await rateLimitedRequest(() =>
     connection.getParsedTokenAccountsByOwner(walletPublicKey, {
