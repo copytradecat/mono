@@ -133,13 +133,13 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
 
         const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(cancelButton);
 
-        const swapPreviewMessage = await interaction.editReply({
+        await interaction.editReply({
           content: `${swapPreview}\n\nClick cancel within 5 seconds to cancel the swap.`,
           components: [buttonRow],
         });
 
         try {
-          const buttonCollector = swapPreviewMessage.createMessageComponentCollector({
+          const buttonCollector = (await interaction.fetchReply()).createMessageComponentCollector({
             componentType: ComponentType.Button,
             time: swapTime,
           });
@@ -150,10 +150,18 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
             if (btnInteraction.customId === 'cancel_swap' && btnInteraction.user.id === userId) {
               transactionCancelled = true;
               buttonCollector.stop();
-              await btnInteraction.update({
-                content: 'Transaction cancelled.',
-                components: [],
-              });
+              try {
+                await btnInteraction.update({
+                  content: 'Transaction cancelled.',
+                  components: [],
+                });
+              } catch (error) {
+                console.error('Error updating button interaction:', error);
+                await interaction.followUp({
+                  content: 'Transaction cancelled.',
+                  ephemeral: true,
+                });
+              }
             } else {
               await btnInteraction.reply({ content: 'You cannot use this button.', ephemeral: true });
             }
@@ -174,7 +182,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                   await recordTrade(userId, wallet.publicKey, swapResult.signature, selectedAmount, tokenAddress);
 
                   const selectionIndex = entryAmounts.indexOf(selectedAmount) !== -1 
-                    ? ['Small', 'Medium', 'Large'][Math.floor(entryAmounts.indexOf(selectedAmount) / 2)]
+                    ? ['Small', 'Medium', 'Large', 'Very Large', 'Massive', 'MEGAMOON'][Math.floor(entryAmounts.indexOf(selectedAmount) / 2)]
                     : 'Custom';
 
                   await interaction.editReply({
@@ -182,20 +190,43 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                     components: [],
                   });
 
-                  const publicMessage = `**${interaction.user.username}** bought a **${selectionIndex}** amount of **${outputTokenInfo.symbol}**`;
+                  const publicMessage = `**${interaction.user.username}** bought **${selectedAmount} ${tokenInfo.symbol}** worth of **${outputTokenInfo.symbol}**`;
                   await interaction.channel?.send(publicMessage);
                 } else {
+                  const errorMessage = `Failed to execute buy order. Reason: ${swapResult.transactionMessage}\n\nError details: ${swapResult.error}`;
+                  try {
+                    await interaction.editReply({
+                      content: errorMessage,
+                      components: [],
+                    });
+                  } catch (replyError) {
+                    console.error('Error editing reply:', replyError);
+                    await interaction.followUp({
+                      content: errorMessage,
+                      ephemeral: true,
+                    });
+                  }
+                }
+              } catch (error: any) {
+                console.error('Error executing swap:', error);
+                let errorMessage = 'Failed to execute buy order. Please try again later.';
+                if (error.message.includes('TransactionExpiredTimeoutError')) {
+                  const match = error.message.match(/Check signature ([a-zA-Z0-9]+)/);
+                  const signature = match ? match[1] : 'unknown';
+                  errorMessage = `Transaction timed out. It is unknown if it succeeded or failed. Check signature ${signature} using the Solana Explorer or CLI tools.`;
+                }
+                try {
                   await interaction.editReply({
-                    content: `Failed to execute buy order. Reason: ${swapResult.transactionMessage}`,
+                    content: errorMessage,
                     components: [],
                   });
+                } catch (replyError) {
+                  console.error('Error editing reply:', replyError);
+                  await interaction.followUp({
+                    content: errorMessage,
+                    ephemeral: true,
+                  });
                 }
-              } catch (error) {
-                console.error('Error executing swap:', error);
-                await interaction.followUp({
-                  content: 'Failed to execute buy order. Please try again later.',
-                  ephemeral: true,
-                });
               }
             }
           });

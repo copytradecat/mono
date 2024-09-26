@@ -79,7 +79,8 @@ export async function executeSwap(userId: string, walletPublicKey: string, swapT
     return { 
       success: false, 
       error: error.response?.data?.error || error.message || 'Unknown error',
-      transactionMessage: error.response?.data?.transactionMessage || 'No additional information'
+      transactionMessage: error.response?.data?.transactionMessage || 'No additional information',
+      signature: error.response?.data?.signature || 'No signature'
     };
   }
 }
