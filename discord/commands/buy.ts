@@ -1,5 +1,20 @@
-import { CommandInteraction, MessageReaction, User, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ComponentType } from 'discord.js';
-import { getUser, getBalance, createSwapPreview, executeSwap, recordTrade, swapTime } from './swap-base';
+import {
+  CommandInteraction,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
+  ComponentType,
+} from 'discord.js';
+import {
+  getUser,
+  getBalance,
+  createSwapPreview,
+  executeSwap,
+  recordTrade,
+  swapTime,
+} from './swap-base';
 import { getSwapTransaction, getTokenInfo } from '../../src/services/jupiter.service';
 import { defaultSettings } from '../../src/components/BotSettings';
 
@@ -18,7 +33,8 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
     const entryAmounts = user.settings.entryAmounts || [0.05, 0.1, 0.25, 0.5, 1];
     const settings = user.settings || defaultSettings;
 
-    const balance = await getBalance(wallet.publicKey);
+    const balanceLamports = await getBalance(wallet.publicKey);
+    const balance = balanceLamports / 10 ** 9; // Convert lamports to SOL
 
     // Create the selection menu
     const select = new StringSelectMenuBuilder()
@@ -50,6 +66,8 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
       });
 
       if (confirmation.customId === 'entry_amount') {
+        await confirmation.deferUpdate();
+
         if (confirmation.values[0] === 'cancel') {
           await interaction.followUp({ content: 'Buy order cancelled.', ephemeral: true });
           return;
@@ -89,29 +107,28 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
 
         // Fetch token info
         const tokenInfo = await getTokenInfo(inputToken);
+        const outputTokenInfo = await getTokenInfo(tokenAddress);
         let requiredBalance = selectedAmount;
 
         if (inputToken === 'So11111111111111111111111111111111111111112') {
-          requiredBalance = selectedAmount + (5000000 / 1e9); // Add 0.005 SOL for transaction fees (only for SOL)
+          requiredBalance = selectedAmount + 0.005; // Add 0.005 SOL for transaction fees (only for SOL)
         }
         if (balance < requiredBalance) {
-          await interaction.followUp({ content: `Insufficient balance. You need at least ${requiredBalance} ${tokenInfo.symbol} for this transaction.`, ephemeral: true });
+          await interaction.followUp({
+            content: `Insufficient balance. You need at least ${requiredBalance} ${tokenInfo.symbol} for this transaction.`,
+            ephemeral: true,
+          });
           return;
-        } else 
-        {
-
+        } else {
           // Remove the selection menu
           await interaction.editReply({
-            content: `You have selected to buy **${selectedAmount} SOL** worth of **${tokenInfo.symbol}**.`,
+            content: `You have selected to buy **${selectedAmount} SOL** worth of **${outputTokenInfo.symbol}** (${tokenAddress}).`,
             components: [],
           });
         }
 
         // Adjust the amount based on token decimals
         const adjustedAmount = Math.floor(selectedAmount * 10 ** tokenInfo.decimals);
-
-        // try {
-        //   const { quoteData, swapPreview } = await createSwapPreview(adjustedAmount, inputToken, tokenAddress, settings);
 
         const { quoteData, swapPreview, estimatedOutput } = await createSwapPreview(
           adjustedAmount,
@@ -120,44 +137,73 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
           settings
         );
 
-        // const swapPreviewMessage = await interaction.followUp({ content: swapPreview, fetchReply: true });
-        // await swapPreviewMessage.react('🗑️');
-        // Send the swap preview (ephemeral)
-        await interaction.followUp({ content: swapPreview, ephemeral: true });
+        // Create a cancel button
+        const cancelButton = new ButtonBuilder()
+          .setCustomId('cancel_swap')
+          .setLabel('Cancel')
+          .setStyle(ButtonStyle.Danger);
 
-        // const cancelFilter = (reaction: MessageReaction, user: User) => 
-        //   reaction.emoji.name === '🗑️' && user.id === userId;
-        // Proceed with executing the swap
-        const swapData = await getSwapTransaction(quoteData, wallet.publicKey, settings);
+        const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(cancelButton);
 
-        // const cancelCollector = swapPreviewMessage.createReactionCollector({ filter: cancelFilter, time: swapTime });
-        const swapResult = await executeSwap(userId, wallet.publicKey, swapData.swapTransaction);
+        // Send the swap preview (ephemeral) with the cancel button
+        const swapPreviewMessage = await interaction.followUp({
+          content: swapPreview+"\n\nClick cancel within 5 seconds to cancel the swap",
+          components: [buttonRow],
+          ephemeral: true,
+        });
 
-        // cancelCollector.on('collect', async () => {
-        //   cancelCollector.stop();
-        //   await interaction.followUp({ content: 'Transaction cancelled.', ephemeral: true });
-        // });
-        if (swapResult.success) {
-          await recordTrade(userId, wallet.publicKey, swapResult.signature, selectedAmount, tokenAddress);
+        // Set up an interaction collector for the cancel button
+        const buttonCollector = swapPreviewMessage.createMessageComponentCollector({
+          componentType: ComponentType.Button,
+          time: swapTime,
+        });
 
-          // cancelCollector.on('end', async (collected) => {
-          //   // Remove the trashcan emoji and the cancellation message
-          //   const trashReaction = swapPreviewMessage.reactions.cache.get('🗑️');
-          //   if (trashReaction) {
-          //     await trashReaction.remove();
-          //   }
-          //   await swapPreviewMessage.edit({
-          //     content: swapPreview.split('\n').slice(0, -1).join('\n'),
-          //     components: []
-          //   });
-          const successMessage = `**${interaction.user.username}** bought **${estimatedOutput} ${tokenInfo.symbol}** using **${selectedAmount} SOL**.
+        let transactionCancelled = false;
+
+        buttonCollector.on('collect', async (btnInteraction) => {
+          if (btnInteraction.customId === 'cancel_swap' && btnInteraction.user.id === userId) {
+            transactionCancelled = true;
+            buttonCollector.stop();
+            await btnInteraction.update({
+              content: 'Transaction cancelled.',
+              components: [],
+            });
+          } else {
+            await btnInteraction.reply({ content: 'You cannot use this button.', ephemeral: true });
+          }
+        });
+
+        buttonCollector.on('end', async () => {
+          if (transactionCancelled) {
+            // Transaction was cancelled by the user
+            // return;
+          } else {
+            // Proceed with executing the swap
+            try {
+              const swapData = await getSwapTransaction(quoteData, wallet.publicKey, settings);
+              console.log('Swap Data:', swapData);
+
+              const swapResult = await executeSwap(userId, wallet.publicKey, swapData.swapTransaction);
+              if (swapResult.success) {
+                await recordTrade(userId, wallet.publicKey, swapResult.signature, selectedAmount, tokenAddress);
+
+                const successMessage = `**${interaction.user.username}** bought **${estimatedOutput} ${outputTokenInfo.symbol}** (${tokenAddress}) using **${selectedAmount} ${tokenInfo.symbol}**.
 Transaction ID: ${swapResult.signature}`;
 
-          await interaction.channel?.send(successMessage);
-        } else {
-          const errorMessage = `Failed to execute buy order. Reason: ${swapResult.transactionMessage}`;
-          await interaction.followUp({ content: errorMessage, ephemeral: true });
-        }
+                await interaction.channel?.send(successMessage);
+              } else {
+                const errorMessage = `Failed to execute buy order. Reason: ${swapResult.transactionMessage}`;
+                await interaction.followUp({ content: errorMessage, ephemeral: true });
+              }
+            } catch (error) {
+              console.error('Error executing swap:', error);
+              await interaction.followUp({
+                content: 'Failed to execute buy order. Please try again later.',
+                ephemeral: true,
+              });
+            }
+          }
+        });
       }
     } catch (error) {
       console.error('Buy order timed out or was cancelled:', error);

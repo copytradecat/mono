@@ -1,4 +1,4 @@
-import { CommandInteraction, MessageReaction, User } from 'discord.js';
+import { CommandInteraction, MessageReaction, User, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ComponentType, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { getQuote, getSwapTransaction, getTokenInfo } from '../../src/services/jupiter.service';
 import UserAccount from '../../src/models/User';
 import Trade from '../../src/models/Trade';
@@ -22,7 +22,8 @@ export async function getUser(userId: string) {
 
 export async function getBalance(publicKey: string) {
   const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
-  return await connection.getBalance(new PublicKey(publicKey));
+  const balanceLamports = await connection.getBalance(new PublicKey(publicKey));
+  return balanceLamports;
 }
 
 export async function createSwapPreview(
@@ -73,11 +74,11 @@ export async function executeSwap(userId: string, walletPublicKey: string, swapT
     });
 
     return { success: true, signature: response.data.signature };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Swap execution failed:', error);
     return { 
       success: false, 
-      error: error.response?.data?.error || 'Unknown error',
+      error: error.response?.data?.error || error.message || 'Unknown error',
       transactionMessage: error.response?.data?.transactionMessage || 'No additional information'
     };
   }
