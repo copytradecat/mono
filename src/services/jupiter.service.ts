@@ -228,3 +228,27 @@ export async function executeSwap(connection: Connection, swapTransaction: strin
   transaction.sign([signer]);
   return await connection.sendTransaction(transaction);
 }
+
+export async function getTokenBalance(walletAddress: string, tokenAddress: string): Promise<{
+  balance: number;
+  decimals: number;
+}> {
+  const walletPublicKey = new PublicKey(walletAddress);
+  const tokenPublicKey = new PublicKey(tokenAddress);
+
+  const tokenAccounts = await rateLimitedRequest(() =>
+    connection.getParsedTokenAccountsByOwner(walletPublicKey, {
+      mint: tokenPublicKey,
+    })
+  );
+
+  if (tokenAccounts.value.length === 0) {
+    return { balance: 0, decimals: 0 };
+  }
+
+  const tokenAccount = tokenAccounts.value[0].account.data.parsed.info;
+  const balance = parseFloat(tokenAccount.tokenAmount.uiAmount);
+  const decimals = tokenAccount.tokenAmount.decimals;
+
+  return { balance, decimals };
+}

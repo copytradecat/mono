@@ -13,7 +13,7 @@ import {
   swapTime,
 } from './swap-base';
 import { Connection, PublicKey } from '@solana/web3.js';
-import { rateLimitedRequest, getTokenInfo, getSwapTransaction } from '../../src/services/jupiter.service';
+import { rateLimitedRequest, getTokenInfo, getSwapTransaction, getTokenBalance } from '../../src/services/jupiter.service';
 import { defaultSettings } from '../../src/components/BotSettings';
 import { truncatedString } from '../../src/lib/utils';
 
@@ -258,29 +258,4 @@ export async function handleSellCommand(interaction: CommandInteraction) {
       components: [],
     });
   }
-}
-
-// Helper function to get token balance and decimals
-async function getTokenBalance(walletAddress: string, inputTokenAddress: string): Promise<{
-  balance: number;
-  decimals: number;
-}> {
-  const walletPublicKey = new PublicKey(walletAddress);
-  const tokenPublicKey = new PublicKey(inputTokenAddress);
-
-  const tokenAccounts = await rateLimitedRequest(() =>
-    connection.getParsedTokenAccountsByOwner(walletPublicKey, {
-      mint: tokenPublicKey,
-    })
-  );
-
-  if (tokenAccounts.value.length === 0) {
-    return { balance: 0, decimals: 0 };
-  }
-
-  const tokenAccount = tokenAccounts.value[0].account.data.parsed.info;
-  const balance = parseFloat(tokenAccount.tokenAmount.uiAmount);
-  const decimals = tokenAccount.tokenAmount.decimals;
-
-  return { balance, decimals };
 }
