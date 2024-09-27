@@ -16,32 +16,38 @@ export const authOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, account, profile }: { token: JWT; account: Account; profile: Profile }) {
+    async signIn({ user, account, profile }) {
+      await connectDB();
+      await User.findOneAndUpdate(
+        { name: profile.id },
+        { 
+          $setOnInsert: { 
+            name: profile.id,
+            discordId: profile.id,
+            email: profile.email,
+            settings: { maxTradeAmount: 100 } 
+          } 
+        },
+        { upsert: true, new: true }
+      );
+      return true;
+    },
+    async jwt({ token, account, profile }) {
       if (account) {
         token.discordId = account.providerAccountId;
         token.email = profile?.email || null;
       }
       return token;
     },
-    async session({ session, token }: { session: Session; token: JWT }) {
+    async session({ session, token }) {
       if (session.user) {
         session.user = {
           ...session.user,
           name: token.discordId as string,
           email: token.email || session.user.email,
         } as Session['user'];
-
-        // Update user record to include email
-        await connectDB();
-        if (session.user && session.user.name) {
-          await User.findOneAndUpdate(
-            { name: session.user.name },
-            { $set: { email: session.user.email, name: session.user.name, discordId: session.user.name } },
-            { upsert: false }
-          );
-        }
-        return session;
       }
+      return session;
     },
   },
   secret: process.env.JWT_SECRET,
