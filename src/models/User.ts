@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { defaultSettings } from '../components/BotSettings';
 
 const WalletSchema = new mongoose.Schema({
     publicKey: String,
@@ -8,14 +9,14 @@ const WalletSchema = new mongoose.Schema({
 });
 
 const SettingsSchema = new mongoose.Schema({
-    slippage: { type: Number, default: 3.0 },
-    slippageType: { type: String, enum: ['fixed', 'dynamic'], default: 'fixed' },
-    smartMevProtection: { type: String, enum: ['fast', 'secure'], default: 'secure' },
-    transactionSpeed: { type: String, enum: ['medium', 'high', 'veryHigh', 'custom', 'auto'], default: 'medium' },
-    priorityFee: { type: mongoose.Schema.Types.Mixed, default: 'auto' },
-    entryAmounts: { type: [Number], default: [0.05, 0.1, 0.24, 0.69, 0.8, 1] },
-    exitPercentages: { type: [Number], default: [24, 33, 100] },
-    wrapUnwrapSOL: { type: Boolean, default: true },
+    slippage: { type: Number, default: defaultSettings.slippage },
+    slippageType: { type: String, enum: ['fixed', 'dynamic'], default: defaultSettings.slippageType },
+    smartMevProtection: { type: String, enum: ['fast', 'secure'], default: defaultSettings.smartMevProtection },
+    transactionSpeed: { type: String, enum: ['medium', 'high', 'veryHigh', 'custom', 'auto'], default: defaultSettings.transactionSpeed },
+    priorityFee: { type: mongoose.Schema.Types.Mixed, default: defaultSettings.priorityFee },
+    entryAmounts: { type: [Number], default: defaultSettings.entryAmounts },
+    exitPercentages: { type: [Number], default: defaultSettings.exitPercentages },
+    wrapUnwrapSOL: { type: Boolean, default: defaultSettings.wrapUnwrapSOL },
 });
 
 const UserSchema = new mongoose.Schema({
