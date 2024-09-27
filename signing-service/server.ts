@@ -4,7 +4,8 @@ import { decrypt } from '../src/lib/encryption';
 import User from '../src/models/User';
 import { connectDB } from '../src/lib/mongodb';
 import dotenv from 'dotenv';
-import bs58 from 'bs58'; // Make sure to import bs58 if not already imported
+import bs58 from 'bs58';
+import Limiter from 'limiter';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -13,16 +14,24 @@ app.use(express.json());
 
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 
+const { RateLimiter } = Limiter;
+const limiter = new RateLimiter({ tokensPerInterval: 5, interval: 'second' });
+
 app.post('/sign-and-send', async (req, res) => {
   console.log('Received request in signing service');
   console.log('Request body:', JSON.stringify(req.body, null, 2));
 
   try {
+    await limiter.removeTokens(1);
+
+    console.log('Received sign-and-send request');
+    const { userId, walletPublicKey, serializedTransaction } = req.body;
+    console.log('Request body:', { userId, walletPublicKey, serializedTransaction: serializedTransaction.substring(0, 50) + '...' });
+
     console.log('Connecting to database');
     await connectDB();
 
-    const { userId, walletPublicKey, serializedTransaction } = req.body;
-
+    
     // console.log('Finding user');
     const user = await User.findOne({ name: userId });
     // console.log('User found:', user ? 'Yes' : 'No');
