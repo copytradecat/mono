@@ -18,18 +18,32 @@ export const authOptions = {
   callbacks: {
     async signIn({ user, account, profile }) {
       await connectDB();
-      await User.findOneAndUpdate(
+      const referralCode = profile.referralCode || null;
+      const latestUser = await User.findOne().sort({ accountNumber: -1 });
+      const newAccountNumber = latestUser ? latestUser.accountNumber + 1 : 1;
+
+      const newUser = await User.findOneAndUpdate(
         { name: profile.id },
         { 
           $setOnInsert: { 
             name: profile.id,
             discordId: profile.id,
             email: profile.email,
-            settings: { maxTradeAmount: 100 } 
+            settings: { maxTradeAmount: 100 },
+            accountNumber: newAccountNumber,
+            referrer: referralCode,
           } 
         },
         { upsert: true, new: true }
       );
+
+      if (referralCode) {
+        await User.findOneAndUpdate(
+          { referralCode },
+          { $addToSet: { referrals: newUser._id } }
+        );
+      }
+
       return true;
     },
     async jwt({ token, account, profile }) {
