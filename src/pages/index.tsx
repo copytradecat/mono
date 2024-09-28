@@ -6,29 +6,24 @@ import Link from "next/link";
 
 export default function Home() {
   const { data: session } = useSession();
-  const [betaStatus, setBetaStatus] = useState<string | null>(null);
-  const [hasAccess, setHasAccess] = useState(false);
+  const [subscriptionInfo, setSubscriptionInfo] = useState<{
+    hasAccess: boolean;
+    level: number;
+    betaRequested: boolean;
+    referralCode: string | null;
+  } | null>(null);
 
   useEffect(() => {
     if (session) {
-      checkBetaStatus();
       checkSubscription();
     }
   }, [session]);
-
-  const checkBetaStatus = async () => {
-    const response = await fetch('/api/check-beta-status');
-    if (response.ok) {
-      const data = await response.json();
-      setBetaStatus(data.status);
-    }
-  };
 
   const checkSubscription = async () => {
     const response = await fetch('/api/check-subscription');
     if (response.ok) {
       const data = await response.json();
-      setHasAccess(data.hasAccess);
+      setSubscriptionInfo(data);
     }
   };
 
@@ -36,19 +31,28 @@ export default function Home() {
     <div>
       <h1>CopyTradeCat</h1>
       <SignInInterface />
-      {session && (
+      {session && subscriptionInfo && (
         <>
-          {hasAccess ? (
+          {subscriptionInfo.hasAccess ? (
             <>
               <p>Welcome to CopyTradeCat! You have full access.</p>
               <Link href="/dashboard">Go to Dashboard</Link>
             </>
           ) : (
             <>
-              {betaStatus === 'active' && <p>Welcome to the beta!</p>}
-              {betaStatus === 'pending' && <p>Your beta access request is pending.</p>}
-              {betaStatus === 'inactive' && <BetaAccessRequest />}
+              {subscriptionInfo.level === 0 && !subscriptionInfo.betaRequested && (
+                <BetaAccessRequest onRequestSubmitted={checkSubscription} />
+              )}
+              {subscriptionInfo.level === 0 && subscriptionInfo.betaRequested && (
+                <p>Your beta access request is pending.</p>
+              )}
+              {subscriptionInfo.level === 1 && (
+                <p>Welcome to the beta!</p>
+              )}
             </>
+          )}
+          {subscriptionInfo.referralCode && (
+            <p>Your referral URL: {`${process.env.NEXT_PUBLIC_WEBSITE_URL}?ref=${subscriptionInfo.referralCode}`}</p>
           )}
         </>
       )}

@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { JWT } from 'next-auth/jwt';
 import { connectDB } from '../../../lib/mongodb';
 import User from '../../../models/User';
+import Subscription from '../../../models/Subscriptions';
 
 dotenv.config({ path: '.env.local' });
 
@@ -33,6 +34,22 @@ export const authOptions = {
             accountNumber: newAccountNumber,
             referrer: referralCode,
           } 
+        },
+        { upsert: true, new: true }
+      );
+
+      // Create or update subscription
+      await Subscription.findOneAndUpdate(
+        { userId: newUser._id },
+        { 
+          $setOnInsert: { 
+            level: 0,
+            status: 'inactive',
+            betaRequested: false,
+          },
+          $set: {
+            referralCode: crypto.randomBytes(6).toString('hex'),
+          }
         },
         { upsert: true, new: true }
       );

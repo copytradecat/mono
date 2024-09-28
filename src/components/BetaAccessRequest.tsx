@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 
-export default function BetaAccessRequest() {
+interface BetaAccessRequestProps {
+  onRequestSubmitted: () => void;
+}
+
+export default function BetaAccessRequest({ onRequestSubmitted }: BetaAccessRequestProps) {
   const { data: session } = useSession();
   const [isRequesting, setIsRequesting] = useState(false);
   const [requestStatus, setRequestStatus] = useState('');
@@ -19,6 +23,7 @@ export default function BetaAccessRequest() {
 
       if (response.ok) {
         setRequestStatus('Your beta access request has been submitted.');
+        onRequestSubmitted();
       } else {
         setRequestStatus('Failed to submit beta access request. Please try again.');
       }

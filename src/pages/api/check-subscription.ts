@@ -19,11 +19,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await connectDB();
     const subscription = await Subscription.findOne({ userId: session.user.name });
 
-    if (!subscription || subscription.status !== 'active') {
-      return res.status(200).json({ hasAccess: false });
+    if (!subscription) {
+      return res.status(200).json({ hasAccess: false, level: 0, betaRequested: false, referralCode: null });
     }
 
-    res.status(200).json({ hasAccess: true });
+    const hasAccess = subscription.level > 0 && subscription.status === 'active';
+    res.status(200).json({ 
+      hasAccess, 
+      level: subscription.level, 
+      betaRequested: subscription.betaRequested,
+      referralCode: subscription.referralCode
+    });
   } catch (error) {
     console.error('Failed to check subscription:', error);
     res.status(500).json({ error: 'Failed to check subscription' });
