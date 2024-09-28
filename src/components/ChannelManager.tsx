@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 
 interface Channel {
@@ -11,28 +11,29 @@ export default function ChannelManager({ selectedWallet }: { selectedWallet: str
   const [channels, setChannels] = useState<Channel[]>([]);
   const [connectedChannels, setConnectedChannels] = useState<string[]>([]);
 
-  useEffect(() => {
-    if (session && selectedWallet) {
-      fetchChannels();
-      fetchConnectedChannels();
-    }
-  }, [session, selectedWallet, fetchConnectedChannels]);
-
-  const fetchChannels = async () => {
+  const fetchChannels = useCallback(async () => {
     const response = await fetch('/api/get-channels');
     if (response.ok) {
       const data = await response.json();
       setChannels(data.channels);
     }
-  };
+  }, []);
 
-  const fetchConnectedChannels = async () => {
+  const fetchConnectedChannels = useCallback(async () => {
+    if (!selectedWallet) return;
     const response = await fetch(`/api/get-connected-channels?wallet=${selectedWallet}`);
     if (response.ok) {
       const data = await response.json();
       setConnectedChannels(data.connectedChannels);
     }
-  };
+  }, [selectedWallet]);
+
+  useEffect(() => {
+    if (session && selectedWallet) {
+      fetchChannels();
+      fetchConnectedChannels();
+    }
+  }, [session, selectedWallet, fetchChannels, fetchConnectedChannels]);
 
   const connectChannel = async (channelId: string) => {
     const response = await fetch('/api/connect-channel', {

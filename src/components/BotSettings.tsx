@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 
 export interface Settings {
@@ -30,20 +30,20 @@ export default function BotSettings() {
   const [fetchedSettings, setFetchedSettings] = useState<Settings>();
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    if (session) {
-      fetchSettings();
-    }
-  }, [session]);
-
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     const response = await fetch('/api/bot-settings');
     if (response.ok) {
       const data = await response.json();
       setSettings({ ...defaultSettings, ...data.settings });
       setFetchedSettings({ ...defaultSettings, ...data.settings });
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (session) {
+      fetchSettings();
+    }
+  }, [session, fetchSettings]);
 
   const updateSetting = (setting: keyof Settings, value: any) => {
     setSettings((prev) => ({ ...prev, [setting]: value }));

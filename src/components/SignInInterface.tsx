@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import { useWallet } from '@jup-ag/wallet-adapter';
 import { Keypair } from '@solana/web3.js';
@@ -14,19 +14,19 @@ export default function SignInInterface() {
   const [walletCreated, setWalletCreated] = useState(false);
   const [storedWallets, setStoredWallets] = useState<any[]>([]);
 
-  useEffect(() => {
-    if (session) {
-      fetchStoredWallets();
-    }
-  }, [session]);
-
-  const fetchStoredWallets = async () => {
+  const fetchStoredWallets = useCallback(async () => {
     const response = await fetch('/api/get-wallets');
     if (response.ok) {
       const data = await response.json();
       setStoredWallets(data.wallets);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (session) {
+      fetchStoredWallets();
+    }
+  }, [session, fetchStoredWallets]);
 
   const handleCreateWallet = () => {
     const newKeypair = Keypair.generate();

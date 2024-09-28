@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { getTokenBalances } from '../services/jupiter.service';
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
@@ -15,22 +15,16 @@ export default function WalletInfo() {
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [balances, setBalances] = useState<{ [key: string]: any }>({});
 
-  useEffect(() => {
-    if (session) {
-      fetchWallets();
-    }
-  }, [session, fetchWallets]);
-
-  const fetchWallets = async () => {
+  const fetchWallets = useCallback(async () => {
     const response = await fetch('/api/get-wallets');
     if (response.ok) {
       const data = await response.json();
       setWallets(data.wallets);
       fetchBalances(data.wallets);
     }
-  };
+  }, []);
 
-  const fetchBalances = async (wallets: Wallet[]) => {
+  const fetchBalances = useCallback(async (wallets: Wallet[]) => {
     const balancesPromises = wallets.map(async (wallet) => {
       try {
         const { balances, metadata } = await getTokenBalances(wallet.publicKey);
@@ -46,7 +40,13 @@ export default function WalletInfo() {
       acc[result.publicKey] = result;
       return acc;
     }, {} as { [key: string]: any }));
-  };
+  }, []);
+
+  useEffect(() => {
+    if (session) {
+      fetchWallets();
+    }
+  }, [session, fetchWallets]);
 
   return (
     <div>

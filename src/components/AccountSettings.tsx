@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 
 interface Settings {
@@ -10,20 +10,20 @@ export default function AccountSettings() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [maxTradeAmount, setMaxTradeAmount] = useState('');
 
-  useEffect(() => {
-    if (session) {
-      fetchSettings();
-    }
-  }, [session]);
-
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     const response = await fetch('/api/get-settings');
     if (response.ok) {
       const data = await response.json();
       setSettings(data);
       setMaxTradeAmount(data.maxTradeAmount.toString());
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (session) {
+      fetchSettings();
+    }
+  }, [session, fetchSettings]);
 
   const handleSaveSettings = async () => {
     const response = await fetch('/api/update-settings', {

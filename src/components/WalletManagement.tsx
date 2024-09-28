@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
@@ -23,19 +23,7 @@ export default function WalletManagement() {
   const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
   const [tokenBalances, setTokenBalances] = useState<TokenBalance[]>([]);
 
-  useEffect(() => {
-    if (session) {
-      fetchWallets();
-    }
-  }, [session]);
-
-  useEffect(() => {
-    if (selectedWallet) {
-      fetchTokenBalances(selectedWallet);
-    }
-  }, [selectedWallet]);
-
-  const fetchWallets = async () => {
+  const fetchWallets = useCallback(async () => {
     try {
       const response = await fetch('/api/get-wallets');
       if (response.ok) {
@@ -47,9 +35,9 @@ export default function WalletManagement() {
     } catch (error) {
       console.error('Error fetching wallets:', error);
     }
-  };
+  }, []);
 
-  const fetchTokenBalances = async (publicKey: string) => {
+  const fetchTokenBalances = useCallback(async (publicKey: string) => {
     const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
     const pubKey = new PublicKey(publicKey);
 
@@ -69,7 +57,19 @@ export default function WalletManagement() {
     } catch (error) {
       console.error('Error fetching token balances:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (session) {
+      fetchWallets();
+    }
+  }, [session, fetchWallets]);
+
+  useEffect(() => {
+    if (selectedWallet) {
+      fetchTokenBalances(selectedWallet);
+    }
+  }, [selectedWallet, fetchTokenBalances]);
 
   const handleRemoveWallet = async (publicKey: string) => {
     if (confirm("Are you sure you want to remove this wallet? This action is irreversible. Please ensure you have backed up your wallet before proceeding.")) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 
@@ -6,13 +6,7 @@ export default function WalletHeader({ selectedWallet, setSelectedWallet }: { se
   const { data: session } = useSession();
   const [wallets, setWallets] = useState<Array<{ publicKey: string }>>([]);
 
-  useEffect(() => {
-    if (session) {
-      fetchWallets();
-    }
-  }, [session, fetchWallets]);
-
-  const fetchWallets = async () => {
+  const fetchWallets = useCallback(async () => {
     const response = await fetch('/api/get-wallets');
     if (response.ok) {
       const data = await response.json();
@@ -21,7 +15,13 @@ export default function WalletHeader({ selectedWallet, setSelectedWallet }: { se
         setSelectedWallet(data.wallets[0].publicKey);
       }
     }
-  };
+  }, [selectedWallet, setSelectedWallet]);
+
+  useEffect(() => {
+    if (session) {
+      fetchWallets();
+    }
+  }, [session, fetchWallets]);
 
   return (
     <div className="flex justify-between items-center p-4 bg-gray-100">
