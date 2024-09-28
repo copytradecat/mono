@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { getTokenBalances } from '../services/jupiter.service';
@@ -21,25 +21,12 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
   const [balances, setBalances] = useState<any>({});
   const [aggregateBalance, setAggregateBalance] = useState<AggregateBalance>({});
 
-  useEffect(() => {
-    if (session) {
-      fetchWallets();
-      fetchAggregateBalance();
-    }
-  }, [session]);
-
-  useEffect(() => {
-    if (selectedWallet) {
-      fetchBalances(selectedWallet);
-    }
-  }, [selectedWallet]);
-
-  const fetchWallets = async () => {
+  const fetchWallets = useCallback(async () => {
     try {
       const response = await axios.get('/api/get-wallets', {
-        params: { limit: 10 } // Limit the number of wallets fetched
+        params: { limit: 10 }
       });
-      const fetchedWallets = response.data.wallets.slice(0, 10); // Ensure we don't exceed 10 wallets
+      const fetchedWallets = response.data.wallets.slice(0, 10);
       setWallets(fetchedWallets);
       if (fetchedWallets.length > 0 && !selectedWallet) {
         setSelectedWallet(fetchedWallets[0].publicKey);
@@ -47,7 +34,30 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
     } catch (error) {
       console.error('Failed to fetch wallets:', error);
     }
-  };
+  }, [setSelectedWallet, selectedWallet]);
+
+  const fetchAggregateBalance = useCallback(async () => {
+    try {
+      const response = await axios.get('/api/get-aggregate-balance');
+      setAggregateBalance(response.data.aggregateBalance);
+    } catch (error) {
+      console.error('Failed to fetch aggregate balance:', error);
+      setAggregateBalance({ error: 'Failed to fetch aggregate balance' });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (session) {
+      fetchWallets();
+      fetchAggregateBalance();
+    }
+  }, [session, fetchWallets, fetchAggregateBalance]);
+
+  useEffect(() => {
+    if (selectedWallet) {
+      fetchBalances(selectedWallet);
+    }
+  }, [selectedWallet]);
 
   const fetchBalances = async (pubKey: string) => {
     try {
@@ -68,16 +78,6 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
           error: 'Failed to fetch balances'
         }
       }));
-    }
-  };
-
-  const fetchAggregateBalance = async () => {
-    try {
-      const response = await axios.get('/api/get-aggregate-balance');
-      setAggregateBalance(response.data.aggregateBalance);
-    } catch (error) {
-      console.error('Failed to fetch aggregate balance:', error);
-      setAggregateBalance({ error: 'Failed to fetch aggregate balance' });
     }
   };
 

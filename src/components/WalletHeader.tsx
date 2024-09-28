@@ -10,7 +10,7 @@ export default function WalletHeader({ selectedWallet, setSelectedWallet }: { se
     if (session) {
       fetchWallets();
     }
-  }, [session]);
+  }, [session, fetchWallets]);
 
   const fetchWallets = async () => {
     const response = await fetch('/api/get-wallets');

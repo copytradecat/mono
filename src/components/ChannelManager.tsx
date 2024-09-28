@@ -16,7 +16,7 @@ export default function ChannelManager({ selectedWallet }: { selectedWallet: str
       fetchChannels();
       fetchConnectedChannels();
     }
-  }, [session, selectedWallet]);
+  }, [session, selectedWallet, fetchConnectedChannels]);
 
   const fetchChannels = async () => {
     const response = await fetch('/api/get-channels');

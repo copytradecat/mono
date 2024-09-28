@@ -19,7 +19,7 @@ export default function WalletInfo() {
     if (session) {
       fetchWallets();
     }
-  }, [session]);
+  }, [session, fetchWallets]);
 
   const fetchWallets = async () => {
     const response = await fetch('/api/get-wallets');
