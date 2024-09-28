@@ -6,8 +6,8 @@ import WalletManager from '../components/WalletManager';
 import ChannelManager from '../components/ChannelManager';
 import TradingInterface from '../components/TradingInterface';
 import BotSettings from '../components/BotSettings';
-
-export default function Dashboard() {
+import { withSubscriptionCheck } from '../components/withSubscriptionCheck';
+const Dashboard = withSubscriptionCheck(() => {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
@@ -39,4 +39,6 @@ export default function Dashboard() {
       </div>
     </div>
   );
-}
+});
+
+export default Dashboard;

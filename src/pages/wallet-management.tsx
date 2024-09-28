@@ -1,8 +1,9 @@
 import { useSession } from 'next-auth/react';
 import WalletManagement from '../components/WalletManagement';
 import { useRouter } from 'next/router';
+import { withSubscriptionCheck } from '../components/withSubscriptionCheck';
 
-export default function WalletManagementPage() {
+const WalletManagementPage = withSubscriptionCheck(() => {
   const { data: session, status } = useSession();
   const router = useRouter();
 
@@ -21,4 +22,6 @@ export default function WalletManagementPage() {
       <WalletManagement />
     </div>
   );
-}
+});
+
+export default WalletManagementPage;
