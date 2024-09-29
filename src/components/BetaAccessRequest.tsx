@@ -35,7 +35,7 @@ export default function BetaAccessRequest({ onRequestSubmitted }: BetaAccessRequ
       const response = await fetch('/api/request-beta-access', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: session.user.name }),
+        body: JSON.stringify({ userId: session.user?.name }),
       });
 
       if (response.ok) {

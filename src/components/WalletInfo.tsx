@@ -15,15 +15,6 @@ export default function WalletInfo() {
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [balances, setBalances] = useState<{ [key: string]: any }>({});
 
-  const fetchWallets = useCallback(async () => {
-    const response = await fetch('/api/get-wallets');
-    if (response.ok) {
-      const data = await response.json();
-      setWallets(data.wallets);
-      fetchBalances(data.wallets);
-    }
-  }, []);
-
   const fetchBalances = useCallback(async (wallets: Wallet[]) => {
     const balancesPromises = wallets.map(async (wallet) => {
       try {
@@ -40,6 +31,15 @@ export default function WalletInfo() {
       acc[result.publicKey] = result;
       return acc;
     }, {} as { [key: string]: any }));
+  }, []);
+
+  const fetchWallets = useCallback(async () => {
+    const response = await fetch('/api/get-wallets');
+    if (response.ok) {
+      const data = await response.json();
+      setWallets(data.wallets);
+      fetchBalances(data.wallets);
+    }
   }, []);
 
   useEffect(() => {
@@ -64,7 +64,7 @@ export default function WalletInfo() {
                 {Object.entries(balances[wallet.publicKey]?.balances || {}).map(([token, balance]) => (
                   token !== 'SOL' && (
                     <li key={token}>
-                      {balances[wallet.publicKey]?.metadata?.[token]?.symbol || token}: {(balance / Math.pow(10, balances[wallet.publicKey]?.metadata?.[token]?.decimals || 0)).toFixed(4)}
+                      {balances[wallet.publicKey]?.metadata?.[token]?.symbol || token}: {(Number(balance) / Math.pow(10, balances[wallet.publicKey]?.metadata?.[token]?.decimals || 0)).toFixed(4)}
                     </li>
                   )
                 ))}

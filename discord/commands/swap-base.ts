@@ -145,21 +145,34 @@ export async function executeSwapTransaction(
 ) {
   try {
     const swapData = await getSwapTransaction(quoteData, wallet.publicKey, settings);
+    
+    // Update message to show that the transaction is being sent
+    await interaction.editReply({
+      content: 'Sending transaction...',
+      components: [],
+    });
+
     const swapResult = await executeSwap(userId, wallet.publicKey, swapData.swapTransaction);
+
+    // Update message with transaction signature as soon as it's available
+    if (swapResult.signature) {
+      await interaction.editReply({
+        content: `Transaction sent! Waiting for confirmation...\nTransaction ID: [${truncatedString(swapResult.signature, 4)}](<https://solscan.io/tx/${swapResult.signature}>)`,
+        components: [],
+      });
+    }
 
     if (swapResult.success) {
       await recordTrade(userId, wallet.publicKey, swapResult.signature, amount, isBuyOperation ? outputTokenAddress : inputTokenAddress);
 
       let selectionIndex = 'Custom';
       if (!isBuyOperation) {
-        // For sell operations, find the matching exit percentage
         const exitPercentage = (amount / inputTokenInfo.balance) * 100;
         const percentageIndex = selectionPercentages.findIndex(p => Math.abs(p - exitPercentage) < 0.01);
         if (percentageIndex !== -1) {
           selectionIndex = selectionIndexOptions[percentageIndex];
         }
       } else {
-        // For buy operations, find the matching entry amount
         const amountIndex = selectionPercentages.findIndex(p => Math.abs(p - amount) < 0.00001);
         if (amountIndex !== -1) {
           selectionIndex = selectionIndexOptions[amountIndex];
