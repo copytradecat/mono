@@ -67,7 +67,8 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
       const collectorFilter = (i: { user: { id: string } }) => i.user.id === interaction.user.id;
       const confirmation = await response.awaitMessageComponent({
         filter: collectorFilter,
-        time: 60000,
+        // Remove the time limit or increase it significantly
+        // time: 60000,
       });
 
       await confirmation.deferUpdate();
@@ -131,110 +132,66 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
         settings
       );
 
+      const executeButton = new ButtonBuilder()
+        .setCustomId('execute_swap')
+        .setLabel('Swap Now')
+        .setStyle(ButtonStyle.Primary);
+
       const cancelButton = new ButtonBuilder()
         .setCustomId('cancel_swap')
         .setLabel('Cancel')
         .setStyle(ButtonStyle.Danger);
 
-      const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(cancelButton);
-
+      const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(executeButton, cancelButton);
+      const fiveSecondsFromNow = Math.floor(Date.now() / 1000) + 5;
       await interaction.editReply({
-        content: `${swapPreview}\n\nClick cancel within 5 seconds to cancel the swap.`,
+        content: `${swapPreview}\n\nSubmitting swap <t:${fiveSecondsFromNow}:R>\n\nClick 'Swap Now' to proceed immediately, or 'Cancel' within 5 seconds to abort transaction.`,
         components: [buttonRow],
       });
 
       try {
         const buttonCollector = (await interaction.fetchReply()).createMessageComponentCollector({
           componentType: ComponentType.Button,
-          time: swapTime,
+          time: 5000, // Set to 5 seconds
         });
 
         let transactionCancelled = false;
+        let transactionExecuted = false;
 
         buttonCollector.on('collect', async (btnInteraction) => {
-          if (btnInteraction.customId === 'cancel_swap' && btnInteraction.user.id === userId) {
-            transactionCancelled = true;
-            buttonCollector.stop();
-            try {
+          if (btnInteraction.user.id === userId) {
+            if (btnInteraction.customId === 'cancel_swap') {
+              transactionCancelled = true;
+              buttonCollector.stop();
               await btnInteraction.update({
                 content: 'Transaction cancelled.',
                 components: [],
               });
-            } catch (error) {
-              console.error('Error updating button interaction:', error);
-              await interaction.followUp({
-                content: 'Transaction cancelled.',
-                ephemeral: true,
+            } else if (btnInteraction.customId === 'execute_swap') {
+              transactionExecuted = true;
+              buttonCollector.stop();
+              await btnInteraction.update({
+                content: 'Processing your swap...',
+                components: [],
               });
+              await executeSwapTransaction(interaction, userId, wallet, quoteData, settings, selectedAmount, outputTokenAddress, inputTokenInfo, outputTokenInfo, estimatedOutput, inputToken, entryAmounts);
             }
           } else {
             await btnInteraction.reply({ content: 'You cannot use this button.', ephemeral: true });
           }
         });
 
-        buttonCollector.on('end', async () => {
-          if (!transactionCancelled) {
-            try {
-              await interaction.editReply({
-                content: 'Processing your swap...',
-                components: [],
-              });
-
-              const swapData = await getSwapTransaction(quoteData, wallet.publicKey, settings);
-              const swapResult = await executeSwap(userId, wallet.publicKey, swapData.swapTransaction);
-
-              if (swapResult.success) {
-                await recordTrade(userId, wallet.publicKey, swapResult.signature, selectedAmount, outputTokenAddress);
-
-                const selectionIndex = entryAmounts.indexOf(selectedAmount) !== -1 
-                  ? ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌', 'Massive 🦍', 'MEGAMOON 🌝'][Math.floor(entryAmounts.indexOf(selectedAmount) / 2)]
-                  : 'Custom';
-
-                await interaction.editReply({
-                  content: `Swap Complete!\n\nBought: ${estimatedOutput} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>)\nUsing: ${selectedAmount} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputToken}>)\nTransaction ID: [${truncatedString(swapResult.signature, 4)}](<https://solscan.io/tx/${swapResult.signature}>)`,
-                  components: [],
-                });
-
-                const publicMessage = `**${interaction.user.username}** bought a **${selectionIndex}** amount of **[${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>)** at **${estimatedOutput/selectedAmount} ${outputTokenInfo.symbol}/${inputTokenInfo.symbol}**`;
-                await interaction.channel?.send(publicMessage);
-              } else {
-                const errorMessage = `Failed to execute buy order. Reason: ${swapResult.transactionMessage}\n\nError details: ${swapResult.error}`;
-                try {
-                  await interaction.editReply({
-                    content: errorMessage,
-                    components: [],
-                  });
-                } catch (replyError) {
-                  console.error('Error editing reply:', replyError);
-                  await interaction.followUp({
-                    content: errorMessage,
-                    ephemeral: true,
-                  });
-                }
-              }
-            } catch (error: any) {
-              console.error('Error executing swap:', error);
-              let errorMessage = 'Failed to execute buy order. Please try again later.';
-              if (error.message.includes('TransactionExpiredTimeoutError')) {
-                const match = error.message.match(/Check signature ([a-zA-Z0-9]+)/);
-                const signature = match ? match[1] : 'unknown';
-                errorMessage = `Transaction timed out. It is unknown if it succeeded or failed. Check signature ${signature} using the Solana Explorer or CLI tools.`;
-              }
-              try {
-                await interaction.editReply({
-                  content: errorMessage,
-                  components: [],
-                });
-              } catch (replyError) {
-                console.error('Error editing reply:', replyError);
-                await interaction.followUp({
-                  content: errorMessage,
-                  ephemeral: true,
-                });
-              }
-            }
+        buttonCollector.on('end', async (collected) => {
+          if (!transactionCancelled && !transactionExecuted) {
+            // If no button was pressed, execute the swap automatically
+            await interaction.editReply({
+              content: 'Processing your swap...',
+              components: [],
+            });
+            await executeSwapTransaction(interaction, userId, wallet, quoteData, settings, selectedAmount, outputTokenAddress, inputTokenInfo, outputTokenInfo, estimatedOutput, inputToken, entryAmounts);
           }
         });
+
       } catch (error) {
         console.error('Error in button collector:', error);
         await interaction.followUp({
@@ -253,6 +210,60 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
     console.error('Error in handleBuyCommand:', error);
     await interaction.editReply({
       content: 'An error occurred while processing your buy order.',
+      components: [],
+    });
+  }
+}
+
+async function executeSwapTransaction(
+  interaction: CommandInteraction,
+  userId: string,
+  wallet: any,
+  quoteData: any,
+  settings: any,
+  selectedAmount: number,
+  outputTokenAddress: string,
+  inputTokenInfo: any,
+  outputTokenInfo: any,
+  estimatedOutput: number,
+  inputToken: string,
+  entryAmounts: number[]
+) {
+  try {
+    const swapData = await getSwapTransaction(quoteData, wallet.publicKey, settings);
+    const swapResult = await executeSwap(userId, wallet.publicKey, swapData.swapTransaction);
+
+    if (swapResult.success) {
+      await recordTrade(userId, wallet.publicKey, swapResult.signature, selectedAmount, outputTokenAddress);
+
+      const selectionIndex = entryAmounts.indexOf(selectedAmount) !== -1 
+        ? ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌', 'Massive 🦍', 'MEGAMOON 🌝'][Math.floor(entryAmounts.indexOf(selectedAmount) / 2)]
+        : 'Custom';
+
+      await interaction.editReply({
+        content: `Swap Complete!\n\nBought: ${estimatedOutput} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>)\nUsing: ${selectedAmount} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputToken}>)\nTransaction ID: [${truncatedString(swapResult.signature, 4)}](<https://solscan.io/tx/${swapResult.signature}>)`,
+        components: [],
+      });
+
+      const publicMessage = `**${interaction.user.username}** bought a **${selectionIndex}** amount of **[${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>)** at **${estimatedOutput/selectedAmount} ${outputTokenInfo.symbol}/${inputTokenInfo.symbol}**`;
+      await interaction.channel?.send(publicMessage);
+    } else {
+      const errorMessage = `Failed to execute buy order. Reason: ${swapResult.transactionMessage}\n\nError details: ${swapResult.error}`;
+      await interaction.editReply({
+        content: errorMessage,
+        components: [],
+      });
+    }
+  } catch (error: any) {
+    console.error('Error executing swap:', error);
+    let errorMessage = 'Failed to execute buy order. Please try again later.';
+    if (error.message.includes('TransactionExpiredTimeoutError')) {
+      const match = error.message.match(/Check signature ([a-zA-Z0-9]+)/);
+      const signature = match ? match[1] : 'unknown';
+      errorMessage = `Transaction timed out. It is unknown if it succeeded or failed. Check signature ${signature} using the Solana Explorer or CLI tools.`;
+    }
+    await interaction.editReply({
+      content: errorMessage,
       components: [],
     });
   }
