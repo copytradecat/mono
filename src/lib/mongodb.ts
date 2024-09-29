@@ -1,16 +1,19 @@
+/* eslint-disable no-use-before-define */
+
 import dotenv from 'dotenv';
 import { MongoClient } from 'mongodb';
 import mongoose from 'mongoose';
 
+// Declare a new interface for the global scope
 declare global {
-  let mongoose: {
+  const mongoose: {
     conn: typeof mongoose | null;
     promise: Promise<typeof mongoose> | null;
-  };
+  } | undefined;
 }
-
-if (!global.mongoose) {
-  global.mongoose = { conn: null, promise: null };
+// Initialize the global mongoose object if it doesn't exist
+if (!(global as any).mongoose) {
+  (global as any).mongoose = { conn: null, promise: null };
 }
 
 dotenv.config({ path: ['.env.local', '.env'] });
@@ -38,21 +41,19 @@ export async function connectToDatabase() {
 }
 
 export async function connectDB() {
-  if (global.mongoose.conn) {
-    return global.mongoose.conn;
+  if ((global as any).mongoose?.conn) {
+    return (global as any).mongoose.conn;
   }
 
-  if (!global.mongoose.promise) {
+  if (!(global as any).mongoose?.promise) {
     const opts = {
       bufferCommands: false,
     };
-
-    global.mongoose.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
-      return mongoose;
-    });
+    (global as any).mongoose = (global as any).mongoose || { conn: null, promise: null };
+    (global as any).mongoose.promise = mongoose.connect(MONGODB_URI as string, opts) as unknown;
   }
-  global.mongoose.conn = await global.mongoose.promise;
-  return global.mongoose.conn;
+  (global as any).mongoose.conn = await (global as any).mongoose.promise;
+  return (global as any).mongoose.conn;
 }
 
 export function disconnectDB() {

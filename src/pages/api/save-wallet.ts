@@ -9,7 +9,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const session = await getServerSession(req, res, authOptions);
     console.log('Session:', JSON.stringify(session, null, 2));
-    console.log('Session user:', JSON.stringify(session.user, null, 2));
+    console.log('Session user:', JSON.stringify(session?.user, null, 2));
 
     if (!session) {
       return res.status(401).json({ error: 'Unauthorized' });
@@ -43,7 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const normalizedPublicKey = publicKey;
 
     const existingUser = await User.findOne({ 
-      discordId: session.user.name, 
+      discordId: session.user?.name, 
       'wallets.publicKey': normalizedPublicKey 
     });
 
@@ -52,11 +52,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const user = await User.findOneAndUpdate(
-      { discordId: session.user.name },
+      { discordId: session.user?.name },
       {
         $set: {
-          email: session.user.email,
-          name: session.user.name,
+          email: session.user?.email,
+          name: session.user?.name,
         },
         $push: {
           wallets: {
@@ -67,8 +67,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }
         },
         $setOnInsert: {
-          discordId: session.user.name,
-          name: session.user.name,
+          discordId: session.user?.name,
+          name: session.user?.name,
         }
       },
       { new: true, upsert: true }
@@ -83,6 +83,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(200).json({ message: 'Wallet saved successfully' });
   } catch (error) {
     console.error('Failed to save wallet:', error);
-    res.status(500).json({ error: `Failed to save wallet: ${error.message}` });
+    res.status(500).json({ error: `Failed to save wallet: ${error instanceof Error ? error.message : 'Unknown error'}` });
   }
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { getTokenBalances } from '../services/jupiter.service';
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
@@ -8,11 +8,11 @@ const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 
 export default function WalletInfo() {
   const { data: session } = useSession();
-  const { wallets, isLoading, error } = useWallets();
+  const { wallets, isLoading, error } = useWallets(); 
   const [balances, setBalances] = useState<{ [key: string]: any }>({});
 
-  const fetchBalances = useCallback(async (wallets: Wallet[]) => {
-    const balancesPromises = wallets.map(async (wallet) => {
+  const fetchBalances = useCallback(async (wallets: any[]) => {
+    const balancesPromises = wallets.map(async (wallet: any) => {
       try {
         const { balances, metadata } = await getTokenBalances(wallet.publicKey);
         return { publicKey: wallet.publicKey, balances, metadata };

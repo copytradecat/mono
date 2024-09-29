@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
 
-export function withSubscriptionCheck<P>(WrappedComponent: React.ComponentType<P>) {
+export function withSubscriptionCheck<P extends object>(WrappedComponent: React.ComponentType<P>) {
   return function WithSubscriptionCheck(props: P) {
     const { data: session, status } = useSession();
     const router = useRouter();

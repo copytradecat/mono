@@ -17,13 +17,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     await connectDB();
-    const user = await User.findOne({ discordId: session.user.name });
+    const user = await User.findOne({ discordId: session.user?.name });
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const walletAddresses = user.wallets.map(wallet => wallet.publicKey);
+    const walletAddresses = user.wallets.map((wallet: any) => wallet.publicKey);
     const aggregateBalance = await getAggregateBalance(walletAddresses);
 
     res.status(200).json({ aggregateBalance });

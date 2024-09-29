@@ -33,9 +33,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       console.log('Response from signing service:', JSON.stringify(response.data, null, 2));
       res.status(200).json({ signature: response.data.signature });
-    } catch (error) {
-      console.error('Error signing and sending transaction:', error.response?.data || error.message);
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error('Error signing and sending transaction:', error.message);
+      } else {
+        console.error('Error signing and sending transaction:', String(error));
+      }
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
         res.status(404).json({ error: 'User or wallet not found' });
       } else {
         res.status(500).json({ error: 'Failed to sign and send transaction' });

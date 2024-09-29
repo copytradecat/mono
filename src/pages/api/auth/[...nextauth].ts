@@ -1,4 +1,4 @@
-import NextAuth, { Account, Profile, Session } from 'next-auth';
+import NextAuth, { Account, NextAuthOptions, Profile, Session } from 'next-auth';
 import DiscordProvider from 'next-auth/providers/discord';
 import GoogleProvider from 'next-auth/providers/google';
 import dotenv from 'dotenv';
@@ -18,9 +18,9 @@ export const authOptions = {
     }),
   ],
   callbacks: {
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account, profile }: { user: any; account: any; profile: any }) {
       await connectDB();
-      const referralCode = profile.referralCode || null;
+      const referralCode = (profile as any).referralCode || null;
 
       try {
         // Find the latest user to get the highest account number
@@ -72,14 +72,14 @@ export const authOptions = {
         return false;
       }
     },
-    async jwt({ token, account, profile }) {
+    async jwt({ token, account, profile }: { token: JWT; account: Account | null; profile?: Profile }) {
       if (account) {
         token.discordId = account.providerAccountId;
         token.email = profile?.email || null;
       }
       return token;
     },
-    async session({ session, token }) {
+    async session({ session, token }: { session: any; token: any }) {
       if (session.user) {
         session.user = {
           ...session.user,
@@ -91,6 +91,6 @@ export const authOptions = {
     },
   },
   secret: process.env.JWT_SECRET,
-};
+} as NextAuthOptions;
 
 export default NextAuth(authOptions);

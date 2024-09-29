@@ -18,7 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     await connectDB();
     await Trade.create({
-      userId: session.user.name,
+      userId: session.user?.name,
       publicKey,
       txid,
       amount,

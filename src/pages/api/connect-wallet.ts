@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await connectDB();
 
     const user = await User.findOneAndUpdate(
-      { discordId: session.user.name, 'wallets.publicKey': publicKey },
+      { discordId: session.user?.name, 'wallets.publicKey': publicKey },
       { 
         $addToSet: { 
           'wallets.$.connectedChannels': channelId

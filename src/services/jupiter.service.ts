@@ -28,7 +28,7 @@ async function getTokenMetadata(mintAddresses: string[]) {
   const metadataPromises = mintAddresses.map(async (address) => {
     try {
       const mintPublicKey = new PublicKey(address);
-      const nft = await metaplex.nfts().findByMint({ mintAddress: mintPublicKey }).run();
+      const nft = await metaplex.nfts().findByMint({ mintAddress: mintPublicKey });
 
       metadata[address] = {
         symbol: nft.symbol,
@@ -79,9 +79,9 @@ export async function getTokenInfo(tokenAddress: string) {
     console.log(data);
     return data;
   } catch (error) {
-    console.error(error.message);
+    console.error('Error fetching token info:', error instanceof Error ? error.message : String(error));
+    throw error; // Re-throw the error after logging
   }
-
 }
 
 export async function getTokenBalances(publicKey: string) {

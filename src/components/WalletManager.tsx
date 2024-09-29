@@ -42,13 +42,13 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
       const { balances, metadata } = await getTokenBalances(pubKey);
       console.log("balances: ", balances);
       console.log("metadata: ", metadata);
-      setBalances(prevBalances => ({
+      setBalances((prevBalances: any) => ({
         ...prevBalances,
         [pubKey]: { balances, metadata, error: null }
       }));
     } catch (error) {
       console.error('Error fetching balances:', error);
-      setBalances(prevBalances => ({
+      setBalances((prevBalances: { [key: string]: { balances: any, metadata: any, error: string | null } }) => ({
         ...prevBalances,
         [pubKey]: { 
           balances: prevBalances[pubKey]?.balances || {}, 

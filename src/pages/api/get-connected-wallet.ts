@@ -22,14 +22,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     await connectDB();
-    const user = await User.findOne({ discordId: session.user.name });
+    const user = await User.findOne({ discordId: session.user?.name });
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     const connectedWallet = user.connectedWallets.find(
-      (wallet) => wallet.channelId === channelId
+      (wallet: any) => wallet.channelId === channelId
     );
 
     if (!connectedWallet) {

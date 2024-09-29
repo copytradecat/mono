@@ -25,7 +25,9 @@ export default function ConnectWallet() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <WalletHeader />
+      <WalletHeader selectedWallet={null} setSelectedWallet={function (wallet: string | null): void {
+        throw new Error('Function not implemented.');
+      } } />
       <h1 className="text-3xl font-bold mb-8">Connect Your Wallet</h1>
       <p>Channel ID: {channelId}</p>
       <WalletConnection channelId={channelId} />
