@@ -11,6 +11,7 @@ import {
   executeSwap,
   recordTrade,
   swapTime,
+  executeSwapTransaction
 } from './swap-base';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { rateLimitedRequest, getTokenInfo, getSwapTransaction, getTokenBalance } from '../../src/services/jupiter.service';
@@ -18,7 +19,6 @@ import { defaultSettings } from '../../src/components/BotSettings';
 import { truncatedString } from '../../src/lib/utils';
 
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
-const EXIT_PERCENTAGES = [25, 50, 75, 100]; // Adjust as needed
 
 export async function handleSellCommand(interaction: CommandInteraction) {
   const inputTokenAddress = interaction.options.getString('token', true);
@@ -31,7 +31,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
     const wallet = user.wallets[0];
     const outputToken = 'So11111111111111111111111111111111111111112'; // SOL mint address
 
-    const exitPercentages = user.settings.exitPercentages || EXIT_PERCENTAGES;
+    const exitPercentages = user.settings.exitPercentages || defaultSettings.exitPercentages;
     const settings = user.settings || defaultSettings;
 
     // Fetch token balance and info
@@ -176,7 +176,20 @@ export async function handleSellCommand(interaction: CommandInteraction) {
                 content: 'Processing your swap...',
                 components: [],
               });
-              await executeSwapTransaction(interaction, userId, wallet, quoteData, settings, amount, inputTokenAddress, inputTokenInfo, outputTokenInfo, tokenBalance, estimatedOutput, outputToken);
+              await executeSwapTransaction(
+                interaction,
+                userId,
+                wallet,
+                quoteData,
+                settings,
+                amount,
+                inputTokenAddress,
+                inputTokenInfo,
+                outputTokenInfo,
+                tokenBalance,
+                estimatedOutput,
+                outputToken
+              );
             }
           } else {
             await btnInteraction.reply({ content: 'You cannot use this button.', ephemeral: true });
@@ -190,7 +203,20 @@ export async function handleSellCommand(interaction: CommandInteraction) {
               content: 'Processing your swap...',
               components: [],
             });
-            await executeSwapTransaction(interaction, userId, wallet, quoteData, settings, amount, inputTokenAddress, inputTokenInfo, outputTokenInfo, tokenBalance, estimatedOutput, outputToken);
+            await executeSwapTransaction(
+              interaction,
+              userId,
+              wallet,
+              quoteData,
+              settings,
+              amount,
+              inputTokenAddress,
+              inputTokenInfo,
+              outputTokenInfo,
+              tokenBalance,
+              estimatedOutput,
+              outputToken
+            );
           }
         });
 
@@ -250,7 +276,10 @@ async function executeSwapTransaction(
       const publicMessage = `**${interaction.user.username}** sold a **${selectionIndex}** amount of **[${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenAddress}>)** at **${amount/estimatedOutput} ${inputTokenInfo.symbol}/${outputTokenInfo.symbol}**`;
       await interaction.channel?.send(publicMessage);
     } else {
-      const errorMessage = `Failed to execute sell order. Reason: ${swapResult.transactionMessage}\n\nError details: ${swapResult.error}`;
+      let errorMessage = `Failed to execute sell order. Reason: ${swapResult.transactionMessage}\n\nError details: ${swapResult.error}`;
+      if (swapResult.signature) {
+        errorMessage += `\nTransaction may still be processing. Check signature ${swapResult.signature} using the Solana Explorer or CLI tools.`;
+      }
       await interaction.editReply({
         content: errorMessage,
         components: [],
@@ -259,11 +288,6 @@ async function executeSwapTransaction(
   } catch (error: any) {
     console.error('Error executing swap:', error);
     let errorMessage = 'Failed to execute sell order. Please try again later.';
-    if (error.message.includes('TransactionExpiredTimeoutError')) {
-      const match = error.message.match(/Check signature ([a-zA-Z0-9]+)/);
-      const signature = match ? match[1] : 'unknown';
-      errorMessage = `Transaction timed out. It is unknown if it succeeded or failed. Check signature ${signature} using the Solana Explorer or CLI tools.`;
-    }
     await interaction.editReply({
       content: errorMessage,
       components: [],
