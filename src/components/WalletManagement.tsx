@@ -4,6 +4,10 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import dotenv from 'dotenv';
 import { rateLimitedRequest } from '../services/jupiter.service';
+import { useWallet } from '@jup-ag/wallet-adapter';
+import { Keypair } from '@solana/web3.js';
+import bs58 from 'bs58';
+import { encrypt } from '../lib/encryption';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -19,9 +23,74 @@ interface TokenBalance {
 
 export default function WalletManagement() {
   const { data: session } = useSession();
+  const { connected, connect, publicKey } = useWallet();
+  const [walletSeed, setWalletSeed] = useState('');
+  const [publicAddress, setPublicAddress] = useState<string | null>(null);
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
   const [tokenBalances, setTokenBalances] = useState<TokenBalance[]>([]);
+
+  const [showPrivateKey, setShowPrivateKey] = useState(false);
+  const [walletCreated, setWalletCreated] = useState(false);
+  const [storedWallets, setStoredWallets] = useState<any[]>([]);
+
+  const fetchStoredWallets = useCallback(async () => {
+    const response = await fetch('/api/get-wallets');
+    if (response.ok) {
+      const data = await response.json();
+      setStoredWallets(data.wallets);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (session) {
+      fetchStoredWallets();
+    }
+  }, [session, fetchStoredWallets]);
+
+  const handleCreateWallet = () => {
+    const newKeypair = Keypair.generate();
+    const seed = bs58.encode(newKeypair.secretKey);
+    setWalletSeed(seed);
+    setPublicAddress(newKeypair.publicKey.toBase58());
+    setWalletCreated(true);
+  };
+
+  const handleSaveWallet = async () => {
+    if (!session || !walletSeed) return;
+
+    const response = await fetch('/api/save-wallet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        publicKey: publicAddress,
+        secretData: walletSeed,
+        type: 'seed',
+      }),
+    });
+
+    if (response.ok) {
+      alert('Wallet saved successfully!');
+      fetchStoredWallets();
+    } else {
+      const errorData = await response.json();
+      alert(`Failed to save wallet: ${errorData.error}`);
+    }
+  };
+
+  const handleImportWallet = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const seed = (event.currentTarget.elements.namedItem('seed') as HTMLInputElement).value;
+    try {
+      const keypair = Keypair.fromSecretKey(bs58.decode(seed));
+      setWalletSeed(seed);
+      setPublicAddress(keypair.publicKey.toBase58());
+      setWalletCreated(true);
+    } catch (error) {
+      console.error('Invalid seed phrase');
+      alert('Invalid seed phrase');
+    }
+  };
 
   const fetchWallets = useCallback(async () => {
     try {
@@ -121,6 +190,32 @@ export default function WalletManagement() {
   return (
     <div>
       <h1>Wallet Management</h1>
+      {storedWallets.length > 0 && (
+        <div>
+          <h3>Stored Wallets</h3>
+          {storedWallets.map((wallet, index) => (
+            <p key={index}>Public Key: {wallet.publicKey}</p>
+          ))}
+        </div>
+      )}
+      <h3>Create or Import Wallet</h3>
+      {!walletCreated && (
+        <form onSubmit={handleImportWallet}>
+          <input type="text" name="seed" placeholder="Enter seed phrase" />
+          <button type="submit">Import Wallet</button>
+        </form>
+      )}
+      {!walletCreated && <button onClick={handleCreateWallet}>Create New Wallet</button>}
+      {walletCreated && (
+        <div>
+          <p>Public Address: {publicAddress?.toString()}</p>
+          <button onClick={() => setShowPrivateKey(!showPrivateKey)}>
+            {showPrivateKey ? 'Hide' : 'Reveal'} Private Key
+          </button>
+          {showPrivateKey && <p>Private Key: {walletSeed}</p>}
+          <button onClick={handleSaveWallet}>Save Wallet</button>
+        </div>
+      )}
       <select onChange={(e) => setSelectedWallet(e.target.value)}>
         <option value="">Select a wallet</option>
         {wallets.map((wallet, index) => (
