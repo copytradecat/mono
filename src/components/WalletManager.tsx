@@ -1,15 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { getTokenBalances } from '../services/jupiter.service';
 import Link from 'next/link';
 import axios from 'axios';
-
-interface Wallet {
-  publicKey: string;
-  encryptedPrivateKey: string;
-  connectedChannels: string[];
-}
+import { useWallets } from '../hooks/useWallets';
 
 interface AggregateBalance {
   [key: string]: number;
@@ -17,24 +11,9 @@ interface AggregateBalance {
 
 export default function WalletManager({ selectedWallet, setSelectedWallet }: { selectedWallet: string | null, setSelectedWallet: (wallet: string | null) => void }) {
   const { data: session } = useSession();
-  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const { wallets, isLoading, error } = useWallets();
   const [balances, setBalances] = useState<any>({});
   const [aggregateBalance, setAggregateBalance] = useState<AggregateBalance>({});
-
-  const fetchWallets = useCallback(async () => {
-    try {
-      const response = await axios.get('/api/get-wallets', {
-        params: { limit: 10 }
-      });
-      const fetchedWallets = response.data.wallets.slice(0, 10);
-      setWallets(fetchedWallets);
-      if (fetchedWallets.length > 0 && !selectedWallet) {
-        setSelectedWallet(fetchedWallets[0].publicKey);
-      }
-    } catch (error) {
-      console.error('Failed to fetch wallets:', error);
-    }
-  }, [setSelectedWallet, selectedWallet]);
 
   const fetchAggregateBalance = useCallback(async () => {
     try {
@@ -42,16 +21,15 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
       setAggregateBalance(response.data.aggregateBalance);
     } catch (error) {
       console.error('Failed to fetch aggregate balance:', error);
-      setAggregateBalance({ error: 'Failed to fetch aggregate balance' });
+      setAggregateBalance({});
     }
   }, []);
 
   useEffect(() => {
     if (session) {
-      fetchWallets();
       fetchAggregateBalance();
     }
-  }, [session, fetchWallets, fetchAggregateBalance]);
+  }, [session, fetchAggregateBalance]);
 
   useEffect(() => {
     if (selectedWallet) {

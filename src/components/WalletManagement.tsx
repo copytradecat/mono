@@ -1,20 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
-import dotenv from 'dotenv';
 import { rateLimitedRequest } from '../services/jupiter.service';
-import { useWallet } from '@jup-ag/wallet-adapter';
 import { Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { encrypt } from '../lib/encryption';
-
-dotenv.config({ path: ['.env.local', '.env'] });
-
-interface Wallet {
-  publicKey: string;
-  encryptedPrivateKey: string;
-}
+import { useWallets } from '../hooks/useWallets';
 
 interface TokenBalance {
   mint: string;
@@ -23,30 +14,47 @@ interface TokenBalance {
 
 export default function WalletManagement() {
   const { data: session } = useSession();
-  const { connected, connect, publicKey } = useWallet();
-  const [walletSeed, setWalletSeed] = useState('');
-  const [publicAddress, setPublicAddress] = useState<string | null>(null);
-  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const { wallets, isLoading, error, fetchWallets } = useWallets();
   const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
   const [tokenBalances, setTokenBalances] = useState<TokenBalance[]>([]);
-
   const [showPrivateKey, setShowPrivateKey] = useState(false);
   const [walletCreated, setWalletCreated] = useState(false);
-  const [storedWallets, setStoredWallets] = useState<any[]>([]);
+  const [walletSeed, setWalletSeed] = useState('');
+  const [publicAddress, setPublicAddress] = useState<string | null>(null);
 
-  const fetchStoredWallets = useCallback(async () => {
-    const response = await fetch('/api/get-wallets');
-    if (response.ok) {
-      const data = await response.json();
-      setStoredWallets(data.wallets);
+  const fetchTokenBalances = async (publicKey: string) => {
+    const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
+    const pubKey = new PublicKey(publicKey);
+
+    try {
+      const tokenAccounts = await rateLimitedRequest(() => 
+        connection.getParsedTokenAccountsByOwner(pubKey, {
+          programId: TOKEN_PROGRAM_ID,
+        })
+      );
+
+      const balances = tokenAccounts.value.map((accountInfo) => ({
+        mint: accountInfo.account.data.parsed.info.mint,
+        balance: accountInfo.account.data.parsed.info.tokenAmount.uiAmount,
+      }));
+
+      setTokenBalances(balances);
+    } catch (error) {
+      console.error('Error fetching token balances:', error);
     }
-  }, []);
+  };
 
   useEffect(() => {
     if (session) {
-      fetchStoredWallets();
+      fetchWallets();
     }
-  }, [session, fetchStoredWallets]);
+  }, [session, fetchWallets]);
+
+  useEffect(() => {
+    if (selectedWallet) {
+      fetchTokenBalances(selectedWallet);
+    }
+  }, [selectedWallet]);
 
   const handleCreateWallet = () => {
     const newKeypair = Keypair.generate();
@@ -71,7 +79,7 @@ export default function WalletManagement() {
 
     if (response.ok) {
       alert('Wallet saved successfully!');
-      fetchStoredWallets();
+      fetchWallets();
     } else {
       const errorData = await response.json();
       alert(`Failed to save wallet: ${errorData.error}`);
@@ -91,54 +99,6 @@ export default function WalletManagement() {
       alert('Invalid seed phrase');
     }
   };
-
-  const fetchWallets = useCallback(async () => {
-    try {
-      const response = await fetch('/api/get-wallets');
-      if (response.ok) {
-        const data = await response.json();
-        setWallets(data.wallets);
-      } else {
-        console.error('Failed to fetch wallets');
-      }
-    } catch (error) {
-      console.error('Error fetching wallets:', error);
-    }
-  }, []);
-
-  const fetchTokenBalances = useCallback(async (publicKey: string) => {
-    const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
-    const pubKey = new PublicKey(publicKey);
-
-    try {
-      const tokenAccounts = await rateLimitedRequest(() => 
-        connection.getParsedTokenAccountsByOwner(pubKey, {
-          programId: TOKEN_PROGRAM_ID,
-        })
-      );
-
-      const balances = tokenAccounts.value.map((accountInfo) => ({
-        mint: accountInfo.account.data.parsed.info.mint,
-        balance: accountInfo.account.data.parsed.info.tokenAmount.uiAmount,
-      }));
-
-      setTokenBalances(balances);
-    } catch (error) {
-      console.error('Error fetching token balances:', error);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (session) {
-      fetchWallets();
-    }
-  }, [session, fetchWallets]);
-
-  useEffect(() => {
-    if (selectedWallet) {
-      fetchTokenBalances(selectedWallet);
-    }
-  }, [selectedWallet, fetchTokenBalances]);
 
   const handleRemoveWallet = async (publicKey: string) => {
     if (confirm("Are you sure you want to remove this wallet? This action is irreversible. Please ensure you have backed up your wallet before proceeding.")) {
@@ -190,14 +150,6 @@ export default function WalletManagement() {
   return (
     <div>
       <h1>Wallet Management</h1>
-      {storedWallets.length > 0 && (
-        <div>
-          <h3>Stored Wallets</h3>
-          {storedWallets.map((wallet, index) => (
-            <p key={index}>Public Key: {wallet.publicKey}</p>
-          ))}
-        </div>
-      )}
       <h3>Create or Import Wallet</h3>
       {!walletCreated && (
         <form onSubmit={handleImportWallet}>

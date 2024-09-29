@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
+import { useWallets } from '../hooks/useWallets';
 
 interface WalletImportProps {
   onWalletAdded: () => void;
 }
 
 export default function WalletImport({ onWalletAdded }: WalletImportProps) {
+  const { wallets, isLoading, error, fetchWallets } = useWallets();
   const [input, setInput] = useState('');
   const [publicKey, setPublicKey] = useState('');
   const [importType, setImportType] = useState<'seed' | 'privateKey'>('seed');
@@ -60,6 +62,7 @@ export default function WalletImport({ onWalletAdded }: WalletImportProps) {
       console.log('Wallet saved successfully:', data);
       // Refresh the wallet list
       fetchWallets();
+      onWalletAdded(); // If you want to notify the parent component
     } catch (error) {
       console.error('Error saving wallet:', error);
       // Handle the error (e.g., show an error message to the user)

@@ -1,25 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-
-interface Wallet {
-  publicKey: string;
-}
+import { useWallets } from '../hooks/useWallets';
 
 export default function WalletSelector({ channelId, refreshTrigger }: { channelId: string | null, refreshTrigger: number }) {
   const { data: session } = useSession();
-  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const { wallets, isLoading, error } = useWallets();
   const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
-  const [error, setError] = useState('');
 
   useEffect(() => {
     if (session) {
-      fetchWallets();
       const storedWallet = localStorage.getItem(`selectedWallet_${channelId}`);
       if (storedWallet) {
         setSelectedWallet(storedWallet);
       }
     }
-  }, [session, refreshTrigger, channelId]);
+  }, [session, channelId]);
 
   useEffect(() => {
     if (session && channelId && selectedWallet) {
@@ -27,24 +22,6 @@ export default function WalletSelector({ channelId, refreshTrigger }: { channelI
       connectWalletToChannel(selectedWallet, channelId);
     }
   }, [session, channelId, selectedWallet]);
-
-  const fetchWallets = async () => {
-    try {
-      const response = await fetch('/api/get-wallets');
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Fetched wallets (full object):', JSON.stringify(data.wallets, null, 2));
-        setWallets(data.wallets);
-      } else {
-        const errorData = await response.json();
-        console.error('Error fetching wallets:', errorData);
-        setError(errorData.error);
-      }
-    } catch (error) {
-      console.error('Failed to fetch wallets:', error);
-      setError('Failed to fetch wallets. Please try again.');
-    }
-  };
 
   const connectWalletToChannel = async (walletAddress: string, channelId: string) => {
     try {

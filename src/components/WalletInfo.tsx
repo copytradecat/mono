@@ -1,18 +1,14 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { getTokenBalances } from '../services/jupiter.service';
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { useWallets } from '../hooks/useWallets';
 
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 
-interface Wallet {
-  publicKey: string;
-  connectedChannels: string[];
-}
-
 export default function WalletInfo() {
   const { data: session } = useSession();
-  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const { wallets, isLoading, error } = useWallets();
   const [balances, setBalances] = useState<{ [key: string]: any }>({});
 
   const fetchBalances = useCallback(async (wallets: Wallet[]) => {
@@ -33,20 +29,11 @@ export default function WalletInfo() {
     }, {} as { [key: string]: any }));
   }, []);
 
-  const fetchWallets = useCallback(async () => {
-    const response = await fetch('/api/get-wallets');
-    if (response.ok) {
-      const data = await response.json();
-      setWallets(data.wallets);
-      fetchBalances(data.wallets);
-    }
-  }, []);
-
   useEffect(() => {
-    if (session) {
-      fetchWallets();
+    if (session && wallets.length > 0) {
+      fetchBalances(wallets);
     }
-  }, [session, fetchWallets]);
+  }, [session, wallets]);
 
   return (
     <div>
