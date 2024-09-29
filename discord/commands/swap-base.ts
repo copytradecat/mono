@@ -74,7 +74,15 @@ export async function executeSwap(userId: string, walletPublicKey: string, swapT
       serializedTransaction: swapTransaction,
     });
 
-    return { success: true, signature: response.data.signature };
+    const { signature } = response.data;
+    const confirmed = await confirmTransaction(signature);
+
+    return { 
+      success: confirmed, 
+      signature,
+      error: confirmed ? null : 'Transaction timed out',
+      transactionMessage: confirmed ? 'Transaction confirmed' : 'Transaction sent but not confirmed'
+    };
   } catch (error: any) {
     console.error('Swap execution failed:', error);
     return { 
@@ -98,4 +106,22 @@ export async function recordTrade(userId: string, walletAddress: string, signatu
 
 export function createMessageCollector(message: any, filter: any, time: number) {
   return message.createReactionCollector({ filter, time });
+}
+
+export async function confirmTransaction(signature: string, maxRetries: number = 5, retryDelay: number = 5000): Promise<boolean> {
+  const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
+  
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      await connection.confirmTransaction(signature, 'confirmed');
+      return true;
+    } catch (error) {
+      if (i === maxRetries - 1) {
+        console.error('Transaction confirmation failed:', error);
+        return false;
+      }
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
+    }
+  }
+  return false;
 }

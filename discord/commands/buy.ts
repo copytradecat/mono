@@ -248,7 +248,10 @@ async function executeSwapTransaction(
       const publicMessage = `**${interaction.user.username}** bought a **${selectionIndex}** amount of **[${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>)** at **${estimatedOutput/selectedAmount} ${outputTokenInfo.symbol}/${inputTokenInfo.symbol}**`;
       await interaction.channel?.send(publicMessage);
     } else {
-      const errorMessage = `Failed to execute buy order. Reason: ${swapResult.transactionMessage}\n\nError details: ${swapResult.error}`;
+      let errorMessage = `Failed to execute buy order. Reason: ${swapResult.transactionMessage}\n\nError details: ${swapResult.error}`;
+      if (swapResult.signature) {
+        errorMessage += `\nTransaction may still be processing. Check signature ${swapResult.signature} using the Solana Explorer or CLI tools.`;
+      }
       await interaction.editReply({
         content: errorMessage,
         components: [],
@@ -257,11 +260,6 @@ async function executeSwapTransaction(
   } catch (error: any) {
     console.error('Error executing swap:', error);
     let errorMessage = 'Failed to execute buy order. Please try again later.';
-    if (error.message.includes('TransactionExpiredTimeoutError')) {
-      const match = error.message.match(/Check signature ([a-zA-Z0-9]+)/);
-      const signature = match ? match[1] : 'unknown';
-      errorMessage = `Transaction timed out. It is unknown if it succeeded or failed. Check signature ${signature} using the Solana Explorer or CLI tools.`;
-    }
     await interaction.editReply({
       content: errorMessage,
       components: [],

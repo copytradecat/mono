@@ -79,17 +79,49 @@ app.post('/sign-and-send', async (req, res) => {
     try {
       console.log('Sending raw transaction');
       const signature = await connection.sendTransaction(transaction);
-      // console.log('Confirming transaction');
-      await connection.confirmTransaction(signature, 'confirmed');
+      console.log('Transaction sent. Signature:', signature);
 
-      console.log('Transaction confirmed. Signature:', signature);
-      res.status(200).json({ signature });
+      // Implement retry mechanism
+      const maxRetries = 5;
+      const retryDelay = 5000; // 5 seconds
+      let confirmed = false;
+
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          console.log(`Attempt ${i + 1} to confirm transaction`);
+          await connection.confirmTransaction(signature, 'confirmed');
+          confirmed = true;
+          break;
+        } catch (confirmError) {
+          if (i === maxRetries - 1) {
+            throw confirmError;
+          }
+          console.log(`Confirmation attempt ${i + 1} failed. Retrying in ${retryDelay / 1000} seconds...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+      }
+
+      if (confirmed) {
+        console.log('Transaction confirmed. Signature:', signature);
+        res.status(200).json({ signature });
+      } else {
+        console.log('Transaction not confirmed after multiple attempts');
+        res.status(202).json({ signature, message: 'Transaction sent but not confirmed. Please check the signature for status.' });
+      }
     } catch (error) {
       console.error('Error signing and sending transaction:', error);
       if (error.logs) {
         console.error('Transaction logs:', error.logs);
       }
-      res.status(500).json({ error: 'Failed to sign and send transaction', logs: error.logs });
+      if (error instanceof Error && error.message.includes('TransactionExpiredTimeoutError')) {
+        res.status(202).json({ 
+          error: 'Transaction sent but confirmation timed out', 
+          signature: error.signature, 
+          message: 'Please check the signature for status.'
+        });
+      } else {
+        res.status(500).json({ error: 'Failed to sign and send transaction', logs: error.logs });
+      }
     }
   } catch (error) {
     console.error('Error signing and sending transaction:', error);
