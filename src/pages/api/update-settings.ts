@@ -19,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     await connectDB();
     const user = await User.findOneAndUpdate(
-      { name: session.user.name },
+      { discordId: session.user.name },
       { $set: { 'settings.maxTradeAmount': maxTradeAmount } },
       { new: true }
     );

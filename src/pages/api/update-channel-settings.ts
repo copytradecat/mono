@@ -1,8 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "./auth/[...nextauth]";
-import { connectDB } from '../../lib/mongodb';
 import User from '../../models/User';
+import { connectDB } from '../../lib/mongodb';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await getServerSession(req, res, authOptions);
@@ -14,31 +14,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { publicKey } = req.body;
+  const { publicKey, channelId, settings } = req.body;
 
-  if (!publicKey) {
-    return res.status(400).json({ error: 'Missing publicKey' });
+  if (!publicKey || !channelId || !settings) {
+    return res.status(400).json({ error: 'Missing required parameters' });
   }
 
   try {
     await connectDB();
+
     const user = await User.findOneAndUpdate(
-      { discordId: session.user.name },
       { 
-        $pull: { 
-          wallets: { publicKey: publicKey }
+        discordId: session.user.name, 
+        'wallets.publicKey': publicKey,
+        'wallets.connectedChannels': channelId
+      },
+      { 
+        $set: { 
+          'wallets.$.settings': settings
         }
       },
       { new: true }
     );
 
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      throw new Error('User not found or wallet not updated');
     }
 
-    res.status(200).json({ message: 'Wallet removed successfully' });
+    res.status(200).json({ message: 'Channel settings updated successfully', user });
   } catch (error) {
-    console.error('Failed to remove wallet:', error);
-    res.status(500).json({ error: 'Failed to remove wallet' });
+    console.error('Failed to update channel settings:', error);
+    res.status(500).json({ error: 'Failed to update channel settings' });
   }
 }

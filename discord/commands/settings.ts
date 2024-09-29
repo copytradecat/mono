@@ -3,7 +3,7 @@ import User from '../../src/models/User';
 
 export async function handleSettings(message: Message) {
   try {
-    const user = await User.findOne({ name: message.author.id });
+    const user = await User.findOne({ discordId: message.author.id });
     if (!user) {
       return message.reply("You need to register first. Use `.ct register` to get started.");
     }
@@ -27,7 +27,7 @@ export async function handleSet(userId: string, args: string[] | undefined, repl
   const [setting, value] = args;
   
   try {
-    const user = await User.findOne({ name: userId });
+    const user = await User.findOne({ discordId: userId });
     if (!user) {
       return reply("You need to register first. Use `.ct register` to get started.");
     }

@@ -19,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { walletPublicKey, serializedTransaction } = req.body;
     const userId = session.user.name; // Should be the discordId
 
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    // console.log('Request body:', JSON.stringify(req.body, null, 2));
     console.log('User ID:', userId);
 
     try {

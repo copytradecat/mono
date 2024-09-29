@@ -8,7 +8,7 @@ export async function handleConnectWallet(interaction: CommandInteraction) {
   const userId = interaction.user.id;
 
   try {
-    const user = await User.findOne({ name: userId });
+    const user = await User.findOne({ discordId: userId });
     if (!user || user.wallets.length === 0) {
       return interaction.reply({
         content: "You don't have any wallets linked to your account. Please visit our web application to set up your wallets: " + process.env.NEXT_PUBLIC_WEBSITE_URL,

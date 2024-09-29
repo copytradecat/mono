@@ -7,7 +7,7 @@ dotenv.config({ path: ['../.env.local', '../.env'] });
 export async function handleRegister(userId: string, channelId: string, reply: (content: string) => Promise<void>) {
   try {
     const user = await User.findOneAndUpdate(
-      { name: userId },
+      { discordId: userId },
       { 
         $setOnInsert: { 
           name: userId,

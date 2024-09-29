@@ -7,7 +7,7 @@ dotenv.config({ path: ['../.env.local', '.env'] });
 
 export async function handleBalance(userId: string, reply: (content: string) => Promise<void>) {
   try {
-    const user = await User.findOne({ name: userId });
+    const user = await User.findOne({ discordId: userId });
     if (!user || user.wallets.length === 0) {
       return reply("You don't have any wallets linked to your account.");
     }

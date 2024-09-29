@@ -8,7 +8,7 @@ const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 
 export async function handleInfo(interaction: CommandInteraction) {
   try {
-    const user = await User.findOne({ name: interaction.user.id });
+    const user = await User.findOne({ discordId: interaction.user.id });
     
     if (!user || user.wallets.length === 0) {
       return interaction.reply("You don't have any wallets linked to your account. Please visit our web application to set up your wallets.");

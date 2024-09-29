@@ -33,7 +33,7 @@ app.post('/sign-and-send', async (req, res) => {
 
     
     // console.log('Finding user');
-    const user = await User.findOne({ name: userId });
+    const user = await User.findOne({ discordId: userId });
     // console.log('User found:', user ? 'Yes' : 'No');
     // console.log('User data:', JSON.stringify(user, null, 2));
 

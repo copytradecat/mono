@@ -19,16 +19,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    // console.log('Request body:', JSON.stringify(req.body, null, 2));
     const { publicKey, secretData, type } = req.body;
 
-    console.log('Received wallet data:', { 
-      publicKey, 
-      type, 
-      secretDataLength: secretData?.length,
-      sessionUserId: session.user?.name,
-      sessionUserEmail: session.user?.email
-    });
+    // console.log('Received wallet data:', { 
+    //   publicKey, 
+    //   type, 
+    //   secretDataLength: secretData?.length,
+    //   sessionUserId: session.user?.name,
+    //   sessionUserEmail: session.user?.email
+    // });
 
     if (!publicKey || !secretData || !type) {
       return res.status(400).json({ error: 'Missing required fields', received: { publicKey: !!publicKey, secretData: !!secretData, type: !!type } });
@@ -40,12 +40,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     await connectDB();
     const encryptedSecretData = encrypt(secretData);
-
     const normalizedPublicKey = publicKey;
 
-
     const existingUser = await User.findOne({ 
-      name: session.user.name, 
+      discordId: session.user.name, 
       'wallets.publicKey': normalizedPublicKey 
     });
 
@@ -54,7 +52,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const user = await User.findOneAndUpdate(
-      { name: session.user.name },
+      { discordId: session.user.name },
       {
         $set: {
           email: session.user.email,

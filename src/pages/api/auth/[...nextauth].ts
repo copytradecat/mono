@@ -28,11 +28,12 @@ export const authOptions = {
         const newAccountNumber = latestUser ? (latestUser.accountNumber || 0) + 1 : 1;
 
         const newUser = await User.findOneAndUpdate(
-          { name: profile.id },
+          { discordId: profile.id },
           { 
             $setOnInsert: { 
               name: profile.id,
               discordId: profile.id,
+              username: profile.username,
               email: profile.email,
               settings: { maxTradeAmount: 100 },
               referrer: referralCode,
