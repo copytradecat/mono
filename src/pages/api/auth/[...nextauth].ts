@@ -6,6 +6,7 @@ import { JWT } from 'next-auth/jwt';
 import { connectDB } from '../../../lib/mongodb';
 import User from '../../../models/User';
 import Subscription from '../../../models/Subscriptions';
+import crypto from 'crypto';
 
 dotenv.config({ path: '.env.local' });
 
@@ -20,48 +21,55 @@ export const authOptions = {
     async signIn({ user, account, profile }) {
       await connectDB();
       const referralCode = profile.referralCode || null;
-      const latestUser = await User.findOne().sort({ accountNumber: -1 });
-      const newAccountNumber = latestUser ? latestUser.accountNumber + 1 : 1;
 
-      const newUser = await User.findOneAndUpdate(
-        { name: profile.id },
-        { 
-          $setOnInsert: { 
-            name: profile.id,
-            discordId: profile.id,
-            email: profile.email,
-            settings: { maxTradeAmount: 100 },
-            accountNumber: newAccountNumber,
-            referrer: referralCode,
-          } 
-        },
-        { upsert: true, new: true }
-      );
+      try {
+        // Find the latest user to get the highest account number
+        const latestUser = await User.findOne().sort({ accountNumber: -1 });
+        const newAccountNumber = latestUser ? (latestUser.accountNumber || 0) + 1 : 1;
 
-      // Create or update subscription
-      await Subscription.findOneAndUpdate(
-        { userId: newUser._id },
-        { 
-          $setOnInsert: { 
-            level: 0,
-            status: 'inactive',
-            betaRequested: false,
+        const newUser = await User.findOneAndUpdate(
+          { name: profile.id },
+          { 
+            $setOnInsert: { 
+              name: profile.id,
+              discordId: profile.id,
+              email: profile.email,
+              settings: { maxTradeAmount: 100 },
+              referrer: referralCode,
+            },
+            $set: {
+              accountNumber: newAccountNumber, // Set the account number here
+            }
           },
-          $set: {
-            referralCode: crypto.randomBytes(6).toString('hex'),
-          }
-        },
-        { upsert: true, new: true }
-      );
-
-      if (referralCode) {
-        await User.findOneAndUpdate(
-          { referralCode },
-          { $addToSet: { referrals: newUser._id } }
+          { upsert: true, new: true }
         );
-      }
 
-      return true;
+        // Create or update subscription
+        await Subscription.findOneAndUpdate(
+          { userId: newUser.id },
+          { 
+            $setOnInsert: { 
+              level: 0,
+            },
+            $set: {
+              referralCode: crypto.randomBytes(6).toString('hex'),
+            }
+          },
+          { upsert: true, new: true }
+        );
+
+        if (referralCode) {
+          await User.findOneAndUpdate(
+            { referralCode },
+            { $addToSet: { referrals: newUser.discordId } }
+          );
+        }
+
+        return true;
+      } catch (error) {
+        console.error('Error in signIn callback:', error);
+        return false;
+      }
     },
     async jwt({ token, account, profile }) {
       if (account) {

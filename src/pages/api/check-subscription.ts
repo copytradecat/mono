@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "./auth/[...nextauth]";
 import { connectDB } from '../../lib/mongodb';
 import Subscription from '../../models/Subscriptions';
+import User from '../../models/User';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await getServerSession(req, res, authOptions);
@@ -17,18 +18,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     await connectDB();
-    const subscription = await Subscription.findOne({ userId: session.user.name });
+    const user = await User.findOne({ name: session.user.name });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const subscription = await Subscription.findOne({ userId: user.discordId });
 
     if (!subscription) {
-      return res.status(200).json({ hasAccess: false, level: 0, betaRequested: false, referralCode: null });
+      return res.status(200).json({ 
+        level: 0, 
+        referralCode: null,
+        accountNumber: user.accountNumber
+      });
     }
 
     const hasAccess = subscription.level > 0 && subscription.status === 'active';
     res.status(200).json({ 
-      hasAccess, 
       level: subscription.level, 
-      betaRequested: subscription.betaRequested,
-      referralCode: subscription.referralCode
+      referralCode: subscription.referralCode,
+      accountNumber: user.accountNumber
     });
   } catch (error) {
     console.error('Failed to check subscription:', error);

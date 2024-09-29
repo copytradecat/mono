@@ -7,10 +7,9 @@ import Link from "next/link";
 export default function Home() {
   const { data: session } = useSession();
   const [subscriptionInfo, setSubscriptionInfo] = useState<{
-    hasAccess: boolean;
     level: number;
-    betaRequested: boolean;
     referralCode: string | null;
+    accountNumber: number | null;
   } | null>(null);
 
   useEffect(() => {
@@ -33,26 +32,26 @@ export default function Home() {
       <SignInInterface />
       {session && subscriptionInfo && (
         <>
-          {subscriptionInfo.hasAccess ? (
+          {subscriptionInfo.level > 0 ? (
             <>
               <p>Welcome to CopyTradeCat! You have full access.</p>
               <Link href="/dashboard">Go to Dashboard</Link>
             </>
           ) : (
             <>
-              {subscriptionInfo.level === 0 && !subscriptionInfo.betaRequested && (
+              {subscriptionInfo.level === 0 && (
                 <BetaAccessRequest onRequestSubmitted={checkSubscription} />
               )}
-              {subscriptionInfo.level === 0 && subscriptionInfo.betaRequested && (
+              {subscriptionInfo.level === 1 && (
                 <p>Your beta access request is pending.</p>
               )}
-              {subscriptionInfo.level === 1 && (
+              {subscriptionInfo.level === 2 && (
                 <p>Welcome to the beta!</p>
               )}
             </>
           )}
           {subscriptionInfo.referralCode && (
-            <p>Your referral URL: {`${process.env.NEXT_PUBLIC_WEBSITE_URL}?ref=${subscriptionInfo.referralCode}`}</p>
+            <p>Your referral URL: {`${process.env.NEXT_PUBLIC_WEBSITE_URL}?ref=${subscriptionInfo.accountNumber}`}</p>
           )}
         </>
       )}

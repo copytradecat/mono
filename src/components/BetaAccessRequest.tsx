@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 
 interface BetaAccessRequestProps {
@@ -9,6 +9,23 @@ export default function BetaAccessRequest({ onRequestSubmitted }: BetaAccessRequ
   const { data: session } = useSession();
   const [isRequesting, setIsRequesting] = useState(false);
   const [requestStatus, setRequestStatus] = useState('');
+  const [accountNumber, setAccountNumber] = useState<number | null>(null);
+  const [betaRequested, setBetaRequested] = useState(false);
+
+  useEffect(() => {
+    if (session) {
+      fetchUserStatus();
+    }
+  }, [session]);
+
+  const fetchUserStatus = async () => {
+    const response = await fetch('/api/check-subscription');
+    if (response.ok) {
+      const data = await response.json();
+      setAccountNumber(data.accountNumber);
+      setBetaRequested(data.betaRequested);
+    }
+  };
 
   const handleRequestAccess = async () => {
     if (!session) return;
@@ -22,10 +39,14 @@ export default function BetaAccessRequest({ onRequestSubmitted }: BetaAccessRequ
       });
 
       if (response.ok) {
-        setRequestStatus('Your beta access request has been submitted.');
+        const data = await response.json();
+        setAccountNumber(data.accountNumber);
+        setBetaRequested(data.betaRequested);
+        setRequestStatus(`Your beta access request has been submitted. You are #${data.accountNumber} in line.`);
         onRequestSubmitted();
       } else {
-        setRequestStatus('Failed to submit beta access request. Please try again.');
+        const errorData = await response.json();
+        setRequestStatus(`Failed to submit beta access request: ${errorData.error}`);
       }
     } catch (error) {
       console.error('Error requesting beta access:', error);
@@ -37,7 +58,12 @@ export default function BetaAccessRequest({ onRequestSubmitted }: BetaAccessRequ
   return (
     <div>
       <h2>Request Beta Access</h2>
-      {requestStatus ? (
+      {accountNumber !== null && (
+        <p>Your account number: #{accountNumber}</p>
+      )}
+      {betaRequested ? (
+        <p>You have already requested beta access. You are #{accountNumber} in line.</p>
+      ) : requestStatus ? (
         <p>{requestStatus}</p>
       ) : (
         <button onClick={handleRequestAccess} disabled={isRequesting}>

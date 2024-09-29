@@ -85,11 +85,11 @@ export default function SignInInterface() {
     <div>
       <h2>Welcome, {session?.user?.email || 'Friend'}</h2>
       <button onClick={() => signOut()}>Sign Out</button>
-      {!connected ? (
+      {/* {!connected ? (
         <button onClick={connect}>Connect Wallet</button>
       ) : (
         <p>Wallet connected: {publicKey?.toBase58()}</p>
-      )}
+      )} */}
       {storedWallets.length > 0 && (
         <div>
           <h3>Stored Wallets</h3>

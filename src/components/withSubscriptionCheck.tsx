@@ -15,7 +15,7 @@ export function withSubscriptionCheck<P>(WrappedComponent: React.ComponentType<P
           const response = await fetch('/api/check-subscription');
           if (response.ok) {
             const data = await response.json();
-            setHasAccess(data.hasAccess);
+            setHasAccess(data.level > 0);
           } else {
             setHasAccess(false);
           }
