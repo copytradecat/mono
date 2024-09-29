@@ -12,6 +12,7 @@ import {
   executeSwap,
   recordTrade,
   swapTime,
+  executeSwapTransaction,
 } from './swap-base';
 import { getSwapTransaction, getTokenInfo } from '../../src/services/jupiter.service';
 import { defaultSettings } from '../../src/components/BotSettings';
@@ -174,7 +175,22 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                 content: 'Processing your swap...',
                 components: [],
               });
-              await executeSwapTransaction(interaction, userId, wallet, quoteData, settings, selectedAmount, outputTokenAddress, inputTokenInfo, outputTokenInfo, estimatedOutput, inputToken, entryAmounts);
+              await executeSwapTransaction(
+                interaction,
+                userId,
+                wallet,
+                quoteData,
+                settings,
+                selectedAmount,
+                inputToken,
+                outputTokenAddress,
+                inputTokenInfo,
+                outputTokenInfo,
+                estimatedOutput,
+                true, // isBuyOperation
+                ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌', 'Massive 🦍', 'MEGAMOON 🌝'],
+                entryAmounts
+              );
             }
           } else {
             await btnInteraction.reply({ content: 'You cannot use this button.', ephemeral: true });
@@ -188,7 +204,22 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
               content: 'Processing your swap...',
               components: [],
             });
-            await executeSwapTransaction(interaction, userId, wallet, quoteData, settings, selectedAmount, outputTokenAddress, inputTokenInfo, outputTokenInfo, estimatedOutput, inputToken, entryAmounts);
+            await executeSwapTransaction(
+              interaction,
+              userId,
+              wallet,
+              quoteData,
+              settings,
+              selectedAmount,
+              inputToken,
+              outputTokenAddress,
+              inputTokenInfo,
+              outputTokenInfo,
+              estimatedOutput,
+              true, // isBuyOperation
+              ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌', 'Massive 🦍', 'MEGAMOON 🌝'],
+              entryAmounts
+            );
           }
         });
 
@@ -210,58 +241,6 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
     console.error('Error in handleBuyCommand:', error);
     await interaction.editReply({
       content: 'An error occurred while processing your buy order.',
-      components: [],
-    });
-  }
-}
-
-async function executeSwapTransaction(
-  interaction: CommandInteraction,
-  userId: string,
-  wallet: any,
-  quoteData: any,
-  settings: any,
-  selectedAmount: number,
-  outputTokenAddress: string,
-  inputTokenInfo: any,
-  outputTokenInfo: any,
-  estimatedOutput: number,
-  inputToken: string,
-  entryAmounts: number[]
-) {
-  try {
-    const swapData = await getSwapTransaction(quoteData, wallet.publicKey, settings);
-    const swapResult = await executeSwap(userId, wallet.publicKey, swapData.swapTransaction);
-
-    if (swapResult.success) {
-      await recordTrade(userId, wallet.publicKey, swapResult.signature, selectedAmount, outputTokenAddress);
-
-      const selectionIndex = entryAmounts.indexOf(selectedAmount) !== -1 
-        ? ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌', 'Massive 🦍', 'MEGAMOON 🌝'][Math.floor(entryAmounts.indexOf(selectedAmount) / 2)]
-        : 'Custom';
-
-      await interaction.editReply({
-        content: `Swap Complete!\n\nBought: ${estimatedOutput} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>)\nUsing: ${selectedAmount} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputToken}>)\nTransaction ID: [${truncatedString(swapResult.signature, 4)}](<https://solscan.io/tx/${swapResult.signature}>)`,
-        components: [],
-      });
-
-      const publicMessage = `**${interaction.user.username}** bought a **${selectionIndex}** amount of **[${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>)** at **${estimatedOutput/selectedAmount} ${outputTokenInfo.symbol}/${inputTokenInfo.symbol}**`;
-      await interaction.channel?.send(publicMessage);
-    } else {
-      let errorMessage = `Failed to execute buy order. Reason: ${swapResult.transactionMessage}\n\nError details: ${swapResult.error}`;
-      if (swapResult.signature) {
-        errorMessage += `\nTransaction may still be processing. Check signature ${swapResult.signature} using the Solana Explorer or CLI tools.`;
-      }
-      await interaction.editReply({
-        content: errorMessage,
-        components: [],
-      });
-    }
-  } catch (error: any) {
-    console.error('Error executing swap:', error);
-    let errorMessage = 'Failed to execute buy order. Please try again later.';
-    await interaction.editReply({
-      content: errorMessage,
       components: [],
     });
   }

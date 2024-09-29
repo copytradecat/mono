@@ -6,6 +6,7 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import axios from 'axios';
 import { defaultSettings, Settings } from '../../src/components/BotSettings';
 import dotenv from 'dotenv';
+import { truncatedString } from '../../src/lib/utils';
 
 dotenv.config({ path: ['../../.env.local', '../../.env'] });
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -124,4 +125,74 @@ export async function confirmTransaction(signature: string, maxRetries: number =
     }
   }
   return false;
+}
+
+export async function executeSwapTransaction(
+  interaction: CommandInteraction,
+  userId: string,
+  wallet: any,
+  quoteData: any,
+  settings: any,
+  amount: number,
+  inputTokenAddress: string,
+  outputTokenAddress: string,
+  inputTokenInfo: any,
+  outputTokenInfo: any,
+  estimatedOutput: number,
+  isBuyOperation: boolean,
+  selectionIndexOptions: string[],
+  selectionPercentages: number[]
+) {
+  try {
+    const swapData = await getSwapTransaction(quoteData, wallet.publicKey, settings);
+    const swapResult = await executeSwap(userId, wallet.publicKey, swapData.swapTransaction);
+
+    if (swapResult.success) {
+      await recordTrade(userId, wallet.publicKey, swapResult.signature, amount, isBuyOperation ? outputTokenAddress : inputTokenAddress);
+
+      let selectionIndex = 'Custom';
+      if (!isBuyOperation) {
+        // For sell operations, find the matching exit percentage
+        const exitPercentage = (amount / inputTokenInfo.balance) * 100;
+        const percentageIndex = selectionPercentages.findIndex(p => Math.abs(p - exitPercentage) < 0.01);
+        if (percentageIndex !== -1) {
+          selectionIndex = selectionIndexOptions[percentageIndex];
+        }
+      } else {
+        // For buy operations, find the matching entry amount
+        const amountIndex = selectionPercentages.findIndex(p => Math.abs(p - amount) < 0.00001);
+        if (amountIndex !== -1) {
+          selectionIndex = selectionIndexOptions[amountIndex];
+        }
+      }
+
+      const swapContent = isBuyOperation
+        ? `Bought: ${estimatedOutput} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>)\nUsing: ${amount} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenAddress}>)`
+        : `Sold: ${amount} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenAddress}>)\nReceived: ${estimatedOutput} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>)`;
+
+      await interaction.editReply({
+        content: `Swap Complete!\n\n${swapContent}\nTransaction ID: [${truncatedString(swapResult.signature, 4)}](<https://solscan.io/tx/${swapResult.signature}>)`,
+        components: [],
+      });
+
+      const publicMessage = `**${interaction.user.username}** ${isBuyOperation ? 'bought' : 'sold'} a **${selectionIndex}** amount of **[${isBuyOperation ? outputTokenInfo.symbol : inputTokenInfo.symbol}](<https://solscan.io/token/${isBuyOperation ? outputTokenAddress : inputTokenAddress}>)** at **${isBuyOperation ? estimatedOutput/amount : amount/estimatedOutput} ${outputTokenInfo.symbol}/${inputTokenInfo.symbol}**`;
+      await interaction.channel?.send(publicMessage);
+    } else {
+      let errorMessage = `Failed to execute ${isBuyOperation ? 'buy' : 'sell'} order. Reason: ${swapResult.transactionMessage}\n\nError details: ${swapResult.error}`;
+      if (swapResult.signature) {
+        errorMessage += `\nTransaction may still be processing. Check signature ${swapResult.signature} using the Solana Explorer or CLI tools.`;
+      }
+      await interaction.editReply({
+        content: errorMessage,
+        components: [],
+      });
+    }
+  } catch (error: any) {
+    console.error('Error executing swap:', error);
+    let errorMessage = `Failed to execute ${isBuyOperation ? 'buy' : 'sell'} order. Please try again later.`;
+    await interaction.editReply({
+      content: errorMessage,
+      components: [],
+    });
+  }
 }

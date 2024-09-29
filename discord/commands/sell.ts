@@ -184,11 +184,13 @@ export async function handleSellCommand(interaction: CommandInteraction) {
                 settings,
                 amount,
                 inputTokenAddress,
+                outputToken,
                 inputTokenInfo,
                 outputTokenInfo,
-                tokenBalance,
                 estimatedOutput,
-                outputToken
+                false, // isBuyOperation
+                ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌'],
+                exitPercentages
               );
             }
           } else {
@@ -211,11 +213,13 @@ export async function handleSellCommand(interaction: CommandInteraction) {
               settings,
               amount,
               inputTokenAddress,
+              outputToken,
               inputTokenInfo,
               outputTokenInfo,
-              tokenBalance,
               estimatedOutput,
-              outputToken
+              false, // isBuyOperation
+              ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌'],
+              exitPercentages
             );
           }
         });
@@ -238,58 +242,6 @@ export async function handleSellCommand(interaction: CommandInteraction) {
     console.error('Error in handleSellCommand:', error);
     await interaction.editReply({
       content: 'An error occurred while processing your sell order.',
-      components: [],
-    });
-  }
-}
-
-async function executeSwapTransaction(
-  interaction: CommandInteraction,
-  userId: string,
-  wallet: any,
-  quoteData: any,
-  settings: any,
-  amount: number,
-  inputTokenAddress: string,
-  inputTokenInfo: any,
-  outputTokenInfo: any,
-  tokenBalance: number,
-  estimatedOutput: number,
-  outputToken: string
-) {
-  try {
-    const swapData = await getSwapTransaction(quoteData, wallet.publicKey, settings);
-    const swapResult = await executeSwap(userId, wallet.publicKey, swapData.swapTransaction);
-
-    if (swapResult.success) {
-      await recordTrade(userId, wallet.publicKey, swapResult.signature, amount, inputTokenAddress);
-
-      const selectionIndex = EXIT_PERCENTAGES.indexOf(amount / tokenBalance * 100) !== -1 
-        ? ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌'][Math.floor(EXIT_PERCENTAGES.indexOf(amount / tokenBalance * 100) / 2)]
-        : 'Custom';
-
-      await interaction.editReply({
-        content: `Swap Complete!\n\nSold: ${amount} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenAddress}>)\nReceived: ${estimatedOutput} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputToken}>)\nTransaction ID: [${truncatedString(swapResult.signature, 4)}](<https://solscan.io/tx/${swapResult.signature}>)`,
-        components: [],
-      });
-
-      const publicMessage = `**${interaction.user.username}** sold a **${selectionIndex}** amount of **[${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenAddress}>)** at **${amount/estimatedOutput} ${inputTokenInfo.symbol}/${outputTokenInfo.symbol}**`;
-      await interaction.channel?.send(publicMessage);
-    } else {
-      let errorMessage = `Failed to execute sell order. Reason: ${swapResult.transactionMessage}\n\nError details: ${swapResult.error}`;
-      if (swapResult.signature) {
-        errorMessage += `\nTransaction may still be processing. Check signature ${swapResult.signature} using the Solana Explorer or CLI tools.`;
-      }
-      await interaction.editReply({
-        content: errorMessage,
-        components: [],
-      });
-    }
-  } catch (error: any) {
-    console.error('Error executing swap:', error);
-    let errorMessage = 'Failed to execute sell order. Please try again later.';
-    await interaction.editReply({
-      content: errorMessage,
       components: [],
     });
   }
