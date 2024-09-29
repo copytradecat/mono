@@ -145,7 +145,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
       const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(executeButton, cancelButton);
       const fiveSecondsFromNow = Math.floor(Date.now() / 1000) + 5;
       await interaction.editReply({
-        content: `${swapPreview}\n\nSubmitting swap <t:${fiveSecondsFromNow}:R>\n\nClick 'Swap Now' to proceed immediately, or 'Cancel' within 5 seconds to abort transaction.`,
+        content: `${swapPreview}\n\nSubmitting swap in 5 seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`,
         components: [buttonRow],
       });
 
