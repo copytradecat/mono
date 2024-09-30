@@ -1,7 +1,6 @@
 import { Client, GatewayIntentBits, Partials, REST, Routes } from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
 import { handleCommand } from './commands/index.js';
-import mongoose from 'mongoose';
 import { connectDB } from '../src/lib/mongodb.js';
 import dotenv from 'dotenv';
 
