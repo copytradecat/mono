@@ -12,6 +12,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@discordjs/builders": "^1.9.0",
     "@solana/web3.js": "^1.95.3",
     "discord.js": "^14.16.2",
     "dotenv": "^16.4.5",
