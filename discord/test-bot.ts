@@ -5,7 +5,7 @@ import fs from 'fs';
 import { getQuote, getSwapTransaction, executeSwap } from '../src/services/jupiter.service';
 import { rateLimitedRequest } from '../src/services/jupiter.service';
 
-dotenv.config({ path: ['../.env.local', '../.env'] });
+dotenv.config();
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],

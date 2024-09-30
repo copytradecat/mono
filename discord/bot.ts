@@ -4,7 +4,7 @@ import { handleCommand } from './commands/index.js';
 import { connectDB } from '../src/lib/mongodb.js';
 import dotenv from 'dotenv';
 
-dotenv.config({ path: ['../.env.local', '../.env'] });
+dotenv.config();
 
 const client = new Client({
   intents: [

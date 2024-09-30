@@ -8,7 +8,7 @@ import { defaultSettings, Settings } from '../../src/components/BotSettings';
 import dotenv from 'dotenv';
 import { truncatedString } from '../../src/lib/utils';
 
-dotenv.config({ path: ['../../.env.local', '../../.env'] });
+dotenv.config();
 const API_BASE_URL = process.env.SIGNING_SERVICE_URL;
 
 export const swapTime = 5000; // 5 seconds // time to cancel the transaction
