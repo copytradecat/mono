@@ -39,7 +39,7 @@ export const authOptions = {
               referrer: referralCode,
             },
             $set: {
-              accountNumber: newAccountNumber, // Set the account number here
+              accountNumber: newAccountNumber,
             }
           },
           { upsert: true, new: true }
@@ -47,7 +47,7 @@ export const authOptions = {
 
         // Create or update subscription
         await Subscription.findOneAndUpdate(
-          { userId: newUser.id },
+          { userId: newUser._id },
           { 
             $setOnInsert: { 
               level: 0,
@@ -91,6 +91,18 @@ export const authOptions = {
     },
   },
   secret: process.env.JWT_SECRET,
+  useSecureCookies: process.env.NODE_ENV === 'production',
+  cookies: {
+    sessionToken: {
+      name: `__Secure-next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+      },
+    },
+  },
 } as NextAuthOptions;
 
 export default NextAuth(authOptions);

@@ -28,7 +28,7 @@ const UserSchema = new mongoose.Schema({
     settings: { type: SettingsSchema, default: () => ({}) },
     accountNumber: { type: Number, unique: true },
     referrer: { type: String },
-    referralCode: { type: String, unique: true },
+    referralCode: { type: String, unique: true, sparse: true },
 });
 
 export default mongoose.models.User || mongoose.model('User', UserSchema);
