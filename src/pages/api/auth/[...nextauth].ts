@@ -20,10 +20,9 @@ export const authOptions = {
   callbacks: {
     async signIn({ user, account, profile }: { user: any; account: any; profile: any }) {
       await connectDB();
-      const referralCode = (profile as any).referralCode || null;
+      const referredBy = (profile as any).referredBy || null;
 
       try {
-        // Find the latest user to get the highest account number
         const latestUser = await User.findOne().sort({ accountNumber: -1 });
         const newAccountNumber = latestUser ? (latestUser.accountNumber || 0) + 1 : 1;
 
@@ -36,7 +35,7 @@ export const authOptions = {
               username: profile.username,
               email: profile.email,
               settings: { maxTradeAmount: 100 },
-              referrer: referralCode,
+              referredBy: referredBy,
             },
             $set: {
               accountNumber: newAccountNumber,
@@ -59,9 +58,9 @@ export const authOptions = {
           { upsert: true, new: true }
         );
 
-        if (referralCode) {
+        if (referredBy) {
           await User.findOneAndUpdate(
-            { referralCode },
+            { discordId: referredBy },
             { $addToSet: { referrals: newUser.discordId } }
           );
         }
@@ -91,18 +90,6 @@ export const authOptions = {
     },
   },
   secret: process.env.JWT_SECRET,
-  useSecureCookies: process.env.NODE_ENV === 'production',
-  cookies: {
-    sessionToken: {
-      name: `__Secure-next-auth.session-token`,
-      options: {
-        httpOnly: true,
-        sameSite: 'lax',
-        path: '/',
-        secure: process.env.NODE_ENV === 'production',
-      },
-    },
-  },
 } as NextAuthOptions;
 
 export default NextAuth(authOptions);

@@ -16,6 +16,7 @@ const nextConfig = {
   env: {
     ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,
   },
+  output: 'standalone',
 };
 
 export default nextConfig;

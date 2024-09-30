@@ -11,6 +11,7 @@ export default function BetaAccessRequest({ onRequestSubmitted }: BetaAccessRequ
   const [requestStatus, setRequestStatus] = useState('');
   const [accountNumber, setAccountNumber] = useState<number | null>(null);
   const [betaRequested, setBetaRequested] = useState(false);
+  const [referralLink, setReferralLink] = useState<string | null>(null);
 
   useEffect(() => {
     if (session) {
@@ -24,6 +25,7 @@ export default function BetaAccessRequest({ onRequestSubmitted }: BetaAccessRequ
       const data = await response.json();
       setAccountNumber(data.accountNumber);
       setBetaRequested(data.betaRequested);
+      setReferralLink(data.referralLink);
     }
   };
 
@@ -58,17 +60,17 @@ export default function BetaAccessRequest({ onRequestSubmitted }: BetaAccessRequ
   return (
     <div>
       <h2>Request Beta Access</h2>
-      {accountNumber !== null && (
-        <p>Your account number: #{accountNumber}</p>
-      )}
       {betaRequested ? (
-        <p>You have already requested beta access. You are #{accountNumber} in line.</p>
+        <p>You have already requested beta access. </p>
       ) : requestStatus ? (
         <p>{requestStatus}</p>
       ) : (
         <button onClick={handleRequestAccess} disabled={isRequesting}>
           {isRequesting ? 'Requesting...' : 'Request Beta Access'}
         </button>
+      )}
+      {referralLink && (
+        <p>Your referral link: {referralLink}</p>
       )}
     </div>
   );
