@@ -8,7 +8,7 @@ import User from '../../../models/User';
 import Subscription from '../../../models/Subscriptions';
 import crypto from 'crypto';
 
-dotenv.config({ path: '.env.local' });
+dotenv.config();
 
 export const authOptions = {
   providers: [

@@ -3,7 +3,7 @@ import User from '../../src/models/User';
 import dotenv from 'dotenv';
 import { rateLimitedRequest } from '../../src/services/jupiter.service';
 
-dotenv.config({ path: ['../.env.local', '.env'] });
+dotenv.config();
 
 export async function handleBalance(userId: string, reply: (content: string) => Promise<void>) {
   try {
