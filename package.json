@@ -9,6 +9,7 @@
     "lint": "next lint",
     "ui:build": "next build",
     "ui:dev": "next dev",
+    "ui:start": "next start",
     "bot:dev": "nodemon --watch src/discord --ext ts,json --exec npx tsx src/discord/bot.ts",
     "bot:start": "npx tsx src/discord/bot.ts",
     "bot:test": "npx tsx src/discord/test-bot.ts",
