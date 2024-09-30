@@ -33,13 +33,9 @@ export async function connectToDatabase() {
   }
 
   const options: MongoClientOptions = {
+    tlsCertificateKeyFile: MONGODB_CREDENTIALS,
     serverApi: ServerApiVersion.v1,
-    ssl: true,
   };
-
-  if (MONGODB_CREDENTIALS) {
-    options.ca = Buffer.from(MONGODB_CREDENTIALS, 'base64');
-  }
 
   const client = await MongoClient.connect(MONGODB_URL as string, options);
   const db = await client.db();

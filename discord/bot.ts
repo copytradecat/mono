@@ -5,15 +5,7 @@ import { connectDB } from '../src/lib/mongodb.js';
 import dotenv from 'dotenv';
 import path from 'path';
 
-dotenv.config({ path: [path.resolve(__dirname, '/.env'), 
-                      path.resolve(__dirname, '../.env'), 
-                      path.resolve(__dirname, '../../.env'), 
-                      '../.env', 
-                      '.env', 
-                      '/secrets/env', 
-                      '../secrets/env', 
-                      path.resolve(__dirname, '../etc/secrets/.env'), 
-                      path.resolve(__dirname, '/etc/secrets/.env')] });
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const client = new Client({
   intents: [
