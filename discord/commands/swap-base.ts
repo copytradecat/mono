@@ -9,7 +9,7 @@ import dotenv from 'dotenv';
 import { truncatedString } from '../../src/lib/utils';
 
 dotenv.config({ path: ['../../.env.local', '../../.env'] });
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+const API_BASE_URL = process.env.SIGNING_SERVICE_URL;
 
 export const swapTime = 5000; // 5 seconds // time to cancel the transaction
 
