@@ -9,9 +9,10 @@
     "lint": "next lint",
     "ui:build": "next build",
     "ui:dev": "next dev",
-    "bot:dev": "nodemon --watch src/discord --ext ts,json --exec npx tsx src/discord/bot.ts",
-    "bot:start": "npx tsx src/discord/bot.ts",
-    "bot:test": "npx tsx src/discord/test-bot.ts",
+    "ui:start": "next start",
+    "bot:dev": "nodemon --watch discord --ext ts,json --exec npx tsx discord/bot.ts",
+    "bot:start": "npx tsx discord/bot.ts",
+    "bot:test": "npx tsx discord/test-bot.ts",
     "server:dev": "nodemon --watch signing-service --ext ts,json --exec npx tsx signing-service/server.ts",
     "server:start": "npx tsx signing-service/server.ts"
   },
