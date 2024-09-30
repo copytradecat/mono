@@ -3,6 +3,8 @@ import { SlashCommandBuilder } from "@discordjs/builders";
 import { handleCommand } from './commands/index.js';
 import { connectDB } from '../src/lib/mongodb.js';
 import dotenv from 'dotenv';
+import http from 'http';
+import https from 'https';
 import path from 'path';
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
@@ -59,6 +61,40 @@ const commands = [
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN!);
 
+const PORT = process.env.PORT || 3000;
+
+// Create HTTP server
+const server = http.createServer((req, res) => {
+  if (req.url === '/ping') {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('pong');
+  } else {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Discord bot is running!');
+  }
+});
+
+// Function to ping the server
+function pingServer() {
+  const options = {
+    hostname: process.env.RENDER_EXTERNAL_HOSTNAME,
+    port: 443,
+    path: '/ping',
+    method: 'GET',
+  };
+
+  const req = https.request(options, (res) => {
+    console.log(`Self-ping status: ${res.statusCode}`);
+  });
+
+  req.on('error', (error) => {
+    console.error('Error pinging self:', error);
+  });
+
+  req.end();
+}
+
+// Start the bot and server
 async function startBot() {
   try {
     await connectDB();
@@ -72,6 +108,13 @@ async function startBot() {
       { body: commands },
     );
     console.log('Successfully registered application commands.');
+
+    // Start the HTTP server
+    server.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+      // Start the self-pinging mechanism
+      setInterval(pingServer, 14 * 60 * 1000); // Ping every 14 minutes
+    });
   } catch (error) {
     console.error('Error starting the bot:', error);
     process.exit(1);
