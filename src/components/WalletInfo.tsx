@@ -33,7 +33,7 @@ export default function WalletInfo() {
     if (session && wallets.length > 0) {
       fetchBalances(wallets);
     }
-  }, [session, wallets]);
+  }, [session, wallets, fetchBalances]);
 
   return (
     <div>
