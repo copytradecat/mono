@@ -10,7 +10,7 @@ export default function BetaAccessRequest({ onRequestSubmitted }: BetaAccessRequ
   const [isRequesting, setIsRequesting] = useState(false);
   const [requestStatus, setRequestStatus] = useState('');
   const [accountNumber, setAccountNumber] = useState<number | null>(null);
-  const [betaRequested, setBetaRequested] = useState(false);
+  const [subLevel, setSubLevel] = useState<number | null>(null);
   const [referralLink, setReferralLink] = useState<string | null>(null);
 
   useEffect(() => {
@@ -24,7 +24,7 @@ export default function BetaAccessRequest({ onRequestSubmitted }: BetaAccessRequ
     if (response.ok) {
       const data = await response.json();
       setAccountNumber(data.accountNumber);
-      setBetaRequested(data.betaRequested);
+      setSubLevel(data.level);
       setReferralLink(data.referralLink);
     }
   };
@@ -43,7 +43,7 @@ export default function BetaAccessRequest({ onRequestSubmitted }: BetaAccessRequ
       if (response.ok) {
         const data = await response.json();
         setAccountNumber(data.accountNumber);
-        setBetaRequested(data.betaRequested);
+        setSubLevel(data.level);
         setRequestStatus(`Your beta access request has been submitted. You are #${data.accountNumber} in line.`);
         onRequestSubmitted();
       } else {
@@ -60,7 +60,7 @@ export default function BetaAccessRequest({ onRequestSubmitted }: BetaAccessRequ
   return (
     <div>
       <h2>Request Beta Access</h2>
-      {betaRequested ? (
+      {subLevel && subLevel > 0 ? (
         <p>You have already requested beta access. </p>
       ) : requestStatus ? (
         <p>{requestStatus}</p>
