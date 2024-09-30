@@ -16,11 +16,11 @@ if (!(global as any).mongoose) {
   (global as any).mongoose = { conn: null, promise: null };
 }
 
-dotenv.config({ path: ['.env.local', '.env'] });
+dotenv.config();
 const MONGODB_URL = process.env.MONGODB_URL;
 const MONGODB_CREDENTIALS = process.env.MONGODB_CREDENTIALS;
 if (!MONGODB_URL) {
-  throw new Error('Please define the MONGODB_UR environment variable in .env.local');
+  throw new Error('Please define the MONGODB_URL environment variable in .env.local');
 }
 
 let cachedClient: MongoClient | null = null;

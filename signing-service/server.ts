@@ -7,7 +7,7 @@ import dotenv from 'dotenv';
 import bs58 from 'bs58';
 import Limiter from 'limiter';
 
-dotenv.config({ path: ['.env.local', '.env'] });
+dotenv.config();
 
 const app = express();
 app.use(express.json());
