@@ -15,7 +15,7 @@ export async function handleFollow(userId: string, args: string[], reply: (conte
     }
     
     await Follow.create({
-      followerId: user._id,
+      followerId: user.discordId,
       traderAddress: traderAddress
     });
     
@@ -39,7 +39,7 @@ export async function handleUnfollow(userId: string, args: string[], reply: (con
       return reply("You need to register first. Use `.ct register` to get started.");
     }
     
-    const result = await Follow.deleteOne({ followerId: user._id, traderAddress: traderAddress });
+    const result = await Follow.deleteOne({ followerId: user.discordId, traderAddress: traderAddress });
     
     if (result.deletedCount > 0) {
       reply(`You have unfollowed trader with address: ${traderAddress}`);
@@ -59,7 +59,7 @@ export async function handleList(userId: string, reply: (content: string) => Pro
       return reply("You need to register first. Use `.ct register` to get started.");
     }
     
-    const follows = await Follow.find({ followerId: user._id });
+    const follows = await Follow.find({ followerId: user.discordId });
     
     if (follows.length === 0) {
       return reply("You are not following any traders.");

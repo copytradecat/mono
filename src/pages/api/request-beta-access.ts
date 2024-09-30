@@ -17,21 +17,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     await connectDB();
-    const user = await User.findOne({ name: session.user?.name });
+    const user = await User.findOne({ discordId: session.user?.name });
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     const subscription = await Subscription.findOneAndUpdate(
-      { userId: user.discordId },
-      { $set: { betaRequested: true } },
+      { discordId: user.discordId },
+      { $set: { level: 1 } },
       { new: true, upsert: true }
     );
 
     res.status(200).json({ 
       message: 'Beta access requested successfully',
       accountNumber: user.accountNumber,
-      betaRequested: subscription.betaRequested
+      level: subscription.level
     });
   } catch (error) {
     console.error('Failed to request beta access:', error);

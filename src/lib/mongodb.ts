@@ -16,7 +16,7 @@ if (!(global as any).mongoose) {
   (global as any).mongoose = { conn: null, promise: null };
 }
 
-dotenv.config();
+dotenv.config({ path: '.env.local' });
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {

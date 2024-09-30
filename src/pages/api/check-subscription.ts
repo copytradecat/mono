@@ -23,14 +23,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const subscription = await Subscription.findOne({ userId: user._id });
+    const subscription = await Subscription.findOne({ userId: user.discordId });
 
     if (!subscription) {
       return res.status(200).json({ 
         level: 0, 
         referralCode: null,
         accountNumber: user.accountNumber,
-        referredBy: user.referredBy
       });
     }
 
@@ -39,7 +38,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       level: subscription.level, 
       referralCode: subscription.referralCode,
       accountNumber: user.accountNumber,
-      referredBy: user.referredBy
     });
   } catch (error) {
     console.error('Failed to check subscription:', error);

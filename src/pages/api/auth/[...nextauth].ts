@@ -20,7 +20,7 @@ export const authOptions = {
   callbacks: {
     async signIn({ user, account, profile }: { user: any; account: any; profile: any }) {
       await connectDB();
-      const referredBy = (profile as any).referredBy || null;
+      const referrerCode = (profile as any).referrerCode || null;
 
       try {
         const latestUser = await User.findOne().sort({ accountNumber: -1 });
@@ -35,9 +35,6 @@ export const authOptions = {
               username: profile.username,
               email: profile.email,
               settings: { maxTradeAmount: 100 },
-              referredBy: referredBy,
-            },
-            $set: {
               accountNumber: newAccountNumber,
             }
           },
@@ -46,23 +43,24 @@ export const authOptions = {
 
         // Create or update subscription
         await Subscription.findOneAndUpdate(
-          { userId: newUser._id },
+          { discordId: newUser.discordId },
           { 
             $setOnInsert: { 
               level: 0,
-            },
-            $set: {
               referralCode: crypto.randomBytes(6).toString('hex'),
             }
           },
           { upsert: true, new: true }
         );
 
-        if (referredBy) {
-          await User.findOneAndUpdate(
-            { discordId: referredBy },
-            { $addToSet: { referrals: newUser.discordId } }
-          );
+        if (referrerCode) {
+          const referrer = await User.findOne({ 'subscription.referralCode': referrerCode });
+          if (referrer) {
+            await User.findOneAndUpdate(
+              { discordId: referrer.discordId },
+              { $addToSet: { referrals: newUser.discordId } }
+            );
+          }
         }
 
         return true;
@@ -83,6 +81,7 @@ export const authOptions = {
         session.user = {
           ...session.user,
           name: token.discordId as string,
+          discordId: token.discordId as string,
           email: token.email || session.user.email,
         } as Session['user'];
       }
