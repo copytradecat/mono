@@ -20,8 +20,6 @@ if (!(global as any).mongoose) {
 dotenv.config();
 const MONGODB_URL = process.env.MONGODB_URL;
 const MONGODB_CREDENTIALS = process.env.MONGODB_CREDENTIALS;
-console.log(MONGODB_CREDENTIALS);
-console.log(MONGODB_URL);
 if (!MONGODB_URL) {
   throw new Error('Please define the MONGODB_URL environment variable in .env.local');
 }
@@ -33,19 +31,25 @@ export async function connectToDatabase() {
   if (cachedClient && cachedDb) {
     return { client: cachedClient, db: cachedDb };
   }
-
+  if (!MONGODB_URL) {
+    throw new Error('MONGODB_URL is not defined');
+  }
   const options: MongoClientOptions = {
-    tlsCertificateKeyFile: MONGODB_CREDENTIALS!,
     serverApi: ServerApiVersion.v1,
   };
+  if (MONGODB_CREDENTIALS) {
+    options.tlsCertificateKeyFile = MONGODB_CREDENTIALS;
+  }
+  const client = new MongoClient(MONGODB_URL, options);
 
-  const client = await MongoClient.connect(MONGODB_URL as string, options);
-  const db = await client.db();
-
-  cachedClient = client;
-  cachedDb = db;
-
-  return { client, db };
+  try {
+    await client.connect();
+    const db = client.db();
+    return { client, db };
+  } catch (error) {
+    console.error('Failed to connect to MongoDB:', error);
+    throw error;
+  }
 }
 
 export async function connectDB() {
