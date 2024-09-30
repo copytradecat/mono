@@ -1,6 +1,7 @@
 import { useSession } from "next-auth/react";
 import SignInInterface from "../components/SignInInterface";
 import BetaAccessRequest from "../components/BetaAccessRequest";
+import BotInstructions from "./bot-instructions";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
@@ -32,7 +33,7 @@ export default function Home() {
       <SignInInterface />
       {session && subscriptionInfo && (
         <>
-          {subscriptionInfo.level > 0 ? (
+          {subscriptionInfo.level > 3 ? (
             <>
               <p>Welcome to CopyTradeCat! You have full access.</p>
               <Link href="/dashboard">Go to Dashboard</Link>
@@ -46,7 +47,10 @@ export default function Home() {
                 <p>Your beta access request is pending.</p>
               )}
               {subscriptionInfo.level === 2 && (
-                <p>Welcome to the beta!</p>
+                <>
+                  <p>Welcome to the beta!</p>
+                  <BotInstructions />
+                </>
               )}
             </>
           )}
