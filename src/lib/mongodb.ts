@@ -30,12 +30,12 @@ export async function connectToDatabase() {
   if (cachedClient && cachedDb) {
     return { client: cachedClient, db: cachedDb };
   }
+  if (!MONGODB_URI) {
+    throw new Error('MONGODB_URI is not defined');
+  }
 
   try {
-    const client = await MongoClient.connect(MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+    const client = await MongoClient.connect(MONGODB_URI);
     const db = client.db();
 
     cachedClient = client;
