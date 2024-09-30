@@ -53,7 +53,7 @@ export async function connectDB() {
       bufferCommands: false,
     };
     (global as any).mongoose = (global as any).mongoose || { conn: null, promise: null };
-    (global as any).mongoose.promise = mongoose.connect(MONGODB_UR as string, opts) as unknown;
+    (global as any).mongoose.promise = mongoose.connect(MONGODB_URL as string, opts) as unknown;
   }
   (global as any).mongoose.conn = await (global as any).mongoose.promise;
   return (global as any).mongoose.conn;
