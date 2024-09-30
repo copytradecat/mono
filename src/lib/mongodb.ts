@@ -1,7 +1,7 @@
 /* eslint-disable no-use-before-define */
 
 import dotenv from 'dotenv';
-import { MongoClient } from 'mongodb';
+import { MongoClient, ServerApiVersion } from 'mongodb';
 import mongoose from 'mongoose';
 
 // Declare a new interface for the global scope
@@ -17,10 +17,10 @@ if (!(global as any).mongoose) {
 }
 
 dotenv.config({ path: ['.env.local', '.env'] });
-const MONGODB_URI = process.env.MONGODB_URI;
-
-if (!MONGODB_URI) {
-  throw new Error('Please define the MONGODB_URI environment variable in .env.local');
+const MONGODB_URL = process.env.MONGODB_URL;
+const MONGODB_CREDENTIALS = process.env.MONGODB_CREDENTIALS;
+if (!MONGODB_URL) {
+  throw new Error('Please define the MONGODB_UR environment variable in .env.local');
 }
 
 let cachedClient: MongoClient | null = null;
@@ -31,7 +31,10 @@ export async function connectToDatabase() {
     return { client: cachedClient, db: cachedDb };
   }
 
-  const client = await MongoClient.connect(MONGODB_URI as string);
+  const client = await MongoClient.connect(MONGODB_URL as string, {
+    tlsCertificateKeyFile: MONGODB_CREDENTIALS,
+    serverApi: ServerApiVersion.v1,
+  });
   const db = await client.db();
 
   cachedClient = client;
@@ -50,7 +53,7 @@ export async function connectDB() {
       bufferCommands: false,
     };
     (global as any).mongoose = (global as any).mongoose || { conn: null, promise: null };
-    (global as any).mongoose.promise = mongoose.connect(MONGODB_URI as string, opts) as unknown;
+    (global as any).mongoose.promise = mongoose.connect(MONGODB_UR as string, opts) as unknown;
   }
   (global as any).mongoose.conn = await (global as any).mongoose.promise;
   return (global as any).mongoose.conn;
