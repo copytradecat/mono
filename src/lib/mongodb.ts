@@ -1,8 +1,9 @@
 /* eslint-disable no-use-before-define */
 
 import dotenv from 'dotenv';
-import { MongoClient, ServerApiVersion } from 'mongodb';
+import { MongoClient, ServerApiVersion, MongoClientOptions } from 'mongodb';
 import mongoose from 'mongoose';
+import fs from 'fs';
 
 // Declare a new interface for the global scope
 declare global {
@@ -31,10 +32,19 @@ export async function connectToDatabase() {
     return { client: cachedClient, db: cachedDb };
   }
 
-  const client = await MongoClient.connect(MONGODB_URL as string, {
-    tlsCertificateKeyFile: MONGODB_CREDENTIALS,
+  const options: MongoClientOptions = {
     serverApi: ServerApiVersion.v1,
-  });
+  };
+
+  if (MONGODB_CREDENTIALS) {
+    if (fs.existsSync(MONGODB_CREDENTIALS)) {
+      options.tlsCertificateKeyFile = MONGODB_CREDENTIALS;
+    } else {
+      options.tlsCertificateKeyFile = Buffer.from(MONGODB_CREDENTIALS, 'base64');
+    }
+  }
+
+  const client = await MongoClient.connect(MONGODB_URL as string, options);
   const db = await client.db();
 
   cachedClient = client;
