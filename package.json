@@ -10,6 +10,7 @@
     "ui:build": "next build",
     "ui:dev": "next dev",
     "ui:start": "next start",
+    "ui:render": "concurrently \"next start\" \"NODE_ENV=production node server.js\"",
     "bot:dev": "nodemon --watch discord --ext ts,json --exec npx tsx discord/bot.ts",
     "bot:start": "npx tsx discord/bot.ts",
     "bot:test": "npx tsx discord/test-bot.ts",
