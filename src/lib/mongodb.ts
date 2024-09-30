@@ -20,7 +20,7 @@ dotenv.config();
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {
-  throw new Error('Please define the MONGODB_URI environment variable in .env.local');
+  throw new Error('Please define the MONGODB_URI environment variable');
 }
 
 let cachedClient: MongoClient | null = null;
@@ -31,13 +31,22 @@ export async function connectToDatabase() {
     return { client: cachedClient, db: cachedDb };
   }
 
-  const client = await MongoClient.connect(MONGODB_URI as string);
-  const db = await client.db();
+  try {
+    const client = await MongoClient.connect(MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    const db = client.db();
 
-  cachedClient = client;
-  cachedDb = db;
+    cachedClient = client;
+    cachedDb = db;
 
-  return { client, db };
+    console.log('Connected to MongoDB successfully');
+    return { client, db };
+  } catch (error) {
+    console.error('Failed to connect to MongoDB:', error);
+    throw error;
+  }
 }
 
 export async function connectDB() {
