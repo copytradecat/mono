@@ -18,10 +18,12 @@ if (!(global as any).mongoose) {
 }
 
 dotenv.config();
+const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_URL = process.env.MONGODB_URL;
 const MONGODB_CREDENTIALS = process.env.MONGODB_CREDENTIALS;
-if (!MONGODB_URL) {
-  throw new Error('Please define the MONGODB_URL environment variable in .env.local');
+
+if (!MONGODB_URI && !MONGODB_URL) {
+  throw new Error('Please define either MONGODB_URI or MONGODB_URL environment variable');
 }
 
 let cachedClient: MongoClient | null = null;
@@ -31,27 +33,48 @@ export async function connectToDatabase() {
   if (cachedClient && cachedDb) {
     return { client: cachedClient, db: cachedDb };
   }
-  if (!MONGODB_URL) {
-    throw new Error('MONGODB_URL is not defined');
-  }
-  const options: MongoClientOptions = {
-    serverApi: ServerApiVersion.v1,
-  };
-  if (MONGODB_CREDENTIALS) {
-    options.tlsCertificateKeyFile = MONGODB_CREDENTIALS;
-  }
-  const client = new MongoClient(MONGODB_URL, options);
 
-  try {
-    await client.connect();
-    const db = client.db();
-    cachedClient = client;
-    cachedDb = db;
-    return { client, db };
-  } catch (error) {
-    console.error('Failed to connect to MongoDB:', error);
-    throw error;
+  let client: MongoClient;
+
+  // First, try to connect with the certificate if MONGODB_URL and MONGODB_CREDENTIALS are provided
+  if (MONGODB_URL && MONGODB_CREDENTIALS) {
+    try {
+      const options: MongoClientOptions = {
+        serverApi: ServerApiVersion.v1,
+      };
+
+      if (fs.existsSync(MONGODB_CREDENTIALS)) {
+        options.tlsCertificateKeyFile = MONGODB_CREDENTIALS;
+      } else {
+        options.tlsCertificateKeyFile = Buffer.from(MONGODB_CREDENTIALS, 'base64');
+      }
+
+      client = await MongoClient.connect(MONGODB_URL, options);
+      console.log('Connected to MongoDB using certificate authentication');
+    } catch (error) {
+      console.error('Failed to connect with certificate, falling back to URI connection:', error);
+      // If certificate connection fails, fall back to URI connection
+      if (!MONGODB_URI) {
+        throw new Error('MONGODB_URI is not defined for fallback connection');
+      }
+      client = await MongoClient.connect(MONGODB_URI);
+      console.log('Connected to MongoDB using URI');
+    }
+  } else {
+    // If MONGODB_URL or MONGODB_CREDENTIALS are not provided, use MONGODB_URI
+    if (!MONGODB_URI) {
+      throw new Error('MONGODB_URI is not defined');
+    }
+    client = await MongoClient.connect(MONGODB_URI);
+    console.log('Connected to MongoDB using URI');
   }
+
+  const db = client.db();
+
+  cachedClient = client;
+  cachedDb = db;
+
+  return { client, db };
 }
 
 export async function connectDB() {
