@@ -37,11 +37,8 @@ export async function connectToDatabase() {
   };
 
   if (MONGODB_CREDENTIALS) {
-    if (fs.existsSync(MONGODB_CREDENTIALS)) {
-      options.tlsCertificateKeyFile = MONGODB_CREDENTIALS;
-    } else {
-      options.tlsCertificateKeyFile = Buffer.from(MONGODB_CREDENTIALS, 'base64');
-    }
+    options.tls = true;
+    options.tlsCertificateKeyFile = Buffer.from(MONGODB_CREDENTIALS, 'base64').toString('utf-8');
   }
 
   const client = await MongoClient.connect(MONGODB_URL as string, options);
