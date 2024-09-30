@@ -20,6 +20,8 @@ if (!(global as any).mongoose) {
 dotenv.config();
 const MONGODB_URL = process.env.MONGODB_URL;
 const MONGODB_CREDENTIALS = process.env.MONGODB_CREDENTIALS;
+console.log(MONGODB_CREDENTIALS);
+console.log(MONGODB_URL);
 if (!MONGODB_URL) {
   throw new Error('Please define the MONGODB_URL environment variable in .env.local');
 }
@@ -33,7 +35,7 @@ export async function connectToDatabase() {
   }
 
   const options: MongoClientOptions = {
-    tlsCertificateKeyFile: MONGODB_CREDENTIALS,
+    tlsCertificateKeyFile: MONGODB_CREDENTIALS!,
     serverApi: ServerApiVersion.v1,
   };
 
