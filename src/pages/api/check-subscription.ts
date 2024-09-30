@@ -23,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const subscription = await Subscription.findOne({ userId: user.discordId });
+    const subscription = await Subscription.findOne({ discordId: user.discordId });
 
     if (!subscription) {
       return res.status(200).json({ 
