@@ -61,17 +61,6 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
 
   return (
     <div className="bg-white shadow rounded-lg p-6">
-      <h2 className="text-2xl font-bold mb-4">Wallet Manager</h2>
-      <div className="mb-6">
-        <h3 className="text-xl font-semibold mb-2">Aggregate Balance</h3>
-        {aggregateBalance.error ? (
-          <p className="text-red-500">{aggregateBalance.error}</p>
-        ) : (
-          Object.entries(aggregateBalance).map(([token, balance]) => (
-            <p key={token} className="mb-1">{token}: {balance}</p>
-          ))
-        )}
-      </div>
       {selectedWallet && (
         <div>
           <h3 className="text-xl font-semibold mb-2">Balances for {selectedWallet}</h3>
@@ -85,6 +74,15 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
               </p>
             ))
           )}
+          <div className="mb-6">
+            {aggregateBalance.error ? (
+              <p className="text-red-500">{aggregateBalance.error}</p>
+            ) : (
+              Object.entries(aggregateBalance).map(([token, balance]) => (
+                <p key={token} className="mb-1">{token}: {balance}</p>
+              ))
+            )}
+          </div>
           <h3 className="text-xl font-semibold mt-4 mb-2">Connected Channels</h3>
           {(wallets.find(w => w.publicKey === selectedWallet)?.connectedChannels || []).map((channel, index) => (
             <p key={index} className="mb-1">{channel}</p>
