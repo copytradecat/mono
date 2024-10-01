@@ -10,7 +10,7 @@ export default function BetaAccessRequest({ onRequestSubmitted }: BetaAccessRequ
   const [isRequesting, setIsRequesting] = useState(false);
   const [requestStatus, setRequestStatus] = useState('');
   const [accountNumber, setAccountNumber] = useState<number | null>(null);
-  const [betaRequested, setBetaRequested] = useState(false);
+  const [subLevel, setSubLevel] = useState<number | null>(null);
 
   useEffect(() => {
     if (session) {
@@ -23,7 +23,7 @@ export default function BetaAccessRequest({ onRequestSubmitted }: BetaAccessRequ
     if (response.ok) {
       const data = await response.json();
       setAccountNumber(data.accountNumber);
-      setBetaRequested(data.betaRequested);
+      setSubLevel(data.level);
     }
   };
 
@@ -35,13 +35,13 @@ export default function BetaAccessRequest({ onRequestSubmitted }: BetaAccessRequ
       const response = await fetch('/api/request-beta-access', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: session.user?.name }),
+        body: JSON.stringify({ discordId: session.user?.name }),
       });
 
       if (response.ok) {
         const data = await response.json();
         setAccountNumber(data.accountNumber);
-        setBetaRequested(data.betaRequested);
+        setSubLevel(data.level);
         setRequestStatus(`Your beta access request has been submitted. You are #${data.accountNumber} in line.`);
         onRequestSubmitted();
       } else {
@@ -58,11 +58,8 @@ export default function BetaAccessRequest({ onRequestSubmitted }: BetaAccessRequ
   return (
     <div>
       <h2>Request Beta Access</h2>
-      {accountNumber !== null && (
-        <p>Your account number: #{accountNumber}</p>
-      )}
-      {betaRequested ? (
-        <p>You have already requested beta access. You are #{accountNumber} in line.</p>
+      {subLevel === 1 && !requestStatus ? (
+        <p>You have already requested beta access. </p>
       ) : requestStatus ? (
         <p>{requestStatus}</p>
       ) : (

@@ -14,7 +14,7 @@ const API_BASE_URL = process.env.SIGNING_SERVICE_URL;
 export const swapTime = 5000; // 5 seconds // time to cancel the transaction
 
 export async function getUser(userId: string) {
-  const user = await UserAccount.findOne({ name: userId });
+  const user = await UserAccount.findOne({ discordId: userId });
   if (!user || user.wallets.length === 0) {
     throw new Error('You need to set up your wallet first.');
   }

@@ -27,8 +27,7 @@ const UserSchema = new mongoose.Schema({
     wallets: [WalletSchema],
     settings: { type: SettingsSchema, default: () => ({}) },
     accountNumber: { type: Number, unique: true },
-    referrer: { type: String },
-    referralCode: { type: String, unique: true },
+    referrals: [{ type: String }], // Array of discordIds
 });
 
 export default mongoose.models.User || mongoose.model('User', UserSchema);

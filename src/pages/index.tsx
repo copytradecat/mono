@@ -1,7 +1,7 @@
 import { useSession } from "next-auth/react";
 import SignInInterface from "../components/SignInInterface";
 import BetaAccessRequest from "../components/BetaAccessRequest";
-import BotInstructions from "./bot-instructions";
+import BotInstructions from "../components/BotInstructions";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
@@ -9,7 +9,6 @@ export default function Home() {
   const { data: session } = useSession();
   const [subscriptionInfo, setSubscriptionInfo] = useState<{
     level: number;
-    referralCode: string | null;
     accountNumber: number | null;
   } | null>(null);
 
@@ -26,6 +25,10 @@ export default function Home() {
       setSubscriptionInfo(data);
     }
   };
+
+  const referralLink = subscriptionInfo?.accountNumber
+    ? `${process.env.NEXT_PUBLIC_WEBSITE_URL}?r=${subscriptionInfo.accountNumber}`
+    : null;
 
   return (
     <div>
@@ -54,8 +57,8 @@ export default function Home() {
               )}
             </>
           )}
-          {subscriptionInfo.referralCode && (
-            <p>Your referral URL: {`${process.env.NEXT_PUBLIC_WEBSITE_URL}?ref=${subscriptionInfo.accountNumber}`}</p>
+          {referralLink && (
+            <p>Your referral link: {referralLink}</p>
           )}
         </>
       )}
