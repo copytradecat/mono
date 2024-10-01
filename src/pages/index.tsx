@@ -18,13 +18,13 @@ export default function Home() {
       checkSubscription();
     }
     const urlParams = new URLSearchParams(window.location.search);
-    const referralCode = urlParams.get('r');
-    if (referralCode) {
+    const referrerId = urlParams.get('r');
+    if (referrerId) {
       // Store the referral code in localStorage
-      localStorage.setItem('referralCode', referralCode);
+      localStorage.setItem('referrerId', referrerId);
 
       // Optionally, store it in a cookie if you prefer
-      // setCookie(null, 'referralCode', referralCode, { path: '/' });
+      // setCookie(null, 'referrerId', referrerId, { path: '/' });
     }
   }, [session]);
 
@@ -47,11 +47,11 @@ export default function Home() {
   }, [status]);
 
   const handleReferral = async () => {
-    const referralCode = localStorage.getItem('referralCode');
+    const referrerId = localStorage.getItem('referrerId');
 
-    if (referralCode) {
+    if (referrerId) {
       try {
-        const response = await axios.post('/api/process-referral', { referralCode });
+        const response = await axios.post('/api/process-referral', { referrerId });
         if (response.status === 200) {
           console.log('Referral processed successfully');
         }
@@ -62,7 +62,7 @@ export default function Home() {
           console.error('Failed to process referral:', error);
         }
       } finally {
-        localStorage.removeItem('referralCode');
+        localStorage.removeItem('referrerId');
       }
     }
   };

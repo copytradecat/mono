@@ -28,20 +28,26 @@ export const authOptions: NextAuthOptions = {
           ? (latestUser.accountNumber || 0) + 1
           : 1;
 
-        const newUser = await User.findOneAndUpdate(
-          { discordId: discordProfile.id },
-          {
-            $setOnInsert: {
-              name: discordProfile.id,
-              discordId: discordProfile.id,
-              username: discordProfile.username,
-              email: discordProfile.email,
-              settings: { maxTradeAmount: 100 },
-              accountNumber: newAccountNumber,
-            },
-          },
-          { upsert: true, new: true }
-        );
+        // Check if the user already exists
+        let existingUser = await User.findOne({ discordId: discordProfile.id });
+
+        if (existingUser) {
+          // User exists, update only if necessary
+          if (!existingUser.accountNumber) {
+            existingUser.accountNumber = newAccountNumber;
+            await existingUser.save();
+          }
+        } else {
+          // Create new user
+          existingUser = await User.create({
+            name: discordProfile.id,
+            discordId: discordProfile.id,
+            username: discordProfile.username,
+            email: discordProfile.email,
+            settings: { maxTradeAmount: 100 },
+            accountNumber: newAccountNumber,
+          });
+        }
 
         if (discordProfile.id) {
           await Subscription.findOneAndUpdate(

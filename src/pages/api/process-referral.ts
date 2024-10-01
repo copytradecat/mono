@@ -14,9 +14,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { referralCode } = req.body;
+  const { referrerId } = req.body;
   
-  if (!referralCode) {
+  if (!referrerId) {
     return res.status(400).json({ error: 'Referral code is required' });
   }
 
@@ -36,7 +36,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Check if the referral code is valid
-    const referrer = await UserModel.findOne({ accountNumber: parseInt(referralCode, 10) });
+    const referrer = await UserModel.findOne({ accountNumber: parseInt(referrerId, 10) });
     if (!referrer) {
       return res.status(404).json({ error: 'Invalid referral code' });
     }
