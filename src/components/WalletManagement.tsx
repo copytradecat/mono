@@ -168,29 +168,6 @@ export default function WalletManagement() {
           <button onClick={handleSaveWallet}>Save Wallet</button>
         </div>
       )}
-      <select onChange={(e) => setSelectedWallet(e.target.value)}>
-        <option value="">Select a wallet</option>
-        {wallets.map((wallet, index) => (
-          <option key={index} value={wallet.publicKey}>
-            {wallet.publicKey ? `${wallet.publicKey.slice(0, 10)}...${wallet.publicKey.slice(-10)}` : `Wallet ${index + 1}: No public key`}
-          </option>
-        ))}
-      </select>
-
-      {selectedWallet && (
-        <div>
-          <h2>Selected Wallet: {selectedWallet}</h2>
-          <h3>Token Balances:</h3>
-          <ul>
-            {tokenBalances.map((token, index) => (
-              <li key={index}>
-                {token.mint}: {token.balance}
-              </li>
-            ))}
-          </ul>
-          <button onClick={() => handleRemoveWallet(selectedWallet)}>Remove Wallet</button>
-        </div>
-      )}
 
       <h3>Available Wallets:</h3>
       {wallets.map((wallet, index) => (

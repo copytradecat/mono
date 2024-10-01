@@ -43,13 +43,16 @@ export const authOptions: NextAuthOptions = {
           { upsert: true, new: true }
         );
 
-        await Subscription.findOneAndUpdate(
-          { discordId: discordProfile.id },
-          {
-            $setOnInsert: { level: 0 },
-          },
-          { upsert: true, new: true }
-        );
+        if (discordProfile.id) {
+          await Subscription.deleteMany({ discordId: null });
+          await Subscription.findOneAndUpdate(
+            { discordId: discordProfile.id },
+            {
+              $setOnInsert: { level: 0 },
+            },
+            { upsert: true, new: true }
+          );
+        }
 
         return true;
       } catch (error) {
