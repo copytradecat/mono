@@ -37,7 +37,7 @@ export default function BetaAccessRequest({ onRequestSubmitted }: BetaAccessRequ
       const response = await fetch('/api/request-beta-access', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: session.user?.name }),
+        body: JSON.stringify({ discordId: session.user?.name }),
       });
 
       if (response.ok) {
@@ -60,7 +60,7 @@ export default function BetaAccessRequest({ onRequestSubmitted }: BetaAccessRequ
   return (
     <div>
       <h2>Request Beta Access</h2>
-      {subLevel && subLevel > 0 ? (
+      { subLevel == 1 && !requestStatus ? (
         <p>You have already requested beta access. </p>
       ) : requestStatus ? (
         <p>{requestStatus}</p>
