@@ -1,5 +1,5 @@
-import { CommandInteraction, MessageReaction, User, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ComponentType, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { getQuote, getSwapTransaction, getTokenInfo } from '../../src/services/jupiter.service';
+import { CommandInteraction } from 'discord.js';
+import { getQuote, getSwapTransaction, getTokenInfo, getTokenBalance } from '../../src/services/jupiter.service';
 import UserAccount from '../../src/models/User';
 import Trade from '../../src/models/Trade';
 import { Connection, PublicKey } from '@solana/web3.js';
@@ -10,6 +10,7 @@ import { truncatedString } from '../../src/lib/utils';
 
 dotenv.config({ path: ['../../.env.local', '../../.env'] });
 const API_BASE_URL = process.env.SIGNING_SERVICE_URL;
+const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 
 export const swapTime = 5000; // 5 seconds // time to cancel the transaction
 
@@ -22,7 +23,6 @@ export async function getUser(userId: string) {
 }
 
 export async function getBalance(publicKey: string) {
-  const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
   const balanceLamports = await connection.getBalance(new PublicKey(publicKey));
   return balanceLamports;
 }
@@ -43,14 +43,13 @@ export async function createSwapPreview(
   );
   const inputTokenInfo = await getTokenInfo(inputToken);
   const outputTokenInfo = await getTokenInfo(outputToken);
-  console.log("quoteData", quoteData);
 
   const estimatedOutput = quoteData.outAmount / 10 ** outputTokenInfo.decimals;
 
   const swapPreview = `Swap Preview:
-From: ${(amount / 10 ** inputTokenInfo.decimals)} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenInfo.address}>)
+From: ${amount / 10 ** inputTokenInfo.decimals} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenInfo.address}>)
 To: ${estimatedOutput} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenInfo.address}>)
-Price Impact: ${(quoteData.priceImpactPct * 100)}%
+Price Impact: ${quoteData.priceImpactPct * 100}%
 Slippage: ${
     settings.slippageType === 'fixed' ? `${settings.slippage / 100}%` : 'Dynamic'
   }
@@ -67,6 +66,128 @@ Wrap/Unwrap SOL: ${settings.wrapUnwrapSOL ? 'Enabled' : 'Disabled'}`;
   };
 }
 
+export async function executeSwapForUser(params: {
+  interaction: CommandInteraction;
+  user: any;
+  wallet: any;
+  selectedAmount: number;
+  settings: any;
+  outputTokenAddress: string;
+  inputTokenAddress: string;
+  isBuyOperation: boolean;
+  inputTokenInfo: any;
+  outputTokenInfo: any;
+  estimatedOutput: number;
+  initiatingUser: any;
+  quoteData: any;
+}) {
+  const {
+    interaction,
+    user,
+    wallet,
+    selectedAmount,
+    settings,
+    outputTokenAddress,
+    inputTokenAddress,
+    isBuyOperation,
+    inputTokenInfo,
+    outputTokenInfo,
+    estimatedOutput,
+    initiatingUser,
+    quoteData,
+  } = params;
+
+  try {
+    const swapData = await getSwapTransaction(
+      quoteData,
+      wallet.publicKey,
+      settings
+    );
+
+    const swapResult = await executeSwap(user.discordId, wallet.publicKey, swapData.swapTransaction);
+
+    // Fetch token balances after the trade
+    const { balance: inputBalanceAfter } = await getTokenBalance(wallet.publicKey, inputTokenAddress);
+    const { balance: outputBalanceAfter } = await getTokenBalance(wallet.publicKey, outputTokenAddress);
+
+    if (swapResult.success) {
+      await recordTrade(
+        user.discordId,
+        wallet.publicKey,
+        swapResult.signature,
+        selectedAmount,
+        isBuyOperation ? outputTokenAddress : inputTokenAddress
+      );
+
+      // Prepare the swap content message
+      const swapContent = isBuyOperation
+        ? `Bought: ${(estimatedOutput).toFixed(6)} ${outputTokenInfo.symbol} using ${(selectedAmount / 10 ** inputTokenInfo.decimals).toFixed(6)} ${inputTokenInfo.symbol}\n`
+        : `Sold: ${(selectedAmount / 10 ** inputTokenInfo.decimals).toFixed(6)} ${inputTokenInfo.symbol} received ${(estimatedOutput).toFixed(6)} ${outputTokenInfo.symbol}\n`;
+
+      const balanceContent = `New Balances:\n- ${inputTokenInfo.symbol}: ${inputBalanceAfter.toFixed(6)}\n- ${outputTokenInfo.symbol}: ${outputBalanceAfter.toFixed(6)}`;
+
+      // Send a direct message to the user about their trade
+      try {
+        const userDiscord = await interaction.client.users.fetch(user.discordId);
+        await userDiscord.send({
+          content: `Your swap is complete!\n\n${swapContent}${balanceContent}\nTransaction ID: [${swapResult.signature}](<https://solscan.io/tx/${swapResult.signature}>)`,
+        });
+      } catch (dmError) {
+        console.error('Failed to send DM to user:', dmError);
+      }
+
+      // If the user is the initiating user, edit the original interaction
+      if (user.discordId === initiatingUser.discordId) {
+        await interaction.editReply({
+          content: 'Your trade has been executed.',
+          components: [],
+        });
+      }
+    } else {
+      // Fetch token balances before the trade (assuming they haven't changed)
+      const { balance: inputBalanceBefore } = await getTokenBalance(wallet.publicKey, inputTokenAddress);
+      const { balance: outputBalanceBefore } = await getTokenBalance(wallet.publicKey, outputTokenAddress);
+
+      const balanceContent = `Current Balances:\n- ${inputTokenInfo.symbol}: ${inputBalanceBefore.toFixed(6)}\n- ${outputTokenInfo.symbol}: ${outputBalanceBefore.toFixed(6)}`;
+
+      let errorMessage = `Failed to execute trade for wallet ${wallet.publicKey}.\nReason: ${swapResult.transactionMessage}\nError Details: ${swapResult.error}\n\n${balanceContent}`;
+      if (swapResult.signature) {
+        errorMessage += `\nTransaction may still be processing. Check signature [${swapResult.signature}](<https://solscan.io/tx/${swapResult.signature}>).`;
+      }
+      // Send error message to the user via DM
+      try {
+        const userDiscord = await interaction.client.users.fetch(user.discordId);
+        await userDiscord.send({
+          content: errorMessage,
+        });
+      } catch (dmError) {
+        console.error('Failed to send DM to user:', dmError);
+      }
+    }
+
+    return swapResult;
+  } catch (error: any) {
+    console.error('Error executing swap:', error);
+    // Fetch token balances before the trade (assuming they haven't changed)
+    const { balance: inputBalance } = await getTokenBalance(wallet.publicKey, inputTokenAddress);
+    const { balance: outputBalance } = await getTokenBalance(wallet.publicKey, outputTokenAddress);
+
+    const balanceContent = `Current Balances:\n- ${inputTokenInfo.symbol}: ${inputBalance.toFixed(6)}\n- ${outputTokenInfo.symbol}: ${outputBalance.toFixed(6)}`;
+
+    let errorMessage = `Failed to execute trade for wallet ${wallet.publicKey}. Please try again later.\n\n${balanceContent}`;
+    // Send error message to the user via DM
+    try {
+      const userDiscord = await interaction.client.users.fetch(user.discordId);
+      await userDiscord.send({
+        content: errorMessage,
+      });
+    } catch (dmError) {
+      console.error('Failed to send DM to user:', dmError);
+    }
+    return { success: false, error: error.message };
+  }
+}
+
 export async function executeSwap(userId: string, walletPublicKey: string, swapTransaction: string) {
   try {
     const response = await axios.post(`${API_BASE_URL}/sign-and-send`, {
@@ -78,24 +199,32 @@ export async function executeSwap(userId: string, walletPublicKey: string, swapT
     const { signature } = response.data;
     const confirmed = await confirmTransaction(signature);
 
-    return { 
-      success: confirmed, 
+    return {
+      success: confirmed,
       signature,
       error: confirmed ? null : 'Transaction timed out',
-      transactionMessage: confirmed ? 'Transaction confirmed' : 'Transaction sent but not confirmed'
+      transactionMessage: confirmed
+        ? 'Transaction confirmed'
+        : 'Transaction sent but not confirmed',
     };
   } catch (error: any) {
     console.error('Swap execution failed:', error);
-    return { 
-      success: false, 
+    return {
+      success: false,
       error: error.response?.data?.error || error.message || 'Unknown error',
       transactionMessage: error.response?.data?.transactionMessage || 'No additional information',
-      signature: error.response?.data?.signature || 'No signature'
+      signature: error.response?.data?.signature || 'No signature',
     };
   }
 }
 
-export async function recordTrade(userId: string, walletAddress: string, signature: string, amount: number, token: string) {
+export async function recordTrade(
+  userId: string,
+  walletAddress: string,
+  signature: string,
+  amount: number,
+  token: string
+) {
   await Trade.create({
     userId,
     walletAddress,
@@ -105,13 +234,11 @@ export async function recordTrade(userId: string, walletAddress: string, signatu
   });
 }
 
-export function createMessageCollector(message: any, filter: any, time: number) {
-  return message.createReactionCollector({ filter, time });
-}
-
-export async function confirmTransaction(signature: string, maxRetries: number = 5, retryDelay: number = 5000): Promise<boolean> {
-  const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
-  
+export async function confirmTransaction(
+  signature: string,
+  maxRetries: number = 5,
+  retryDelay: number = 5000
+): Promise<boolean> {
   for (let i = 0; i < maxRetries; i++) {
     try {
       await connection.confirmTransaction(signature, 'confirmed');
@@ -121,76 +248,8 @@ export async function confirmTransaction(signature: string, maxRetries: number =
         console.error('Transaction confirmation failed:', error);
         return false;
       }
-      await new Promise(resolve => setTimeout(resolve, retryDelay));
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
     }
   }
   return false;
-}
-
-export async function executeSwapTransaction(
-  interaction: CommandInteraction,
-  userId: string,
-  wallet: any,
-  quoteData: any,
-  settings: any,
-  amount: number,
-  inputTokenAddress: string,
-  outputTokenAddress: string,
-  inputTokenInfo: any,
-  outputTokenInfo: any,
-  estimatedOutput: number,
-  isBuyOperation: boolean,
-  selectionIndexOptions: string[],
-  selectionPercentages: number[]
-) {
-  try {
-    const swapData = await getSwapTransaction(quoteData, wallet.publicKey, settings);
-    const swapResult = await executeSwap(userId, wallet.publicKey, swapData.swapTransaction);
-
-    if (swapResult.success) {
-      await recordTrade(userId, wallet.publicKey, swapResult.signature, amount, isBuyOperation ? outputTokenAddress : inputTokenAddress);
-
-      let selectionIndex = 'Custom';
-      if (!isBuyOperation) {
-        const exitPercentage = (amount / inputTokenInfo.balance) * 100;
-        const percentageIndex = selectionPercentages.findIndex(p => Math.abs(p - exitPercentage) < 0.01);
-        if (percentageIndex !== -1) {
-          selectionIndex = selectionIndexOptions[percentageIndex];
-        }
-      } else {
-        const amountIndex = selectionPercentages.findIndex(p => Math.abs(p - amount) < 0.00001);
-        if (amountIndex !== -1) {
-          selectionIndex = selectionIndexOptions[amountIndex];
-        }
-      }
-
-      const swapContent = isBuyOperation
-        ? `Bought: ${estimatedOutput} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>)\nUsing: ${amount} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenAddress}>)`
-        : `Sold: ${amount} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenAddress}>)\nReceived: ${estimatedOutput} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>)`;
-
-      await interaction.editReply({
-        content: `Swap Complete!\n\n${swapContent}\nTransaction ID: [${truncatedString(swapResult.signature, 4)}](<https://solscan.io/tx/${swapResult.signature}>)`,
-        components: [],
-      });
-
-      const publicMessage = `**${interaction.user.username}** ${isBuyOperation ? 'bought' : 'sold'} a **${selectionIndex}** amount of **[${isBuyOperation ? outputTokenInfo.symbol : inputTokenInfo.symbol}](<https://solscan.io/token/${isBuyOperation ? outputTokenAddress : inputTokenAddress}>)** at **${isBuyOperation ? estimatedOutput/amount : amount/estimatedOutput} ${outputTokenInfo.symbol}/${inputTokenInfo.symbol}**`;
-      await interaction.channel?.send(publicMessage);
-    } else {
-      let errorMessage = `Failed to execute ${isBuyOperation ? 'buy' : 'sell'} order. Reason: ${swapResult.transactionMessage}\n\nError details: ${swapResult.error}`;
-      if (swapResult.signature) {
-        errorMessage += `\nTransaction may still be processing. Check signature ${swapResult.signature} using the Solana Explorer or CLI tools.`;
-      }
-      await interaction.editReply({
-        content: errorMessage,
-        components: [],
-      });
-    }
-  } catch (error: any) {
-    console.error('Error executing swap:', error);
-    let errorMessage = `Failed to execute ${isBuyOperation ? 'buy' : 'sell'} order. Please try again later.`;
-    await interaction.editReply({
-      content: errorMessage,
-      components: [],
-    });
-  }
 }
