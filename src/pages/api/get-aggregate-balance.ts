@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "./auth/authOptions";
+import { authOptions } from "../../lib/authOptions";
 import User from '../../models/User';
 import { connectDB } from '../../lib/mongodb';
 import { getAggregateBalance } from '../../services/jupiter.service';

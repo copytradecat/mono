@@ -5,7 +5,7 @@ import User from '../../models/User';
 import { decrypt } from '../../lib/encryption';
 import { Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { authOptions } from './auth/authOptions';
+import { authOptions } from '../../lib/authOptions';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await getServerSession(req, res, authOptions);
