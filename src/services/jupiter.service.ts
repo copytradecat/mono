@@ -87,7 +87,6 @@ export async function getTokenInfo(tokenAddress: string) {
 export async function getTokenBalances(publicKey: string) {
   try {
     const pubKey = new PublicKey(publicKey);
-    const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 
     // Fetch SOL balance
     const solBalance = await rateLimitedRequest(() => connection.getBalance(pubKey));
@@ -243,12 +242,14 @@ export async function getTokenBalance(walletAddress: string, tokenAddress: strin
   );
 
   if (tokenAccounts.value.length === 0) {
-    return { balance: 0, decimals: 0 };
+    // No token accounts found
+    const decimals = (await getTokenInfo(tokenAddress)).decimals;
+    return { balance: 0, decimals };
   }
 
-  const tokenAccount = tokenAccounts.value[0].account.data.parsed.info;
-  const balance = parseFloat(tokenAccount.tokenAmount.uiAmount);
-  const decimals = tokenAccount.tokenAmount.decimals;
+  const tokenAmount = tokenAccounts.value[0].account.data.parsed.info.tokenAmount;
+  const balance = parseFloat(tokenAmount.amount) / Math.pow(10, tokenAmount.decimals);
+  const decimals = tokenAmount.decimals;
 
   return { balance, decimals };
 }

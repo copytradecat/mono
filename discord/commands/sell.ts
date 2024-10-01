@@ -10,7 +10,7 @@ import {
   createSwapPreview,
   executeSwapForUser,
 } from './swap-base';
-import { getQuote, getTokenInfo, getTokenBalance } from '../../src/services/jupiter.service';
+import { getTokenInfo, getTokenBalance } from '../../src/services/jupiter.service';
 import { defaultSettings } from '../../src/components/BotSettings';
 import { getConnectedWalletsInChannel, mapSelectionToUserSettings } from './utils';
 
@@ -85,87 +85,160 @@ export async function handleSellCommand(interaction: CommandInteraction) {
         selectedPercentage = parseFloat(btnInteraction.customId.replace('percentage_', ''));
         collector.stop();
 
-        await btnInteraction.update({
-          content: `You have chosen to sell **${selectedPercentage}%** of your **${inputTokenInfo.symbol}** balance.`,
-          components: [],
+        // Map initiating user's selected percentage to their settings index
+        const selectionIndex = initiatingExitPercentages.indexOf(selectedPercentage);
+
+        // Calculate amount based on initiating user's wallet balance
+        const { balance: initiatingBalance } = await getTokenBalance(initiatingWallet.publicKey, inputTokenAddress);
+        const amountToSell = (initiatingBalance * selectedPercentage) / 100;
+        const adjustedAmount = Math.floor(amountToSell * 10 ** inputTokenInfo.decimals);
+
+        // Create swap preview
+        const { quoteData, swapPreview, estimatedOutput } = await createSwapPreview(
+          adjustedAmount,
+          inputTokenAddress,
+          outputToken,
+          initiatingSettings
+        );
+
+        // Prepare swap summary with "Swap Now" and "Cancel" buttons
+        const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId('swap_now')
+            .setLabel('Swap Now')
+            .setStyle(ButtonStyle.Primary),
+          new ButtonBuilder()
+            .setCustomId('cancel_swap')
+            .setLabel('Cancel')
+            .setStyle(ButtonStyle.Danger)
+        );
+
+        await interaction.editReply({
+          content: `Swap Summary:\n${swapPreview}\n\nYou have 5 seconds to cancel or confirm the swap.`,
+          components: [actionRow],
         });
 
-        // Proceed to execute swaps for all connected wallets
-        for (const walletInfo of connectedWallets) {
-          const { user, wallet } = walletInfo;
-          const settings = user.settings || defaultSettings;
-          const userExitPercentages = settings.exitPercentages || defaultSettings.exitPercentages;
+        const swapFilter = (i: any) =>
+          i.user.id === initiatingUserId &&
+          (i.customId === 'swap_now' || i.customId === 'cancel_swap');
 
-          // Map initiating user's selected percentage to this user's settings
-          const mappedPercentage = mapSelectionToUserSettings(
-            initiatingExitPercentages,
-            userExitPercentages,
-            initiatingExitPercentages.indexOf(selectedPercentage)
-          );
+        const swapCollector = interaction.channel?.createMessageComponentCollector({
+          filter: swapFilter,
+          componentType: ComponentType.Button,
+          time: 5000,
+        });
 
-          // Fetch token balance
-          const { balance: tokenBalance } = await getTokenBalance(wallet.publicKey, inputTokenAddress);
-          const decimals = inputTokenInfo.decimals;
+        swapCollector?.on('collect', async (i) => {
+          if (i.customId === 'swap_now') {
+            swapCollector.stop();
 
-          // Log values for debugging
-          console.log(`walletAddress, tokenAddress: ${wallet.publicKey}, ${inputTokenAddress}`);
-          console.log(`balance, decimals: ${tokenBalance}, ${decimals}`);
+            await i.update({
+              content: `Executing swap...`,
+              components: [],
+            });
 
-          // Check for valid values
-          if (typeof tokenBalance !== 'number' || isNaN(tokenBalance)) {
-            // throw new Error(`Invalid token balance for wallet ${wallet.publicKey}`);
-            console.log(`Invalid token balance for wallet ${wallet.publicKey}`);
-            continue;
+            // Proceed to execute swaps for all connected wallets
+            const tradeResults = [];
+
+            for (const walletInfo of connectedWallets) {
+              const { user, wallet } = walletInfo;
+              const settings = user.settings || defaultSettings;
+              const userExitPercentages = settings.exitPercentages || defaultSettings.exitPercentages;
+
+              // Map initiating user's selected percentage to this user's settings
+              const mappedPercentage = mapSelectionToUserSettings(
+                initiatingExitPercentages,
+                userExitPercentages,
+                selectionIndex
+              );
+
+              // Fetch token balance
+              const { balance: tokenBalance } = await getTokenBalance(wallet.publicKey, inputTokenAddress);
+              const decimals = inputTokenInfo.decimals;
+
+              if (typeof tokenBalance !== 'number' || isNaN(tokenBalance) || tokenBalance <= 0) {
+                console.log(`Invalid token balance for wallet ${wallet.publicKey}`);
+                continue;
+              }
+
+              // Calculate amount to sell
+              const amount = tokenBalance * (mappedPercentage / 100);
+              const userAdjustedAmount = Math.floor(amount * Math.pow(10, decimals));
+
+              // Ensure adjustedAmount is valid
+              if (!Number.isFinite(userAdjustedAmount) || userAdjustedAmount <= 0) {
+                console.log(`Calculated adjusted amount is invalid for wallet ${wallet.publicKey}: ${userAdjustedAmount}`);
+                continue;
+              }
+
+              // Create swap preview
+              const { quoteData: userQuoteData, estimatedOutput: userEstimatedOutput } = await createSwapPreview(
+                userAdjustedAmount,
+                inputTokenAddress,
+                outputToken,
+                settings
+              );
+
+              // Execute the swap for this user's wallet
+              const swapResult = await executeSwapForUser({
+                interaction,
+                user,
+                wallet,
+                selectedAmount: userAdjustedAmount,
+                settings,
+                outputTokenAddress: outputToken,
+                inputTokenAddress: inputTokenAddress,
+                isBuyOperation: false,
+                inputTokenInfo,
+                outputTokenInfo,
+                estimatedOutput: userEstimatedOutput,
+                initiatingUser,
+                quoteData: userQuoteData,
+              });
+
+              tradeResults.push({
+                user,
+                swapResult,
+                mappedPercentage,
+                estimatedOutput: userEstimatedOutput,
+                inputTokenInfo,
+                outputTokenInfo,
+              });
+            }
+
+            // Prepare public message
+            const publicMessages = tradeResults.map((result) => {
+              const { user, swapResult, mappedPercentage, estimatedOutput, inputTokenInfo, outputTokenInfo } = result;
+              const rate = (estimatedOutput) / ((mappedPercentage / 100) * tokenBalance);
+
+              if (swapResult.success) {
+                return `${user.username || user.discordId} sold ${(mappedPercentage).toFixed(2)}% of their ${inputTokenInfo.symbol} for ${estimatedOutput.toFixed(outputTokenInfo.decimals)} ${outputTokenInfo.symbol} at rate ${rate.toFixed(6)}.`;
+              } else {
+                return `${user.username || user.discordId} attempted to sell but the transaction failed.`;
+              }
+            });
+
+            // Send public messages to the channel
+            await interaction.channel?.send(`**${initiatingUser.username || initiatingUser.discordId}** executed a sell order:\n` + publicMessages.join('\n'));
+
+          } else if (i.customId === 'cancel_swap') {
+            swapCollector.stop();
+            await i.update({
+              content: 'Transaction cancelled.',
+              components: [],
+            });
           }
-          if (typeof mappedPercentage !== 'number' || isNaN(mappedPercentage)) {
-            console.log(`Invalid mapped percentage for user ${user.discordId}`);
-            continue;
-            // throw new Error(`Invalid mapped percentage for user ${user.discordId}`);
-          }
-          if (typeof decimals !== 'number' || isNaN(decimals)) {
-            console.log(`Invalid decimals for token ${inputTokenAddress}`);
-            continue;
-            // throw new Error(`Invalid decimals for token ${inputTokenAddress}`);
-          }
+        });
 
-          // Calculate amount to sell
-          const amount = tokenBalance * (mappedPercentage / 100);
-          const adjustedAmount = Math.floor(amount * Math.pow(10, decimals));
-
-          // Ensure adjustedAmount is valid
-          if (!Number.isFinite(adjustedAmount) || adjustedAmount <= 0) {
-            throw new Error(`Calculated adjusted amount is invalid: ${adjustedAmount}`);
+        swapCollector?.on('end', async (_, reason) => {
+          if (reason === 'time') {
+            await interaction.editReply({
+              content: 'Transaction timed out.',
+              components: [],
+            });
           }
-          // Ensure adjustedAmount is an integer
-          if (!Number.isInteger(adjustedAmount)) {
-            throw new Error(`Adjusted amount must be an integer. Received: ${adjustedAmount}`);
-          }
+        });
 
-          // Create swap preview
-          const { quoteData, swapPreview, estimatedOutput } = await createSwapPreview(
-            adjustedAmount,
-            inputTokenAddress,
-            outputToken,
-            settings
-          );
-
-          // Execute the swap for this user's wallet
-          await executeSwapForUser({
-            interaction,
-            user,
-            wallet,
-            selectedAmount: adjustedAmount,
-            settings,
-            outputTokenAddress: outputToken,
-            inputTokenAddress: inputTokenAddress,
-            isBuyOperation: false,
-            inputTokenInfo,
-            outputTokenInfo,
-            estimatedOutput,
-            initiatingUser,
-            quoteData,
-          });
-        }
       } else if (btnInteraction.customId === 'cancel') {
         collector.stop();
         await btnInteraction.update({

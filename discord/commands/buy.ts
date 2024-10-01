@@ -12,7 +12,7 @@ import {
 } from './swap-base';
 import { getTokenInfo, getTokenBalance } from '../../src/services/jupiter.service';
 import { defaultSettings } from '../../src/components/BotSettings';
-import { getConnectedWalletsInChannel, mapSelectionToUserSettings } from './utils';
+import { getConnectedWalletsInChannel, mapSelectionToUserSettings } from './utils';L
 
 export async function handleBuyCommand(interaction: CommandInteraction) {
   const outputTokenAddress = interaction.options.getString('token', true);
@@ -85,78 +85,140 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
         selectedAmount = parseFloat(btnInteraction.customId.replace('amount_', ''));
         collector.stop();
 
-        await btnInteraction.update({
-          content: `You have chosen to buy **${selectedAmount} SOL** worth of **${outputTokenInfo.symbol}**.`,
-          components: [],
+        // Map initiating user's selected amount to their settings index
+        const selectionIndex = initiatingEntryAmounts.indexOf(selectedAmount);
+        const amountLabel = selectionIndex !== -1 ? `Level ${selectionIndex + 1}` : 'Custom amount';
+
+        // Create swap preview
+        const adjustedAmount = Math.floor(selectedAmount * 10 ** inputTokenInfo.decimals);
+
+        const { quoteData, swapPreview, estimatedOutput } = await createSwapPreview(
+          adjustedAmount,
+          inputToken,
+          outputTokenAddress,
+          initiatingSettings
+        );
+
+        // Prepare swap summary with "Swap Now" and "Cancel" buttons
+        const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId('swap_now')
+            .setLabel('Swap Now')
+            .setStyle(ButtonStyle.Primary),
+          new ButtonBuilder()
+            .setCustomId('cancel_swap')
+            .setLabel('Cancel')
+            .setStyle(ButtonStyle.Danger)
+        );
+
+        await interaction.editReply({
+          content: `Swap Summary:\n${swapPreview}\n\nYou have 5 seconds to cancel or confirm the swap.`,
+          components: [actionRow],
         });
 
-        const tradeResults = [];
+        const swapFilter = (i: any) =>
+          i.user.id === initiatingUserId &&
+          (i.customId === 'swap_now' || i.customId === 'cancel_swap');
 
-        // Proceed to execute swaps for all connected wallets
-        for (const walletInfo of connectedWallets) {
-          const { user, wallet } = walletInfo;
-          const settings = user.settings || defaultSettings;
-          const userEntryAmounts = settings.entryAmounts || [0.05, 0.1, 0.25, 0.5, 1];
+        const swapCollector = interaction.channel?.createMessageComponentCollector({
+          filter: swapFilter,
+          componentType: ComponentType.Button,
+          time: 5000,
+        });
 
-          // Map initiating user's selected amount to this user's settings
-          const mappedAmount = mapSelectionToUserSettings(
-            initiatingEntryAmounts,
-            userEntryAmounts,
-            initiatingEntryAmounts.indexOf(selectedAmount)
-          );
+        swapCollector?.on('collect', async (i) => {
+          if (i.customId === 'swap_now') {
+            swapCollector.stop();
 
-          const adjustedAmount = Math.floor(mappedAmount * 10 ** inputTokenInfo.decimals);
+            await i.update({
+              content: `Executing swap...`,
+              components: [],
+            });
 
-          // Create swap preview
-          const { quoteData, swapPreview, estimatedOutput } = await createSwapPreview(
-            adjustedAmount,
-            inputToken,
-            outputTokenAddress,
-            settings
-          );
+            // Proceed to execute swaps for all connected wallets
+            const tradeResults = [];
 
-          // Execute the swap for this user's wallet
-          const swapResult = await executeSwapForUser({
-            interaction,
-            user,
-            wallet,
-            selectedAmount: adjustedAmount,
-            settings,
-            outputTokenAddress,
-            inputTokenAddress: inputToken,
-            isBuyOperation: true,
-            inputTokenInfo,
-            outputTokenInfo,
-            estimatedOutput,
-            initiatingUser,
-            quoteData,
-          });
+            for (const walletInfo of connectedWallets) {
+              const { user, wallet } = walletInfo;
+              const settings = user.settings || defaultSettings;
+              const userEntryAmounts = settings.entryAmounts || [0.05, 0.1, 0.25, 0.5, 1];
 
-          tradeResults.push({
-            user,
-            swapResult,
-            mappedAmount,
-            estimatedOutput,
-            inputTokenInfo,
-            outputTokenInfo,
-          });
-        }
+              // Map initiating user's selected amount to this user's settings
+              const mappedAmount = mapSelectionToUserSettings(
+                initiatingEntryAmounts,
+                userEntryAmounts,
+                selectionIndex
+              );
 
-        // Prepare public message
-        const publicMessages = tradeResults.map((result) => {
-          const { user, swapResult, mappedAmount, estimatedOutput, inputTokenInfo, outputTokenInfo } = result;
-          const rate = (mappedAmount / 10 ** inputTokenInfo.decimals) / estimatedOutput;
-          const selectionIndex = user.settings.entryAmounts.indexOf(mappedAmount / 10 ** inputTokenInfo.decimals);
+              const userAdjustedAmount = Math.floor(mappedAmount * 10 ** inputTokenInfo.decimals);
 
-          if (swapResult.success) {
-            return `${user.username || user.discordId} bought a ${selectionIndex !== -1 ? `Level ${selectionIndex + 1}` : 'Custom amount'} of ${outputTokenInfo.symbol} at rate ${rate.toFixed(6)}.`;
-          } else {
-            return `${user.username || user.discordId} attempted to buy but the transaction failed.`;
+              // Create swap preview for this user
+              const { quoteData: userQuoteData, estimatedOutput: userEstimatedOutput } = await createSwapPreview(
+                userAdjustedAmount,
+                inputToken,
+                outputTokenAddress,
+                settings
+              );
+
+              // Execute the swap for this user's wallet
+              const swapResult = await executeSwapForUser({
+                interaction,
+                user,
+                wallet,
+                selectedAmount: userAdjustedAmount,
+                settings,
+                outputTokenAddress,
+                inputTokenAddress: inputToken,
+                isBuyOperation: true,
+                inputTokenInfo,
+                outputTokenInfo,
+                estimatedOutput: userEstimatedOutput,
+                initiatingUser,
+                quoteData: userQuoteData,
+              });
+
+              tradeResults.push({
+                user,
+                swapResult,
+                mappedAmount,
+                estimatedOutput: userEstimatedOutput,
+                inputTokenInfo,
+                outputTokenInfo,
+              });
+            }
+
+            // Prepare public message
+            const publicMessages = tradeResults.map((result) => {
+              const { user, swapResult, mappedAmount, estimatedOutput, inputTokenInfo, outputTokenInfo } = result;
+              const rate = (mappedAmount / 10 ** inputTokenInfo.decimals) / estimatedOutput;
+
+              if (swapResult.success) {
+                return `${user.username || user.discordId} bought ${estimatedOutput.toFixed(6)} ${outputTokenInfo.symbol} using ${(mappedAmount / 10 ** inputTokenInfo.decimals).toFixed(6)} ${inputTokenInfo.symbol} at rate ${rate.toFixed(6)}.`;
+              } else {
+                return `${user.username || user.discordId} attempted to buy but the transaction failed.`;
+              }
+            });
+
+            // Send public messages to the channel
+            await interaction.channel?.send(`**${initiatingUser.username || initiatingUser.discordId}** executed a buy order:\n` + publicMessages.join('\n'));
+
+          } else if (i.customId === 'cancel_swap') {
+            swapCollector.stop();
+            await i.update({
+              content: 'Transaction cancelled.',
+              components: [],
+            });
           }
         });
 
-        // Send public messages to the channel
-        await interaction.channel?.send(publicMessages.join('\n'));
+        swapCollector?.on('end', async (_, reason) => {
+          if (reason === 'time') {
+            await interaction.editReply({
+              content: 'Transaction timed out.',
+              components: [],
+            });
+          }
+        });
 
       } else if (btnInteraction.customId === 'cancel') {
         collector.stop();
@@ -166,11 +228,170 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
         });
       } else if (btnInteraction.customId === 'custom') {
         collector.stop();
+
+        // Prompt the user to enter a custom amount
         await btnInteraction.update({
           content: 'Please enter a custom amount (in SOL):',
           components: [],
         });
-        // Handle custom amount input...
+
+        // Create a message collector to collect the user's input
+        const messageFilter = (msg: any) => msg.author.id === initiatingUserId;
+        const messageCollector = interaction.channel?.createMessageCollector({
+          filter: messageFilter,
+          max: 1,
+          time: 30000, // 30 seconds to enter amount
+        });
+
+        messageCollector?.on('collect', async (message: any) => {
+          const input = message.content.trim();
+          const customAmount = parseFloat(input);
+          if (isNaN(customAmount) || customAmount <= 0) {
+            await interaction.followUp({
+              content: 'Invalid amount entered. Transaction cancelled.',
+              ephemeral: true,
+            });
+            return;
+          }
+
+          // Proceed to create swap preview with customAmount
+          const adjustedAmount = Math.floor(customAmount * 10 ** inputTokenInfo.decimals);
+
+          const { quoteData, swapPreview, estimatedOutput } = await createSwapPreview(
+            adjustedAmount,
+            inputToken,
+            outputTokenAddress,
+            initiatingSettings
+          );
+
+          // Prepare swap summary with "Swap Now" and "Cancel" buttons
+          const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setCustomId('swap_now')
+              .setLabel('Swap Now')
+              .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+              .setCustomId('cancel_swap')
+              .setLabel('Cancel')
+              .setStyle(ButtonStyle.Danger)
+          );
+
+          await interaction.followUp({
+            content: `Swap Summary:\n${swapPreview}\n\nYou have 5 seconds to cancel or confirm the swap.`,
+            components: [actionRow],
+            ephemeral: true,
+          });
+
+          // Set up a collector for swap confirmation
+          const swapFilter = (i: any) =>
+            i.user.id === initiatingUserId &&
+            (i.customId === 'swap_now' || i.customId === 'cancel_swap');
+
+          const swapCollector = interaction.channel?.createMessageComponentCollector({
+            filter: swapFilter,
+            componentType: ComponentType.Button,
+            time: 5000,
+          });
+
+          swapCollector?.on('collect', async (i) => {
+            if (i.customId === 'swap_now') {
+              swapCollector.stop();
+
+              await i.update({
+                content: 'Executing swap...',
+                components: [],
+              });
+
+              // Proceed to execute swaps for all connected wallets
+              const tradeResults = [];
+
+              for (const walletInfo of connectedWallets) {
+                const { user, wallet } = walletInfo;
+                const settings = user.settings || defaultSettings;
+                const userEntryAmounts = settings.entryAmounts || initiatingEntryAmounts;
+
+                // Use the custom amount for all users
+                const mappedAmount = customAmount;
+
+                const userAdjustedAmount = Math.floor(mappedAmount * 10 ** inputTokenInfo.decimals);
+
+                // Create swap preview for this user
+                const { quoteData: userQuoteData, estimatedOutput: userEstimatedOutput } = await createSwapPreview(
+                  userAdjustedAmount,
+                  inputToken,
+                  outputTokenAddress,
+                  settings
+                );
+
+                // Execute the swap for this user's wallet
+                const swapResult = await executeSwapForUser({
+                  interaction,
+                  user,
+                  wallet,
+                  selectedAmount: userAdjustedAmount,
+                  settings,
+                  outputTokenAddress,
+                  inputTokenAddress: inputToken,
+                  isBuyOperation: true,
+                  inputTokenInfo,
+                  outputTokenInfo,
+                  estimatedOutput: userEstimatedOutput,
+                  initiatingUser,
+                  quoteData: userQuoteData,
+                });
+
+                tradeResults.push({
+                  user,
+                  swapResult,
+                  mappedAmount,
+                  estimatedOutput: userEstimatedOutput,
+                  inputTokenInfo,
+                  outputTokenInfo,
+                });
+              }
+
+              // Prepare public message
+              const publicMessages = tradeResults.map((result) => {
+                const { user, swapResult, mappedAmount, estimatedOutput, inputTokenInfo, outputTokenInfo } = result;
+                const rate = mappedAmount / estimatedOutput;
+
+                if (swapResult.success) {
+                  return `${user.username || user.discordId} bought ${estimatedOutput.toFixed(6)} ${outputTokenInfo.symbol} using ${mappedAmount.toFixed(outputTokenInfo.decimals)} ${inputTokenInfo.symbol} at rate ${rate.toFixed(6)}.`;
+                } else {
+                  return `${user.username || user.discordId} attempted to buy but the transaction failed.`;
+                }
+              });
+
+              // Send public messages to the channel
+              await interaction.channel?.send(`**${initiatingUser.username || initiatingUser.discordId}** executed a buy order:\n` + publicMessages.join('\n'));
+
+            } else if (i.customId === 'cancel_swap') {
+              swapCollector.stop();
+              await i.update({
+                content: 'Transaction cancelled.',
+                components: [],
+              });
+            }
+          });
+
+          swapCollector?.on('end', async (_, reason) => {
+            if (reason === 'time') {
+              await interaction.followUp({
+                content: 'Transaction timed out.',
+                ephemeral: true,
+              });
+            }
+          });
+        });
+
+        messageCollector?.on('end', async (collected, reason) => {
+          if (collected.size === 0) {
+            await interaction.followUp({
+              content: 'No amount entered. Transaction cancelled.',
+              ephemeral: true,
+            });
+          }
+        });
       }
     });
 
