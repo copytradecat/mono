@@ -27,7 +27,7 @@ const UserSchema = new mongoose.Schema({
     wallets: [WalletSchema],
     settings: { type: SettingsSchema, default: () => ({}) },
     accountNumber: { type: Number, unique: true },
-    referrer: { type: String },
+    referredBy: { type: String },
     referralCode: { type: String, unique: true, sparse: true },
 });
 
