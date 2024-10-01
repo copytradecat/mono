@@ -2,9 +2,9 @@ import NextAuth, { NextAuthOptions } from 'next-auth';
 import DiscordProvider, { DiscordProfile } from 'next-auth/providers/discord';
 import GoogleProvider from 'next-auth/providers/google';
 import dotenv from 'dotenv';
-import { connectDB } from '../../../lib/mongodb';
-import User from '../../../models/User';
-import Subscription from '../../../models/Subscriptions';
+import { connectDB } from './mongodb';
+import User from '../models/User';
+import Subscription from '../models/Subscriptions';
 import { Session } from 'next-auth';
 
 dotenv.config();
