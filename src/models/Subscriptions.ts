@@ -2,8 +2,12 @@ import mongoose from 'mongoose';
 
 const SubscriptionSchema = new mongoose.Schema({
   discordId: { type: String, required: true, unique: true },
-  level: { type: Number, enum: [0, 1, 2, 3], default: 0 },
-  lastRenewal: { type: Date, default: Date.now },
-}, { strict: 'throw' });
+  subscriptions: [{
+    level: { type: Number, required: true },
+    startDate: { type: Date, default: Date.now },
+    endDate: { type: Date },
+    status: { type: String, enum: ['active', 'expired', 'cancelled'], default: 'active' }
+  }]
+}, { timestamps: true });
 
 export default mongoose.models.Subscription || mongoose.model('Subscription', SubscriptionSchema);

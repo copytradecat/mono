@@ -51,10 +51,18 @@ export default function Home() {
 
     if (referralCode) {
       try {
-        await axios.post('/api/process-referral', { referralCode });
-        localStorage.removeItem('referralCode');
+        const response = await axios.post('/api/process-referral', { referralCode });
+        if (response.status === 200) {
+          console.log('Referral processed successfully');
+        }
       } catch (error) {
-        console.error('Failed to process referral:', error);
+        if (axios.isAxiosError(error) && error.response) {
+          console.error('Failed to process referral:', error.response.data.error);
+        } else {
+          console.error('Failed to process referral:', error);
+        }
+      } finally {
+        localStorage.removeItem('referralCode');
       }
     }
   };
