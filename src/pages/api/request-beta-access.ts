@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "./auth/[...nextauth]";
+import { authOptions } from "./auth/authOptions";
 import { connectDB } from '../../lib/mongodb';
 import Subscription from '../../models/Subscriptions';
 import User from '../../models/User';
