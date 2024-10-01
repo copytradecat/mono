@@ -1,5 +1,12 @@
-import NextAuth, { Account, NextAuthOptions, Profile, Session } from 'next-auth';
-import DiscordProvider from 'next-auth/providers/discord';
+import NextAuth, {
+  Account,
+  NextAuthOptions,
+  Profile,
+  Session,
+  User as NextAuthUser,
+} from 'next-auth';
+
+import DiscordProvider, { DiscordProfile } from 'next-auth/providers/discord';
 import GoogleProvider from 'next-auth/providers/google';
 import dotenv from 'dotenv';
 import { JWT } from 'next-auth/jwt';
@@ -10,7 +17,7 @@ import crypto from 'crypto';
 
 dotenv.config({ path: '.env.local' });
 
-export const authOptions = {
+export const authOptions: NextAuthOptions = {
   providers: [
     DiscordProvider({
       clientId: process.env.DISCORD_CLIENT_ID!,
@@ -18,49 +25,52 @@ export const authOptions = {
     }),
   ],
   callbacks: {
-    async signIn({ user, account, profile }: { user: any; account: any; profile: any }) {
+    async signIn({ user, account, profile }) {
       await connectDB();
-      const referrerCode = (profile as any).referrerCode || null;
 
       try {
+        // Assert that 'profile' is a DiscordProfile
+        const discordProfile = profile as DiscordProfile;
+
         const latestUser = await User.findOne().sort({ accountNumber: -1 });
-        const newAccountNumber = latestUser ? (latestUser.accountNumber || 0) + 1 : 1;
+        const newAccountNumber = latestUser
+          ? (latestUser.accountNumber || 0) + 1
+          : 1;
+
+        // Check if there's a referral code in the session
+        const referralCode = (discordProfile as any).r;
 
         const newUser = await User.findOneAndUpdate(
-          { discordId: profile.id },
-          { 
-            $setOnInsert: { 
-              name: profile.id,
-              discordId: profile.id,
-              username: profile.username,
-              email: profile.email,
+          { discordId: discordProfile.id },
+          {
+            $setOnInsert: {
+              name: discordProfile.id,
+              discordId: discordProfile.id,
+              username: discordProfile.username,
+              email: discordProfile.email,
               settings: { maxTradeAmount: 100 },
               accountNumber: newAccountNumber,
-            }
+            },
           },
           { upsert: true, new: true }
         );
 
-        // Create or update subscription
         await Subscription.findOneAndUpdate(
           { discordId: newUser.discordId },
-          { 
-            $setOnInsert: { 
+          {
+            $setOnInsert: {
               level: 0,
-              referralCode: crypto.randomBytes(6).toString('hex'),
-            }
+            },
           },
           { upsert: true, new: true }
         );
 
-        if (referrerCode) {
-          const referrer = await User.findOne({ 'subscription.referralCode': referrerCode });
-          if (referrer) {
-            await User.findOneAndUpdate(
-              { discordId: referrer.discordId },
-              { $addToSet: { referrals: newUser.discordId } }
-            );
-          }
+        // If there's a referral code, update the referrer's referrals array
+        if (referralCode) {
+          await User.findOneAndUpdate(
+            { accountNumber: parseInt(referralCode) },
+            { $addToSet: { referrals: newUser.discordId } }
+          );
         }
 
         return true;
@@ -87,8 +97,18 @@ export const authOptions = {
       }
       return session;
     },
+    async redirect({ url, baseUrl }) {
+      // Handle referral
+      const urlParams = new URL(url).searchParams;
+      const referralCode = urlParams.get('r');
+      if (referralCode) {
+        // Store the referral code in the session
+        return `${url}&r=${referralCode}`;
+      }
+      return url.startsWith(baseUrl) ? url : baseUrl;
+    },
   },
   secret: process.env.JWT_SECRET,
-} as NextAuthOptions;
+};
 
 export default NextAuth(authOptions);

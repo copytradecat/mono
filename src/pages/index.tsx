@@ -10,7 +10,6 @@ export default function Home() {
   const [subscriptionInfo, setSubscriptionInfo] = useState<{
     level: number;
     accountNumber: number | null;
-    referralLink: string | null;
   } | null>(null);
 
   useEffect(() => {
@@ -26,6 +25,10 @@ export default function Home() {
       setSubscriptionInfo(data);
     }
   };
+
+  const referralLink = subscriptionInfo?.accountNumber
+    ? `${process.env.NEXT_PUBLIC_WEBSITE_URL}?r=${subscriptionInfo.accountNumber}`
+    : null;
 
   return (
     <div>
@@ -54,8 +57,8 @@ export default function Home() {
               )}
             </>
           )}
-          {subscriptionInfo.referralLink && (
-            <p>Your referral link: {subscriptionInfo.referralLink}</p>
+          {referralLink && (
+            <p>Your referral link: {referralLink}</p>
           )}
         </>
       )}

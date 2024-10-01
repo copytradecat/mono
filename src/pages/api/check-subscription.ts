@@ -28,7 +28,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!subscription) {
       return res.status(200).json({ 
         level: 0, 
-        referralCode: null,
         accountNumber: user.accountNumber,
       });
     }
@@ -36,7 +35,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const hasAccess = subscription.level > 0 && subscription.status === 'active';
     res.status(200).json({ 
       level: subscription.level, 
-      referralCode: subscription.referralCode,
       accountNumber: user.accountNumber,
     });
   } catch (error) {
