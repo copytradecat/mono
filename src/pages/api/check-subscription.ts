@@ -32,9 +32,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    const activeSubscription = subscription.subscriptions.find((sub: { status: string; endDate?: Date }) => 
-      sub.status === 'active' && (!sub.endDate || sub.endDate > new Date())
-    );
+    const activeSubscription = subscription.subscriptions
+      .slice()
+      .reverse()
+      .find((sub: { status: string; endDate?: Date }) => 
+        sub.status === 'active' && (!sub.endDate || sub.endDate > new Date())
+      );
 
     res.status(200).json({ 
       level: activeSubscription ? activeSubscription.level : 0, 
