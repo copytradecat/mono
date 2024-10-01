@@ -30,7 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             level: 1,
             startDate: new Date(),
             status: 'active'
-          } 
+          }
         } 
       },
       { new: true, upsert: true }
@@ -39,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(200).json({ 
       message: 'Beta access requested successfully',
       accountNumber: user.accountNumber,
-      level: subscription.level
+      level: subscription.subscriptions[subscription.subscriptions.length - 1].level
     });
   } catch (error) {
     console.error('Failed to request beta access:', error);

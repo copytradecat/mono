@@ -31,11 +31,13 @@ export const authOptions: NextAuthOptions = {
         const newUser = await User.findOneAndUpdate(
           { discordId: discordProfile.id },
           {
+            $set: {
+              username: discordProfile.username,
+              email: discordProfile.email,
+            },
             $setOnInsert: {
               name: discordProfile.id,
               discordId: discordProfile.id,
-              username: discordProfile.username,
-              email: discordProfile.email,
               settings: { maxTradeAmount: 100 },
               accountNumber: newAccountNumber,
             },
