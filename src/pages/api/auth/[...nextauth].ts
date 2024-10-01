@@ -25,7 +25,7 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account, profile, email, credentials }) {
       await connectDB();
 
       try {
@@ -36,9 +36,6 @@ export const authOptions: NextAuthOptions = {
         const newAccountNumber = latestUser
           ? (latestUser.accountNumber || 0) + 1
           : 1;
-
-        // Check if there's a referral code in the session
-        const referralCode = (discordProfile as any).r;
 
         const newUser = await User.findOneAndUpdate(
           { discordId: discordProfile.id },
@@ -65,14 +62,6 @@ export const authOptions: NextAuthOptions = {
           { upsert: true, new: true }
         );
 
-        // If there's a referral code, update the referrer's referrals array
-        if (referralCode) {
-          await User.findOneAndUpdate(
-            { accountNumber: parseInt(referralCode) },
-            { $addToSet: { referrals: newUser.discordId } }
-          );
-        }
-
         return true;
       } catch (error) {
         console.error('Error in signIn callback:', error);
@@ -97,16 +86,14 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
-    async redirect({ url, baseUrl }) {
-      // Handle referral
-      const urlParams = new URL(url).searchParams;
-      const referralCode = urlParams.get('r');
-      if (referralCode) {
-        // Store the referral code in the session
-        return `${url}&r=${referralCode}`;
-      }
-      return url.startsWith(baseUrl) ? url : baseUrl;
-    },
+    // async redirect({ url, baseUrl }) {
+    //   const urlObj = new URL(url);
+    //   if (urlObj.searchParams.has('r')) {
+    //     // Referral code is already present; do not append it again
+    //     return url;
+    //   }
+    //   return url.startsWith(baseUrl) ? url : baseUrl;
+    // },
   },
   secret: process.env.JWT_SECRET,
 };

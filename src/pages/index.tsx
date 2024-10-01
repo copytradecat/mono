@@ -4,9 +4,10 @@ import BetaAccessRequest from "../components/BetaAccessRequest";
 import BotInstructions from "../components/BotInstructions";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import axios from 'axios';
 
 export default function Home() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [subscriptionInfo, setSubscriptionInfo] = useState<{
     level: number;
     accountNumber: number | null;
@@ -15,6 +16,15 @@ export default function Home() {
   useEffect(() => {
     if (session) {
       checkSubscription();
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    const referralCode = urlParams.get('r');
+    if (referralCode) {
+      // Store the referral code in localStorage
+      localStorage.setItem('referralCode', referralCode);
+
+      // Optionally, store it in a cookie if you prefer
+      // setCookie(null, 'referralCode', referralCode, { path: '/' });
     }
   }, [session]);
 
@@ -29,6 +39,25 @@ export default function Home() {
   const referralLink = subscriptionInfo?.accountNumber
     ? `${process.env.NEXT_PUBLIC_WEBSITE_URL}?r=${subscriptionInfo.accountNumber}`
     : null;
+
+  useEffect(() => {
+    if (status === 'authenticated') {
+      handleReferral();
+    }
+  }, [status]);
+
+  const handleReferral = async () => {
+    const referralCode = localStorage.getItem('referralCode');
+
+    if (referralCode) {
+      try {
+        await axios.post('/api/process-referral', { referralCode });
+        localStorage.removeItem('referralCode');
+      } catch (error) {
+        console.error('Failed to process referral:', error);
+      }
+    }
+  };
 
   return (
     <div>
