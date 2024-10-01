@@ -17,15 +17,14 @@ export default function BotInstructions() {
           Click the link below to invite the bot to your server:
           <ul>
             <li className="ml-8">
-              <Link href={botInviteLink}>
                 <a
                   className="text-blue-500 hover:underline"
                   target="_blank"
                   rel="noopener noreferrer"
+                  href={botInviteLink}
                 >
                   Invite CopyTradeCat Bot
                 </a>
-              </Link>
             </li>
           </ul>
         </li>
