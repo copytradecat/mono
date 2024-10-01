@@ -28,7 +28,7 @@ export const authOptions: NextAuthOptions = {
           ? (latestUser.accountNumber || 0) + 1
           : 1;
 
-        await User.findOneAndUpdate(
+        const newUser = await User.findOneAndUpdate(
           { discordId: discordProfile.id },
           {
             $setOnInsert: {
@@ -44,7 +44,6 @@ export const authOptions: NextAuthOptions = {
         );
 
         if (discordProfile.id) {
-          await Subscription.deleteMany({ discordId: null });
           await Subscription.findOneAndUpdate(
             { discordId: discordProfile.id },
             {

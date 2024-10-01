@@ -25,16 +25,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const subscription = await Subscription.findOne({ discordId: user.discordId });
 
-    if (!subscription) {
+    if (!subscription || subscription.subscriptions.length === 0) {
       return res.status(200).json({ 
         level: 0, 
         accountNumber: user.accountNumber,
       });
     }
 
-    const hasAccess = subscription.level > 0 && subscription.status === 'active';
+    const activeSubscription = subscription.subscriptions.find(sub => 
+      sub.status === 'active' && (!sub.endDate || sub.endDate > new Date())
+    );
+
     res.status(200).json({ 
-      level: subscription.level, 
+      level: activeSubscription ? activeSubscription.level : 0, 
       accountNumber: user.accountNumber,
     });
   } catch (error) {

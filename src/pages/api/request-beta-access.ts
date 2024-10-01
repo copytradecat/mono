@@ -24,7 +24,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const subscription = await Subscription.findOneAndUpdate(
       { discordId: user.discordId },
-      { $set: { level: 1 } },
+      { 
+        $push: { 
+          subscriptions: {
+            level: 1,
+            startDate: new Date(),
+            status: 'active'
+          } 
+        } 
+      },
       { new: true, upsert: true }
     );
 

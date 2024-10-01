@@ -26,28 +26,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const newUserDiscordId = session.user?.name;
     const newUser = await UserModel.findOne({ discordId: newUserDiscordId });
 
-    // Ensure createdAt field exists
-    if (!newUser?.createdAt) {
-      return res.status(400).json({ error: 'User creation date not found' });
+    if (!newUser) {
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    // Check if the user is new (e.g., created within the last 5 minutes)
-    const isNewUser = (new Date().getTime() - newUser.createdAt.getTime()) < 5 * 60 * 1000; // 5-minute window
-
-    if (isNewUser) {
-      const referrer = await UserModel.findOneAndUpdate(
-        { accountNumber: parseInt(referralCode, 10) },
-        { $addToSet: { referrals: newUserDiscordId } }
-      );
-
-      if (!referrer) {
-        return res.status(404).json({ error: 'Referrer not found' });
-      }
-
-      return res.status(200).json({ message: 'Referral processed successfully' });
-    } else {
-      return res.status(400).json({ error: 'User is not new or referral already processed' });
+    // Check if the user has already used a referral code
+    if (newUser.referredBy) {
+      return res.status(400).json({ error: 'You have already used a referral code' });
     }
+
+    // Check if the referral code is valid
+    const referrer = await UserModel.findOne({ accountNumber: parseInt(referralCode, 10) });
+    if (!referrer) {
+      return res.status(404).json({ error: 'Invalid referral code' });
+    }
+
+    // Update the new user with the referrer's information
+    newUser.referredBy = referrer.discordId;
+    await newUser.save();
+
+    // Add the new user to the referrer's referrals
+    await UserModel.findOneAndUpdate(
+      { discordId: referrer.discordId },
+      { $addToSet: { referrals: newUserDiscordId } }
+    );
+
+    return res.status(200).json({ message: 'Referral processed successfully' });
   } catch (error) {
     console.error('Failed to process referral:', error);
     res.status(500).json({ error: 'Failed to process referral' });
