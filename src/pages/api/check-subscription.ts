@@ -32,7 +32,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    const activeSubscription = subscription.subscriptions.find(sub => 
+    const activeSubscription = subscription.subscriptions.find((sub: { status: string; endDate?: Date }) => 
       sub.status === 'active' && (!sub.endDate || sub.endDate > new Date())
     );
 
