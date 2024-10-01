@@ -1,13 +1,14 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getSession } from 'next-auth/react';
+import { getServerSession } from 'next-auth/next';
 import { connectDB } from '../../lib/mongodb';
 import User from '../../models/User';
 import { decrypt } from '../../lib/encryption';
 import { Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
+import { authOptions } from './auth/authOptions';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await getSession({ req });
+  const session = await getServerSession(req, res, authOptions);
   if (!session) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
