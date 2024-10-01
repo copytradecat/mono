@@ -1,7 +1,7 @@
 import { useSession } from "next-auth/react";
 import SignInInterface from "../components/SignInInterface";
 import BetaAccessRequest from "../components/BetaAccessRequest";
-import BotInstructions from "./bot-instructions";
+import BotInstructions from "../components/BotInstructions";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
