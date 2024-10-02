@@ -8,6 +8,7 @@ import { defaultSettings, Settings } from '../../src/components/BotSettings';
 import dotenv from 'dotenv';
 import { truncatedString } from '../../src/lib/utils';
 import { rateLimitedRequest } from '../../src/services/jupiter.service';
+import pLimit from 'p-limit';
 
 dotenv.config({ path: ['../../.env.local', '../../.env'] });
 const API_BASE_URL = process.env.SIGNING_SERVICE_URL;
