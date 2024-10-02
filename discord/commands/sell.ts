@@ -110,7 +110,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
           );
 
           await btnInteraction.editReply({
-            content: `You have selected to sell ${selectedPercentage}%. You have 30 seconds to confirm or cancel the swap.`,
+            content: `You have selected to sell ${selectedPercentage}%. You have 5 seconds to confirm or cancel the swap.`,
             components: [actionRow],
           });
 
@@ -121,7 +121,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
           const swapCollector = interaction.channel?.createMessageComponentCollector({
             filter: swapFilter,
             componentType: ComponentType.Button,
-            time: 30000, // 30 seconds to confirm
+            time: 5000, // 5 seconds to confirm
           });
 
           swapCollector?.on('collect', async (i) => {
@@ -336,7 +336,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
               const swapCollector = interaction.channel?.createMessageComponentCollector({
                 filter: swapFilter,
                 componentType: ComponentType.Button,
-                time: 30000, // 30 seconds to confirm
+                time: 5000, // 5 seconds to confirm
               });
 
               swapCollector?.on('collect', async (i) => {

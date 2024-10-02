@@ -129,7 +129,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
           );
 
           await btnInteraction.editReply({
-            content: `Swap Summary:\n${swapPreview}\n\nYou have 30 seconds to confirm or cancel the swap.`,
+            content: `Swap Summary:\n${swapPreview}\n\nYou have 5 seconds to confirm or cancel the swap.`,
             components: [actionRow],
           });
 
@@ -140,7 +140,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
           const swapCollector = interaction.channel?.createMessageComponentCollector({
             filter: swapFilter,
             componentType: ComponentType.Button,
-            time: 30000, // 30 seconds to confirm
+            time: 5000, // 5 seconds to confirm
           });
 
           swapCollector?.on('collect', async (i) => {
@@ -349,7 +349,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
               );
 
               await interaction.editReply({
-                content: `Swap Summary:\n${swapPreview}\n\nYou have 30 seconds to confirm or cancel the swap.`,
+                content: `Swap Summary:\n${swapPreview}\n\nYou have 5 seconds to confirm or cancel the swap.`,
                 components: [actionRow],
                 ephemeral: true,
               });
@@ -362,7 +362,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
               const swapCollector = interaction.channel?.createMessageComponentCollector({
                 filter: swapFilter,
                 componentType: ComponentType.Button,
-                time: 30000, // 30 seconds to confirm
+                time: 5000, // 5 seconds to confirm
               });
 
               swapCollector?.on('collect', async (i) => {
