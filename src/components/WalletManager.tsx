@@ -50,8 +50,8 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
       console.error('Error fetching balances:', error);
       setBalances((prevBalances: { [key: string]: { balances: any, metadata: any, error: string | null } }) => ({
         ...prevBalances,
-        [pubKey]: { 
-          balances: prevBalances[pubKey]?.balances || {}, 
+        [pubKey]: {
+          balances: prevBalances[pubKey]?.balances || {},
           metadata: prevBalances[pubKey]?.metadata || {},
           error: 'Failed to fetch balances'
         }

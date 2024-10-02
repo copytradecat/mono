@@ -7,6 +7,7 @@ import { Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { useWallets } from '../hooks/useWallets';
 import axios from 'axios';
+import pLimit from 'p-limit';
 
 interface TokenBalance {
   mint: string;
@@ -25,20 +26,31 @@ export default function WalletManagement() {
   const [presets, setPresets] = useState([]);
 
   const fetchTokenBalances = async (publicKey: string) => {
+    const limit = pLimit(10); // Limit to 10 concurrent requests
+
     const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
     const pubKey = new PublicKey(publicKey);
 
     try {
-      const tokenAccounts = await rateLimitedRequest(() => 
+      const tokenAccountsResponse = await rateLimitedRequest(() =>
         connection.getParsedTokenAccountsByOwner(pubKey, {
           programId: TOKEN_PROGRAM_ID,
         })
       );
 
-      const balances = tokenAccounts.value.map((accountInfo) => ({
-        mint: accountInfo.account.data.parsed.info.mint,
-        balance: accountInfo.account.data.parsed.info.tokenAmount.uiAmount,
-      }));
+      const tokenAccounts = tokenAccountsResponse.value;
+
+      const balancesPromises = tokenAccounts.map((accountInfo) =>
+        limit(async () => {
+          const mintAddress = accountInfo.account.data.parsed.info.mint;
+          const tokenAmountData = accountInfo.account.data.parsed.info.tokenAmount;
+          const amount = parseFloat(tokenAmountData.amount) / Math.pow(10, tokenAmountData.decimals);
+
+          return { mint: mintAddress, balance: amount };
+        })
+      );
+
+      const balances = await Promise.all(balancesPromises);
 
       setTokenBalances(balances);
     } catch (error) {

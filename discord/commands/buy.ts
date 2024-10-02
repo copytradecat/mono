@@ -10,9 +10,9 @@ import {
   createSwapPreview,
   executeSwapForUser,
 } from './swap-base';
-import { getTokenInfo, getTokenBalance, rateLimitedRequest, getBalancesForWallets } from '../../src/services/jupiter.service';
+import { getTokenInfo, getTokenBalance, getBalancesForWallets } from '../../src/services/jupiter.service';
 import { defaultSettings } from '../../src/components/BotSettings';
-import { getConnectedWalletsInChannel, mapSelectionToUserSettings } from './utils';
+import { truncatedString, getConnectedWalletsInChannel, mapSelectionToUserSettings } from '../../src/lib/utils';
 
 export async function handleBuyCommand(interaction: CommandInteraction) {
   const outputTokenAddress = interaction.options.getString('token', true);
@@ -141,6 +141,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
             // Fetch SOL balances for all wallets concurrently
             const walletPublicKeys = connectedWallets.map(w => w.wallet.publicKey);
 
+            // Use the updated getBalancesForWallets function
             const solBalances = await getBalancesForWallets(walletPublicKeys, 'So11111111111111111111111111111111111111112');
 
             for (const walletInfo of connectedWallets) {
@@ -148,7 +149,9 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
               const walletPublicKey = wallet.publicKey;
 
               // Fetch the wallet's settings
-              const walletSettings = user.wallets.find(w => w.publicKey === walletPublicKey)?.settings || defaultSettings;
+              const walletSettings = user.wallets.find(w => w.publicKey === walletPublicKey)?.settings
+                                     || user.settings  // User's default settings
+                                     || defaultSettings;
               const userEntryAmounts = walletSettings.entryAmounts || defaultSettings.entryAmounts;
 
               // Map initiating user's selected amount to this user's settings
@@ -171,7 +174,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                 console.log(`Insufficient SOL balance for wallet ${walletPublicKey}`);
                 const userDiscord = await interaction.client.users.fetch(user.discordId);
                 await userDiscord.send({
-                  content: `Insufficient SOL balance in wallet ${truncatedString(walletPublicKey)}. Required: ${(requiredAmount + estimatedFee).toFixed(6)} SOL, Available: ${userSolBalance.toFixed(6)} SOL.`,
+                  content: `Insufficient SOL balance in wallet ${truncatedString(walletPublicKey, 4)}. Required: ${(requiredAmount + estimatedFee).toFixed(6)} SOL, Available: ${userSolBalance.toFixed(6)} SOL.`,
                 });
                 continue;
               }
@@ -333,7 +336,9 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
               for (const walletInfo of connectedWallets) {
                 const { user, wallet } = walletInfo;
                 // Fetch the wallet's settings
-                const walletSettings = user.wallets.find(w => w.publicKey === wallet.publicKey)?.settings || defaultSettings;
+                const walletSettings = user.wallets.find(w => w.publicKey === wallet.publicKey)?.settings
+                                       || user.settings  // User's default settings
+                                       || defaultSettings;
 
                 const userEntryAmounts = walletSettings.entryAmounts || initiatingEntryAmounts;
 
@@ -432,9 +437,10 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
     });
   } catch (error) {
     console.error('Error in handleBuyCommand:', error);
-    await interaction.editReply({
-      content: 'An error occurred while processing the buy order.',
-      components: [],
-    });
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply('An error occurred while processing the buy command.');
+    } else {
+      await interaction.reply('An error occurred while processing the buy command.');
+    }
   }
 }

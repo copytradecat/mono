@@ -6,6 +6,7 @@ import { connectDB } from '../src/lib/mongodb';
 import dotenv from 'dotenv';
 import bs58 from 'bs58';
 import Limiter from 'limiter';
+import { rateLimitedRequest } from '../src/services/jupiter.service';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -78,7 +79,7 @@ app.post('/sign-and-send', async (req, res) => {
 
     try {
       console.log('Sending raw transaction');
-      const signature = await connection.sendTransaction(transaction);
+      const signature = await rateLimitedRequest(() => connection.sendTransaction(transaction));
       console.log('Transaction sent. Signature:', signature);
 
       // Implement retry mechanism
@@ -89,7 +90,7 @@ app.post('/sign-and-send', async (req, res) => {
       for (let i = 0; i < maxRetries; i++) {
         try {
           console.log(`Attempt ${i + 1} to confirm transaction`);
-          await connection.confirmTransaction(signature, 'confirmed');
+          await rateLimitedRequest(() => connection.confirmTransaction(signature, 'confirmed'));
           confirmed = true;
           break;
         } catch (confirmError) {

@@ -1,11 +1,12 @@
 import { Connection, PublicKey, LAMPORTS_PER_SOL, VersionedTransaction } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from '@solana/spl-token';
 import dotenv from 'dotenv';
-import { RateLimiter } from 'limiter';
+import Limiter from 'limiter';
 import { Metaplex, token } from '@metaplex-foundation/js';
 import { Transaction } from '@solana/web3.js';
 import { createJupiterApiClient, QuoteGetRequest, QuoteResponse } from '@jup-ag/api';
 import { Settings } from '../components/BotSettings';
+import pLimit from 'p-limit';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -13,27 +14,27 @@ const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 const jupiterApiClient = createJupiterApiClient({ basePath: process.env.NEXT_PUBLIC_SOLANA_RPC_URL_INFURA! });
 const metaplex = Metaplex.make(connection);
 
+const requestLimit = pLimit(10); // Limit to 10 concurrent requests
+const { RateLimiter } = Limiter;
+const limiter = new RateLimiter({ tokensPerInterval: 5, interval: 'second' });
 export async function rateLimitedRequest<T>(fn: () => Promise<T>): Promise<T> {
   // Ensure the limiter is correctly set up
-  // const { RateLimiter } = Limiter;
-  const limiter = new RateLimiter({ tokensPerInterval: 5, interval: 'second' });
   await limiter.removeTokens(1);
   return await fn();
 }
-
-// let lastRequestTime = 0;
-// const requestInterval = 100; // Minimum interval between requests in milliseconds
-// export async function rateLimitedRequest<T>(fn: () => Promise<T>): Promise<T> {
-//   const now = Date.now();
-//   const timeSinceLastRequest = now - lastRequestTime;
-
-//   if (timeSinceLastRequest < requestInterval) {
-//     await new Promise((resolve) => setTimeout(resolve, requestInterval - timeSinceLastRequest));
-//   }
-
-//   lastRequestTime = Date.now();
-//   return await fn();
-// }
+async function rateLimitedRequestWithRetry<T>(fn: () => Promise<T>, retries = 3, delay = 500): Promise<T> {
+  try {
+    await limiter.removeTokens(1);
+    return await fn();
+  } catch (error) {
+    if (retries > 0 && error.message.includes('429')) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return rateLimitedRequestWithRetry(fn, retries - 1, delay * 2);
+    } else {
+      throw error;
+    }
+  }
+}
 
 interface TokenMetadata {
   symbol: string;
@@ -102,15 +103,24 @@ async function getTokenMetadata(mintAddresses: string[]): Promise<{ [key: string
   return metadata;
 }
 
-const tokenInfoCache: { [address: string]: any } = {};
+const tokenInfoCache: {
+  [address: string]: { info: any; lastUpdated: number };
+} = {};
 
 export async function getTokenInfo(tokenAddress: string): Promise<any> {
-  if (tokenInfoCache[tokenAddress]) {
-    return tokenInfoCache[tokenAddress];
+  const cachedEntry = tokenInfoCache[tokenAddress];
+  const cacheTTL = 24 * 60 * 60 * 1000; // 24 hours
+
+  if (cachedEntry && (Date.now() - cachedEntry.lastUpdated) < cacheTTL) {
+    return cachedEntry.info;
   }
 
+  // Fetch token info from the source
   const tokenInfo = await fetchTokenInfo(tokenAddress);
-  tokenInfoCache[tokenAddress] = tokenInfo;
+
+  // Cache the info with a timestamp
+  tokenInfoCache[tokenAddress] = { info: tokenInfo, lastUpdated: Date.now() };
+
   return tokenInfo;
 }
 
@@ -140,44 +150,44 @@ export async function getTokenBalances(publicKey: string) {
     const pubKey = new PublicKey(publicKey);
 
     // Fetch SOL balance
-    const solBalance = await rateLimitedRequest(() => connection.getBalance(pubKey));
+    const solBalancePromise = rateLimitedRequest(() => connection.getBalance(pubKey));
 
     // Fetch token accounts
-    const tokenAccounts = await rateLimitedRequest(() => 
-      connection.getParsedTokenAccountsByOwner(pubKey, {
-        programId: TOKEN_PROGRAM_ID
+    const tokenAccountsResponse = await rateLimitedRequest(() =>
+      connection.getParsedTokenAccountsByOwner(pubKey, { programId: TOKEN_PROGRAM_ID })
+    );
+
+    const tokenAccounts = tokenAccountsResponse.value;
+
+    // Fetch token balances using p-limit
+    const tokenBalancesPromises = tokenAccounts.map((accountInfo) =>
+      requestLimit(async () => {
+        const mintAddress = accountInfo.account.data.parsed.info.mint;
+        const tokenAmountData = accountInfo.account.data.parsed.info.tokenAmount;
+
+        const decimals = tokenAmountData.decimals;
+        const amount = parseFloat(tokenAmountData.amount) / Math.pow(10, decimals);
+
+        return { mintAddress, amount, decimals };
       })
     );
 
-    console.log("Token Accounts:", tokenAccounts);
+    const tokenBalancesArray = await Promise.all(tokenBalancesPromises);
 
-    const balances: { [key: string]: number } = {
-      SOL: solBalance / LAMPORTS_PER_SOL
-    };
+    // Build balances object
+    const balances: { [key: string]: number } = {};
 
-    // Batch token balance requests
-    const batchSize = 100;
-    for (let i = 0; i < tokenAccounts.value.length; i += batchSize) {
-      const batch = tokenAccounts.value.slice(i, i + batchSize);
-      const batchPromises = batch.map(account => 
-        rateLimitedRequest(() => connection.getTokenAccountBalance(account.pubkey))
-      );
-      const batchResults = await Promise.all(batchPromises);
+    // Include SOL balance
+    balances['SOL'] = (await solBalancePromise) / LAMPORTS_PER_SOL;
 
-      batchResults.forEach((result, index) => {
-        const mintAddress = batch[index].account.data.parsed.info.mint;
-        balances[mintAddress] = result.value.uiAmount || 0;
-      });
+    // Include token balances
+    tokenBalancesArray.forEach(({ mintAddress, amount }) => {
+      balances[mintAddress] = amount;
+    });
 
-      console.log(`Batch ${i / batchSize + 1} Balances:`, balances);
-
-      if (i + batchSize < tokenAccounts.value.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-    }
-
-    // Fetch token metadata for all balances
-    const tokenMetadata = await getTokenMetadata(Object.keys(balances).filter(key => key !== 'SOL'));
+    // Fetch token metadata
+    const tokenMintAddresses = tokenBalancesArray.map((t) => t.mintAddress);
+    const tokenMetadata = await getTokenMetadata(tokenMintAddresses);
 
     return { balances, metadata: tokenMetadata };
   } catch (error) {
@@ -189,17 +199,29 @@ export async function getTokenBalances(publicKey: string) {
 export async function getAggregateBalance(wallets: string[]) {
   const aggregateBalance: { [key: string]: number } = {};
 
+  const batch = new RpcBatchRequest(connection);
+
+  // Collect all calls
+  wallets.forEach((wallet) => {
+    const pubKey = new PublicKey(wallet);
+    batch.addCall('getBalance', [pubKey.toBase58()]);
+    batch.addCall('getTokenAccountsByOwner', [pubKey.toBase58(), { programId: TOKEN_PROGRAM_ID }]);
+  });
+
+  // Execute batch
+  const responses = await rateLimitedRequest(() => batch.invoke());
+
+  // Process responses
+  let responseIndex = 0;
   for (const wallet of wallets) {
-    try {
-      const { balances } = await getTokenBalances(wallet);
-      for (const [token, balance] of Object.entries(balances)) {
-        aggregateBalance[token] = (aggregateBalance[token] || 0) + balance;
-      }
-    } catch (error) {
-      console.error(`Error fetching balance for wallet ${wallet}:`, error);
-    }
-    // Add a small delay between processing each wallet
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    const solBalanceResponse = responses[responseIndex++];
+    const tokenAccountsResponse = responses[responseIndex++];
+
+    // Process SOL balance
+    const solBalanceLamports = solBalanceResponse.result?.value || 0;
+    aggregateBalance['SOL'] = (aggregateBalance['SOL'] || 0) + (solBalanceLamports / LAMPORTS_PER_SOL);
+
+    // Process token accounts and balances similarly...
   }
 
   return aggregateBalance;
@@ -277,7 +299,7 @@ export async function executeSwap(connection: Connection, swapTransaction: strin
     throw new Error('Transaction is not a VersionedTransaction');
   }
   transaction.sign([signer]);
-  return await connection.sendTransaction(transaction);
+  return await rateLimitedRequest(() => connection.sendTransaction(transaction));
 }
 
 export async function getTokenBalance(walletAddress: string, tokenAddress: string): Promise<{
@@ -294,7 +316,8 @@ export async function getTokenBalance(walletAddress: string, tokenAddress: strin
     })
   );
 
-  const { decimals, symbol } = await getTokenMetadata([tokenAddress])[tokenAddress];
+  const tokenMetadata = await getTokenMetadata([tokenAddress]);
+  const { decimals, symbol } = tokenMetadata[tokenAddress];
   let balance = 0;
 
   if (tokenAccounts.value.length > 0) {
@@ -305,47 +328,53 @@ export async function getTokenBalance(walletAddress: string, tokenAddress: strin
   return { balance, decimals, symbol };
 }
 
-export async function getBalancesForWallets(walletAddresses: string[], tokenAddress: string): Promise<{ [walletAddress: string]: number }> {
-  const balancePromises = walletAddresses.map(walletAddress =>
-    rateLimitedRequest(async () => {
-      const { balance } = await getTokenBalance(walletAddress, tokenAddress);
-      return { walletAddress, balance };
-    })
+export async function getBalancesForWallets(
+  walletAddresses: string[],
+  tokenAddress: string
+): Promise<{ [walletAddress: string]: number }> {
+  const balances: { [walletAddress: string]: number } = {};
+  const limit = pLimit(5); // Limit to 5 concurrent requests
+
+  await Promise.all(
+    walletAddresses.map((walletAddress) =>
+      limit(async () => {
+        if (tokenAddress === 'So11111111111111111111111111111111111111112' || 'SOL') {
+          // Fetch SOL balance
+          const balanceLamports = await rateLimitedRequest(() =>
+            connection.getBalance(new PublicKey(walletAddress))
+          );
+          balances[walletAddress] = balanceLamports / LAMPORTS_PER_SOL;
+        } else {
+          // Fetch SPL Token balance
+          const { balance } = await rateLimitedRequest(() =>
+            getTokenBalance(walletAddress, tokenAddress)
+          );
+          balances[walletAddress] = balance;
+        }
+      })
+    )
   );
 
-  const results = await Promise.all(balancePromises);
-  const balances: { [walletAddress: string]: number } = {};
-  results.forEach(result => {
-    balances[result.walletAddress] = result.balance;
-  });
   return balances;
 }
 
-export async function getMultipleTokenBalances(walletAddress: string, tokenAddresses: string[]): Promise<{ [tokenAddress: string]: number }> {
-  const accountPublicKeys = tokenAddresses.map(tokenAddress => {
-    // Get associated token account public key
-    return getAssociatedTokenAddressSync(
-      new PublicKey(tokenAddress),
-      new PublicKey(walletAddress)
-    );
-  });
-
-  // Fetch multiple accounts in a single request
-  const accountInfos = await connection.getMultipleAccountsInfo(accountPublicKeys);
-
+export async function getMultipleTokenBalances(
+  walletAddress: string,
+  tokenAddresses: string[]
+): Promise<{ [tokenAddress: string]: number }> {
   const balances: { [tokenAddress: string]: number } = {};
+  const limit = pLimit(10); // Limit to 10 concurrent requests
 
-  for (let i = 0; i < tokenAddresses.length; i++) {
-    const accountInfo = accountInfos[i];
-    const tokenAddress = tokenAddresses[i];
-
-    if (accountInfo) {
-      const tokenAmountData = parseTokenAccountData(accountInfo.data);
-      balances[tokenAddress] = tokenAmountData.amount;
-    } else {
-      balances[tokenAddress] = 0;
-    }
-  }
+  await Promise.all(
+    tokenAddresses.map((tokenAddress) =>
+      limit(async () => {
+        const { balance } = await rateLimitedRequest(() =>
+          getTokenBalance(walletAddress, tokenAddress)
+        );
+        balances[tokenAddress] = balance;
+      })
+    )
+  );
 
   return balances;
 }
@@ -354,4 +383,23 @@ function parseTokenAccountData(data: Buffer): { amount: number } {
   const accountInfo = AccountLayout.decode(data);
   const amount = Number(accountInfo.amount);
   return { amount };
+}
+
+export async function getMultipleTokenBalancesForWallets(
+  walletAddresses: string[],
+  tokenAddresses: string[]
+): Promise<{ [walletAddress: string]: { [tokenAddress: string]: number } }> {
+  const limit = pLimit(10); // Limit to 10 concurrent requests
+  const balances: { [walletAddress: string]: { [tokenAddress: string]: number } } = {};
+
+  await Promise.all(
+    walletAddresses.map((walletAddress) =>
+      limit(async () => {
+        const walletBalances = await getMultipleTokenBalances(walletAddress, tokenAddresses);
+        balances[walletAddress] = walletBalances;
+      })
+    )
+  );
+
+  return balances;
 }

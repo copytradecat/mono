@@ -7,6 +7,7 @@ import axios from 'axios';
 import { defaultSettings, Settings } from '../../src/components/BotSettings';
 import dotenv from 'dotenv';
 import { truncatedString } from '../../src/lib/utils';
+import { rateLimitedRequest } from '../../src/services/jupiter.service';
 
 dotenv.config({ path: ['../../.env.local', '../../.env'] });
 const API_BASE_URL = process.env.SIGNING_SERVICE_URL;
@@ -23,7 +24,7 @@ export async function getUser(userId: string) {
 }
 
 export async function getBalance(publicKey: string) {
-  const balanceLamports = await connection.getBalance(new PublicKey(publicKey));
+  const balanceLamports = await rateLimitedRequest(() => connection.getBalance(new PublicKey(publicKey)));
   return balanceLamports;
 }
 
@@ -190,6 +191,7 @@ export async function executeSwapForUser(params: {
 
 export async function executeSwap(userId: string, walletPublicKey: string, swapTransaction: string) {
   try {
+    // Optional: If your signing server has rate limits, wrap this call
     const response = await axios.post(`${API_BASE_URL}/sign-and-send`, {
       userId,
       walletPublicKey,
@@ -197,7 +199,9 @@ export async function executeSwap(userId: string, walletPublicKey: string, swapT
     });
 
     const { signature } = response.data;
-    const confirmed = await confirmTransaction(signature);
+
+    // Wrap confirmTransaction with rateLimitedRequest
+    const confirmed = await rateLimitedRequest(() => confirmTransaction(signature));
 
     return {
       success: confirmed,
@@ -234,21 +238,18 @@ export async function recordTrade(
   });
 }
 
-export async function confirmTransaction(
-  signature: string,
-  maxRetries: number = 5,
-  retryDelay: number = 5000
-): Promise<boolean> {
+export async function confirmTransaction(signature: string, maxRetries = 5, delay = 2000): Promise<boolean> {
   for (let i = 0; i < maxRetries; i++) {
     try {
-      await connection.confirmTransaction(signature, 'confirmed');
+      await rateLimitedRequest(() => connection.confirmTransaction(signature, 'confirmed'));
       return true;
     } catch (error) {
       if (i === maxRetries - 1) {
         console.error('Transaction confirmation failed:', error);
         return false;
       }
-      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+      // Wait before retrying
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
   return false;

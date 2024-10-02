@@ -12,19 +12,20 @@ import {
 } from './swap-base';
 import { getTokenInfo, getTokenBalance, rateLimitedRequest } from '../../src/services/jupiter.service';
 import { defaultSettings } from '../../src/components/BotSettings';
-import { getConnectedWalletsInChannel, mapSelectionToUserSettings } from './utils';
+import { getConnectedWalletsInChannel, mapSelectionToUserSettings } from '../../src/lib/utils';
 
 export async function handleSellCommand(interaction: CommandInteraction) {
-  const inputTokenAddress = interaction.options.getString('token', true);
-  const initiatingUserId = interaction.user.id;
-  const channelId = interaction.channelId;
-
-  await interaction.deferReply({ ephemeral: true });
-
   try {
+    const inputTokenAddress = interaction.options.getString('token', true);
+    const initiatingUserId = interaction.user.id;
+    const channelId = interaction.channelId;
+
+    // Ensure interaction is deferred if processing takes time
+    await interaction.deferReply();
+
     const initiatingUser = await getUser(initiatingUserId);
     const initiatingWallet = initiatingUser.wallets[0];
-    const outputToken = 'So11111111111111111111111111111111111111112'; // SOL mint address
+    const outputToken = 'So1111111111111111111111111111111111111112'; // SOL mint address
     const inputTokenInfo = await getTokenInfo(inputTokenAddress);
     const outputTokenInfo = await getTokenInfo(outputToken);
     const initiatingExitPercentages = initiatingUser.settings.exitPercentages || defaultSettings.exitPercentages;
@@ -143,7 +144,9 @@ export async function handleSellCommand(interaction: CommandInteraction) {
             for (const walletInfo of connectedWallets) {
               const { user, wallet } = walletInfo;
               // Fetch the wallet's settings
-              const walletSettings = user.wallets.find(w => w.publicKey === wallet.publicKey)?.settings || defaultSettings;
+              const walletSettings = user.wallets.find(w => w.publicKey === wallet.publicKey)?.settings
+                       || user.settings  // User's default settings
+                       || defaultSettings;
               const userExitPercentages = walletSettings.exitPercentages || defaultSettings.exitPercentages;
 
               // Map initiating user's selected percentage to this user's settings
@@ -153,8 +156,10 @@ export async function handleSellCommand(interaction: CommandInteraction) {
                 selectionIndex
               );
 
-              // Fetch token balance
-              const { balance: tokenBalance } = await rateLimitedRequest(() => getTokenBalance(wallet.publicKey, inputTokenAddress));
+              // Fetch token balance using rateLimitedRequest
+              const { balance: tokenBalance } = await rateLimitedRequest(() =>
+                getTokenBalance(wallet.publicKey, inputTokenAddress)
+              );
               const decimals = inputTokenInfo.decimals;
 
               if (typeof tokenBalance !== 'number' || isNaN(tokenBalance) || tokenBalance <= 0) {
@@ -272,9 +277,11 @@ export async function handleSellCommand(interaction: CommandInteraction) {
     });
   } catch (error) {
     console.error('Error in handleSellCommand:', error);
-    await interaction.editReply({
-      content: 'An error occurred while processing the sell order.',
-      components: [],
-    });
+    // If interaction is already deferred or replied, edit the reply
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply('An error occurred while processing the sell command.');
+    } else {
+      await interaction.reply('An error occurred while processing the sell command.');
+    }
   }
 }
