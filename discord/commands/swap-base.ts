@@ -42,10 +42,10 @@ export async function createSwapPreview(
   const inputTokenInfo = await getTokenInfo(inputToken);
   const outputTokenInfo = await getTokenInfo(outputToken);
 
-  const estimatedOutput = quoteData.outAmount / 10 ** outputTokenInfo.decimals;
+  const estimatedOutput = Number(quoteData.outAmount) / 10 ** outputTokenInfo.decimals;
 
   const swapPreview = `Swap Preview:
-From: ${amount / 10 ** inputTokenInfo.decimals} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenInfo.address}>)
+From: ${Number(amount) / 10 ** inputTokenInfo.decimals} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenInfo.address}>)
 To: ${estimatedOutput} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenInfo.address}>)
 Price Impact: ${quoteData.priceImpactPct * 100}%
 Slippage: ${
@@ -199,15 +199,15 @@ export async function executeSwap(userId: string, walletPublicKey: string, swapT
 
     const { signature } = response.data;
 
-    await limiter.schedule({ id: `confirm-${signature}` }, async () => {
-      await connection.confirmTransaction(signature, 'confirmed');
+    const confirmed = await limiter.schedule({ id: `confirm-${signature}` }, async () => {
+      return await connection.confirmTransaction(signature, 'confirmed');
     });
 
     return {
-      success: true,
+      success: confirmed,
       signature,
       error: null,
-      transactionMessage: 'Transaction confirmed',
+      transactionMessage: confirmed ? 'Transaction confirmed' : 'Transaction not confirmed',
     };
   } catch (error: any) {
     console.error('Swap execution failed:', error);

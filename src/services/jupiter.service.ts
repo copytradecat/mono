@@ -109,16 +109,15 @@ async function fetchTokenInfo(tokenAddress: string): Promise<any> {
     return {"address":"So11111111111111111111111111111111111111112","name":"Wrapped SOL","symbol":"SOL","decimals":9,"logoURI":"https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png","tags":["verified","community","strict"],"daily_volume":119732114.11683102,"created_at":"2024-04-26T10:56:58.893768Z","freeze_authority":null,"mint_authority":null,"permanent_delegate":null,"minted_at":null,"extensions":{"coingeckoId":"wrapped-solana"}};
   }
   try {
-    limiter.schedule({id: `fetch-token-info-${tokenAddress}`}, async () => { 
+    return await limiter.schedule({id: `fetch-token-info-${tokenAddress}`}, async () => {
       const response = await fetch(`https://api.jup.ag/tokens/v1/${tokenAddress}`,
         { method: 'GET', headers: {accept: 'application/json'}});
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch token info for ${tokenAddress}
-        \nResponse status: ${response.status}`);
-    }
-    const data = await response.json();
-    console.log(data);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch token info for ${tokenAddress}
+          \nResponse status: ${response.status}`);
+      }
+      const data = await response.json();
       return data;
     });
   } catch (error) {
