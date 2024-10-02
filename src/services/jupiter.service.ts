@@ -1,12 +1,12 @@
 import { Connection, PublicKey, LAMPORTS_PER_SOL, VersionedTransaction } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from '@solana/spl-token';
 import dotenv from 'dotenv';
-import { RateLimiter } from 'limiter';
+import pLimit from 'p-limit';
 import { Metaplex, token } from '@metaplex-foundation/js';
 import { Transaction } from '@solana/web3.js';
 import { createJupiterApiClient, QuoteGetRequest, QuoteResponse } from '@jup-ag/api';
 import { Settings } from '../components/BotSettings';
-import pLimit from 'p-limit';
+import limiter from '../lib/limiter';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -15,28 +15,6 @@ const jupiterApiClient = createJupiterApiClient({ basePath: process.env.NEXT_PUB
 const metaplex = Metaplex.make(connection);
 
 const requestLimit = pLimit(10); // Limit to 10 concurrent requests
-export async function rateLimitedRequest<T>(fn: () => Promise<T>): Promise<T> {
-  // Ensure the limiter is correctly set up
-  // const { RateLimiter } = Limiter;
-  const limiter = new RateLimiter({ tokensPerInterval: 5, interval: 'second' });
-  await limiter.removeTokens(1);
-  return await fn();
-}
-async function rateLimitedRequestWithRetry<T>(fn: () => Promise<T>, retries = 3, delay = 500): Promise<T> {
-  // const { RateLimiter } = Limiter;
-  const limiter = new RateLimiter({ tokensPerInterval: 5, interval: 'second' });
-  try {
-    await limiter.removeTokens(1);
-    return await fn();
-  } catch (error) {
-    if (retries > 0 && error.message.includes('429')) {
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      return rateLimitedRequestWithRetry(fn, retries - 1, delay * 2);
-    } else {
-      throw error;
-    }
-  }
-}
 
 interface TokenMetadata {
   symbol: string;
@@ -64,7 +42,7 @@ async function getTokenMetadata(mintAddresses: string[]): Promise<{ [key: string
       }
 
       const mintPublicKey = new PublicKey(address);
-      const nft = await metaplex.nfts().findByMint({ mintAddress: mintPublicKey });
+      const nft = await limiter.schedule(async () => await metaplex.nfts().findByMint({ mintAddress: mintPublicKey }));
 
       const tokenMeta: TokenMetadata = {
         symbol: nft.symbol,
@@ -131,8 +109,9 @@ async function fetchTokenInfo(tokenAddress: string): Promise<any> {
     return {"address":"So11111111111111111111111111111111111111112","name":"Wrapped SOL","symbol":"SOL","decimals":9,"logoURI":"https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png","tags":["verified","community","strict"],"daily_volume":119732114.11683102,"created_at":"2024-04-26T10:56:58.893768Z","freeze_authority":null,"mint_authority":null,"permanent_delegate":null,"minted_at":null,"extensions":{"coingeckoId":"wrapped-solana"}};
   }
   try {
-    const response = await fetch(`https://api.jup.ag/tokens/v1/${tokenAddress}`,
-      { method: 'GET', headers: {accept: 'application/json'}});
+    limiter.schedule({id: `fetch-token-info-${tokenAddress}`}, async () => { 
+      const response = await fetch(`https://api.jup.ag/tokens/v1/${tokenAddress}`,
+        { method: 'GET', headers: {accept: 'application/json'}});
 
     if (!response.ok) {
       throw new Error(`Failed to fetch token info for ${tokenAddress}
@@ -140,11 +119,20 @@ async function fetchTokenInfo(tokenAddress: string): Promise<any> {
     }
     const data = await response.json();
     console.log(data);
-    return data;
+      return data;
+    });
   } catch (error) {
     console.error('Error fetching token info:', error instanceof Error ? error.message : String(error));
     throw error; // Re-throw the error after logging
   }
+}
+
+
+export async function getBalance(publicKey: string) {
+  const balanceLamports = await limiter.schedule({ id: `get-balance-${publicKey}` }, async () => {
+    return connection.getBalance(new PublicKey(publicKey));
+  });
+  return balanceLamports;
 }
 
 // Fetches the balances for a single wallet
@@ -153,12 +141,14 @@ export async function getTokenBalances(publicKey: string) {
     const pubKey = new PublicKey(publicKey);
 
     // Fetch SOL balance
-    const solBalancePromise = rateLimitedRequest(() => connection.getBalance(pubKey));
+    const solBalancePromise = getBalance(publicKey);
 
     // Fetch token accounts
-    const tokenAccountsResponse = await rateLimitedRequest(() =>
-      connection.getParsedTokenAccountsByOwner(pubKey, { programId: TOKEN_PROGRAM_ID })
-    );
+    const tokenAccountsResponse = await limiter.schedule(async () => {
+      return connection.getParsedTokenAccountsByOwner(pubKey, {
+        programId: TOKEN_PROGRAM_ID,
+      });
+    });
 
     const tokenAccounts = tokenAccountsResponse.value;
 
@@ -247,7 +237,7 @@ export async function getQuote(inputToken: string, outputToken: string, amount: 
       };
 
   try {
-    const quote = await jupiterApiClient.quoteGet(params);
+    const quote = await limiter.schedule({id: `get-quote-${inputToken}-${outputToken}-${amount}`}, async () => await jupiterApiClient.quoteGet(params));
 
     if (!quote) {
       throw new Error('Failed to get quote');
@@ -296,7 +286,7 @@ export async function executeSwap(connection: Connection, swapTransaction: strin
     throw new Error('Transaction is not a VersionedTransaction');
   }
   transaction.sign([signer]);
-  return await rateLimitedRequest(() => connection.sendTransaction(transaction));
+  return await limiter.schedule({id: `execute-swap-${signer}` }, async () => await connection.sendTransaction(transaction));
 }
 
 export async function getTokenBalance(walletAddress: string, tokenAddress: string): Promise<{
@@ -304,25 +294,28 @@ export async function getTokenBalance(walletAddress: string, tokenAddress: strin
   decimals: number;
   symbol: string;
 }> {
-  const walletPublicKey = new PublicKey(walletAddress);
-  const tokenPublicKey = new PublicKey(tokenAddress);
+  try {
+      const walletPublicKey = new PublicKey(walletAddress);
+      const tokenPublicKey = new PublicKey(tokenAddress);
 
-  const tokenAccounts = await rateLimitedRequest(() =>
-    connection.getParsedTokenAccountsByOwner(walletPublicKey, {
-      mint: tokenPublicKey,
-    })
-  );
+      const tokenAccounts = await limiter.schedule(async () => await connection.getParsedTokenAccountsByOwner(walletPublicKey, {
+          mint: tokenPublicKey,
+        }));
 
-  const tokenMetadata = await getTokenMetadata([tokenAddress]);
-  const { decimals, symbol } = tokenMetadata[tokenAddress];
-  let balance = 0;
+      const tokenMetadata = await getTokenMetadata([tokenAddress]);
+      const { decimals, symbol } = tokenMetadata[tokenAddress];
+      let balance = 0;
 
-  if (tokenAccounts.value.length > 0) {
-    const tokenAmount = tokenAccounts.value[0].account.data.parsed.info.tokenAmount;
-    balance = parseFloat(tokenAmount.amount) / Math.pow(10, decimals);
+      if (tokenAccounts.value.length > 0) {
+        const tokenAmount = tokenAccounts.value[0].account.data.parsed.info.tokenAmount;
+        balance = parseFloat(tokenAmount.amount) / Math.pow(10, decimals);
+      }
+
+      return { balance, decimals, symbol };
+  } catch (error) {
+    console.error('Error fetching token balance:', error);
+    throw error;
   }
-
-  return { balance, decimals, symbol };
 }
 
 //  Fetches the balance of a specific token for multiple wallets
@@ -338,15 +331,11 @@ export async function getBalancesForWallets(
       limit(async () => {
         if (tokenAddress === 'So11111111111111111111111111111111111111112' || 'SOL') {
           // Fetch SOL balance
-          const balanceLamports = await rateLimitedRequest(() =>
-            connection.getBalance(new PublicKey(walletAddress))
-          );
+          const balanceLamports = await getBalance(walletAddress);
           balances[walletAddress] = balanceLamports / LAMPORTS_PER_SOL;
         } else {
           // Fetch SPL Token balance
-          const { balance } = await rateLimitedRequest(() =>
-            getTokenBalance(walletAddress, tokenAddress)
-          );
+          const { balance } = await getTokenBalance(walletAddress, tokenAddress);
           balances[walletAddress] = balance;
         }
       })
@@ -366,9 +355,7 @@ export async function getMultipleTokenBalances(
   await Promise.all(
     tokenAddresses.map((tokenAddress) =>
       limit(async () => {
-        const { balance } = await rateLimitedRequest(() =>
-          getTokenBalance(walletAddress, tokenAddress)
-        );
+        const { balance } = await getTokenBalance(walletAddress, tokenAddress);
         balances[tokenAddress] = balance;
       })
     )

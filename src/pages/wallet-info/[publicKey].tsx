@@ -1,8 +1,7 @@
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
-import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { getTokenBalances, rateLimitedRequest } from '../../services/jupiter.service';
 import pLimit from 'p-limit';
+import { getBalance, getTokenBalances } from '../../services/jupiter.service';
 
 export default function WalletInfo() {
   const router = useRouter();
@@ -18,14 +17,9 @@ export default function WalletInfo() {
   const fetchBalances = async (pubKey: string) => {
     const limit = pLimit(10); // Limit to 10 concurrent requests
 
-    const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
-    const solBalancePromise = rateLimitedRequest(() =>
-      connection.getBalance(new PublicKey(pubKey))
-    );
+    const solBalancePromise = await getBalance(pubKey);
 
-    const tokenAccountsResponse = await rateLimitedRequest(() =>
-      connection.getParsedTokenAccountsByOwner(new PublicKey(pubKey), { programId: TOKEN_PROGRAM_ID })
-    );
+    const tokenAccountsResponse = await getTokenBalances(pubKey);
 
     const tokenAccounts = tokenAccountsResponse.value;
 

@@ -268,7 +268,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
             } catch (error) {
               console.error('Error in swapCollector:', error);
               try {
-                await i.followUp({
+                await i.editReply({
                   content: 'An error occurred during the swap execution.',
                   ephemeral: true,
                 });
@@ -319,7 +319,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
               const input = message.content.trim();
               const customAmount = parseFloat(input);
               if (isNaN(customAmount) || customAmount <= 0) {
-                await interaction.followUp({
+                await interaction.editReply({
                   content: 'Invalid amount entered. Transaction cancelled.',
                   ephemeral: true,
                 });
@@ -348,7 +348,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                   .setStyle(ButtonStyle.Danger)
               );
 
-              await interaction.followUp({
+              await interaction.editReply({
                 content: `Swap Summary:\n${swapPreview}\n\nYou have 30 seconds to confirm or cancel the swap.`,
                 components: [actionRow],
                 ephemeral: true,
@@ -462,7 +462,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                 } catch (error) {
                   console.error('Error in swapCollector (custom amount):', error);
                   try {
-                    await i.followUp({
+                    await i.editReply({
                       content: 'An error occurred during the swap execution.',
                       ephemeral: true,
                     });
@@ -475,7 +475,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
               swapCollector?.on('end', async (_, reason) => {
                 if (reason === 'time') {
                   try {
-                    await interaction.followUp({
+                    await interaction.editReply({
                       content: 'Transaction timed out.',
                       ephemeral: true,
                     });
@@ -487,7 +487,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
 
             } catch (error) {
               console.error('Error collecting custom amount:', error);
-              await interaction.followUp({
+              await interaction.editReply({
                 content: 'An error occurred while processing your custom amount.',
                 ephemeral: true,
               });
@@ -497,7 +497,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
           messageCollector?.on('end', async (collected, reason) => {
             if (collected.size === 0) {
               try {
-                await interaction.followUp({
+                await interaction.editReply({
                   content: 'No amount entered. Transaction cancelled.',
                   ephemeral: true,
                 });
@@ -511,7 +511,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
       } catch (error) {
         console.error('Error in collector:', error);
         try {
-          await btnInteraction.followUp({
+          await btnInteraction.editReply({
             content: 'An error occurred while processing your selection.',
             ephemeral: true,
           });
@@ -543,7 +543,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
       }
     } else {
       try {
-        await interaction.reply('An error occurred while processing the buy command.');
+        await interaction.editReply('An error occurred while processing the buy command.');
       } catch (err) {
         console.error('Error replying in catch block:', err);
       }

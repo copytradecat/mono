@@ -1,10 +1,7 @@
 import { useCallback, useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { getTokenBalances } from '../services/jupiter.service';
-import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { useWallets } from '../hooks/useWallets';
-
-const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 
 export default function WalletInfo() {
   const { data: session } = useSession();

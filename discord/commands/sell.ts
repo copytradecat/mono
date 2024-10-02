@@ -249,12 +249,12 @@ export async function handleSellCommand(interaction: CommandInteraction) {
               console.error('Error in swapCollector:', error);
               try {
                 if (i.replied || i.deferred) {
-                  await i.followUp({
+                  await i.editReply({
                     content: 'An error occurred during the swap execution.',
                     ephemeral: true,
                   });
                 } else {
-                  await i.reply({
+                  await i.editReply({
                     content: 'An error occurred during the swap execution.',
                     ephemeral: true,
                   });
@@ -280,13 +280,13 @@ export async function handleSellCommand(interaction: CommandInteraction) {
 
         } else if (btnInteraction.customId === 'cancel') {
           collector.stop();
-          await btnInteraction.update({
+          await btnInteraction.editReply({
             content: 'Transaction cancelled.',
             components: [],
           });
         } else if (btnInteraction.customId === 'custom') {
           collector.stop();
-          await btnInteraction.update({
+          await btnInteraction.editReply({
             content: 'Please enter a custom percentage (e.g., 25 for 25%):',
             components: [],
           });
@@ -304,7 +304,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
               const input = message.content.trim();
               const customPercentage = parseFloat(input);
               if (isNaN(customPercentage) || customPercentage <= 0 || customPercentage > 100) {
-                await interaction.followUp({
+                await interaction.editReply({
                   content: 'Invalid percentage entered. Transaction cancelled.',
                   ephemeral: true,
                 });
@@ -323,7 +323,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
                   .setStyle(ButtonStyle.Danger)
               );
 
-              await interaction.followUp({
+              await interaction.editReply({
                 content: `You have selected to sell ${customPercentage}%. You have 30 seconds to confirm or cancel the swap.`,
                 components: [actionRow],
                 ephemeral: true,
@@ -344,7 +344,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
                   if (i.customId === 'swap_now') {
                     swapCollector.stop();
 
-                    await i.update({
+                    await i.editReply({
                       content: 'Executing swap...',
                       components: [],
                     });
@@ -448,14 +448,14 @@ export async function handleSellCommand(interaction: CommandInteraction) {
                     await interaction.channel?.send(`**${initiatingUser.username || initiatingUser.discordId}** executed a sell order:\n` + publicMessages.join('\n'));
                   } else if (i.customId === 'cancel_swap') {
                     swapCollector.stop();
-                    await i.update({
+                    await i.editReply({
                       content: 'Transaction cancelled.',
                       components: [],
                     });
                   }
                 } catch (error) {
                   console.error('Error in swapCollector (custom percentage):', error);
-                  await i.followUp({
+                  await i.editReply({
                     content: 'An error occurred during the swap execution.',
                     ephemeral: true,
                   });
@@ -465,7 +465,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
               swapCollector?.on('end', async (_, reason) => {
                 if (reason === 'time') {
                   try {
-                    await interaction.followUp({
+                    await interaction.editReply({
                       content: 'Transaction timed out.',
                       ephemeral: true,
                     });
@@ -477,7 +477,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
 
             } catch (error) {
               console.error('Error collecting custom percentage:', error);
-              await interaction.followUp({
+              await interaction.editReply({
                 content: 'An error occurred while processing your custom percentage.',
                 ephemeral: true,
               });
@@ -487,7 +487,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
           messageCollector?.on('end', async (collected, reason) => {
             if (collected.size === 0) {
               try {
-                await interaction.followUp({
+                await interaction.editReply({
                   content: 'No percentage entered. Transaction cancelled.',
                   ephemeral: true,
                 });
@@ -499,7 +499,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
         }
       } catch (error) {
         console.error('Error in collector:', error);
-        await btnInteraction.reply({
+        await btnInteraction.editReply({
           content: 'An error occurred while processing your selection.',
           ephemeral: true,
         });
@@ -528,7 +528,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
       }
     } else {
       try {
-        await interaction.reply('An error occurred while processing the sell command.');
+        await interaction.editReply('An error occurred while processing the sell command.');
       } catch (err) {
         console.error('Error replying in catch block:', err);
       }

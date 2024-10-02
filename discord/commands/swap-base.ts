@@ -7,12 +7,13 @@ import axios from 'axios';
 import { defaultSettings, Settings } from '../../src/components/BotSettings';
 import dotenv from 'dotenv';
 import { truncatedString } from '../../src/lib/utils';
-import { rateLimitedRequest } from '../../src/services/jupiter.service';
 import pLimit from 'p-limit';
+import limiter from '../../src/lib/limiter';
 
 dotenv.config({ path: ['../../.env.local', '../../.env'] });
 const API_BASE_URL = process.env.SIGNING_SERVICE_URL;
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
+
 
 export const swapTime = 5000; // 5 seconds // time to cancel the transaction
 
@@ -22,11 +23,6 @@ export async function getUser(userId: string) {
     throw new Error('You need to set up your wallet first.');
   }
   return user;
-}
-
-export async function getBalance(publicKey: string) {
-  const balanceLamports = await rateLimitedRequest(() => connection.getBalance(new PublicKey(publicKey)));
-  return balanceLamports;
 }
 
 export async function createSwapPreview(
@@ -193,24 +189,25 @@ export async function executeSwapForUser(params: {
 export async function executeSwap(userId: string, walletPublicKey: string, swapTransaction: string) {
   try {
     // Optional: If your signing server has rate limits, wrap this call
-    const response = await axios.post(`${API_BASE_URL}/sign-and-send`, {
-      userId,
-      walletPublicKey,
-      serializedTransaction: swapTransaction,
+    const response = await limiter.schedule({ id: `execute-swap-${userId}` }, async () => {
+      return axios.post(`${API_BASE_URL}/sign-and-send`, {
+        userId,
+        walletPublicKey,
+        serializedTransaction: swapTransaction,
+      });
     });
 
     const { signature } = response.data;
 
-    // Wrap confirmTransaction with rateLimitedRequest
-    const confirmed = await rateLimitedRequest(() => confirmTransaction(signature));
+    await limiter.schedule({ id: `confirm-${signature}` }, async () => {
+      await connection.confirmTransaction(signature, 'confirmed');
+    });
 
     return {
-      success: confirmed,
+      success: true,
       signature,
-      error: confirmed ? null : 'Transaction timed out',
-      transactionMessage: confirmed
-        ? 'Transaction confirmed'
-        : 'Transaction sent but not confirmed',
+      error: null,
+      transactionMessage: 'Transaction confirmed',
     };
   } catch (error: any) {
     console.error('Swap execution failed:', error);
@@ -237,21 +234,4 @@ export async function recordTrade(
     amount,
     token,
   });
-}
-
-export async function confirmTransaction(signature: string, maxRetries = 5, delay = 2000): Promise<boolean> {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      await rateLimitedRequest(() => connection.confirmTransaction(signature, 'confirmed'));
-      return true;
-    } catch (error) {
-      if (i === maxRetries - 1) {
-        console.error('Transaction confirmation failed:', error);
-        return false;
-      }
-      // Wait before retrying
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-  }
-  return false;
 }

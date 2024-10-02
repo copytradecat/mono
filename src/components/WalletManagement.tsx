@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { Connection, PublicKey } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
-import { rateLimitedRequest } from '../services/jupiter.service';
 import { Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { useWallets } from '../hooks/useWallets';
 import axios from 'axios';
 import pLimit from 'p-limit';
+import { getTokenBalances } from '../services/jupiter.service';
 
 interface TokenBalance {
   mint: string;
@@ -28,15 +26,8 @@ export default function WalletManagement() {
   const fetchTokenBalances = async (publicKey: string) => {
     const limit = pLimit(10); // Limit to 10 concurrent requests
 
-    const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
-    const pubKey = new PublicKey(publicKey);
-
     try {
-      const tokenAccountsResponse = await rateLimitedRequest(() =>
-        connection.getParsedTokenAccountsByOwner(pubKey, {
-          programId: TOKEN_PROGRAM_ID,
-        })
-      );
+      const tokenAccountsResponse = await getTokenBalances(publicKey);
 
       const tokenAccounts = tokenAccountsResponse.value;
 

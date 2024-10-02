@@ -1,8 +1,8 @@
-import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import User from '../../src/models/User';
 import dotenv from 'dotenv';
-import { rateLimitedRequest } from '../../src/services/jupiter.service';
 import pLimit from 'p-limit';
+import { getBalance } from "../../src/services/jupiter.service";
 
 dotenv.config({ path: ['../.env.local', '.env'] });
 
@@ -17,10 +17,7 @@ export async function handleBalance(userId: string, reply: (content: string) => 
 
     const balancePromises = user.wallets.map((wallet: { publicKey: string }) =>
       limit(async () => {
-        const publicKey = new PublicKey(wallet.publicKey);
-        const balanceLamports = await rateLimitedRequest(() =>
-          connection.getBalance(publicKey)
-        );
+        const balanceLamports = await getBalance(wallet.publicKey);
         const balanceSOL = balanceLamports / LAMPORTS_PER_SOL;
         return `${wallet.publicKey}: ${balanceSOL.toFixed(6)} SOL`;
       })
