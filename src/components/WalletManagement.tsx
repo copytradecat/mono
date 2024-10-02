@@ -6,6 +6,7 @@ import { rateLimitedRequest } from '../services/jupiter.service';
 import { Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { useWallets } from '../hooks/useWallets';
+import axios from 'axios';
 
 interface TokenBalance {
   mint: string;
@@ -21,6 +22,7 @@ export default function WalletManagement() {
   const [walletCreated, setWalletCreated] = useState(false);
   const [walletSeed, setWalletSeed] = useState('');
   const [publicAddress, setPublicAddress] = useState<string | null>(null);
+  const [presets, setPresets] = useState([]);
 
   const fetchTokenBalances = async (publicKey: string) => {
     const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
@@ -47,6 +49,7 @@ export default function WalletManagement() {
   useEffect(() => {
     if (session) {
       fetchWallets();
+      fetchPresets();
     }
   }, [session, fetchWallets]);
 
@@ -147,6 +150,16 @@ export default function WalletManagement() {
     }
   };
 
+  const fetchPresets = async () => {
+    const response = await axios.get('/api/presets');
+    setPresets(response.data);
+  };
+
+  const applyPresetToWallet = async (walletId, presetName) => {
+    await axios.post(`/api/wallets/${walletId}/apply-preset`, { presetName });
+    fetchWallets();
+  };
+
   return (
     <div>
       <h1>Wallet Management</h1>
@@ -174,6 +187,19 @@ export default function WalletManagement() {
         <div key={index}>
           <p>Wallet {index + 1}: {wallet.publicKey || 'No public key'}</p>
           <button onClick={() => handleRemoveWallet(wallet.publicKey)}>Remove</button>
+          <label htmlFor={`preset-select-${wallet._id}`}>Apply Preset:</label>
+          <select
+            id={`preset-select-${wallet._id}`}
+            value={wallet.presetName || ''}
+            onChange={(e) => applyPresetToWallet(wallet._id, e.target.value)}
+          >
+            <option value="">Select a preset</option>
+            {presets.map((preset) => (
+              <option key={preset._id} value={preset.name}>
+                {preset.name}
+              </option>
+            ))}
+          </select>
         </div>
       ))}
     </div>

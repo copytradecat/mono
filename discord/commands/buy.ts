@@ -10,9 +10,9 @@ import {
   createSwapPreview,
   executeSwapForUser,
 } from './swap-base';
-import { getTokenInfo, getTokenBalance } from '../../src/services/jupiter.service';
+import { getTokenInfo, getTokenBalance, rateLimitedRequest, getBalancesForWallets } from '../../src/services/jupiter.service';
 import { defaultSettings } from '../../src/components/BotSettings';
-import { getConnectedWalletsInChannel, mapSelectionToUserSettings } from './utils';L
+import { getConnectedWalletsInChannel, mapSelectionToUserSettings } from './utils';
 
 export async function handleBuyCommand(interaction: CommandInteraction) {
   const outputTokenAddress = interaction.options.getString('token', true);
@@ -27,7 +27,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
     const inputToken = 'So11111111111111111111111111111111111111112'; // SOL mint address
     const inputTokenInfo = await getTokenInfo(inputToken);
     const outputTokenInfo = await getTokenInfo(outputTokenAddress);
-    const initiatingEntryAmounts = initiatingUser.settings.entryAmounts || [0.05, 0.1, 0.25, 0.5, 1];
+    const initiatingEntryAmounts = initiatingUser.settings.entryAmounts || defaultSettings.entryAmounts;
     const initiatingSettings = initiatingUser.settings || defaultSettings;
 
     // Fetch all connected wallets in this channel
@@ -138,35 +138,60 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
             // Proceed to execute swaps for all connected wallets
             const tradeResults = [];
 
+            // Fetch SOL balances for all wallets concurrently
+            const walletPublicKeys = connectedWallets.map(w => w.wallet.publicKey);
+
+            const solBalances = await getBalancesForWallets(walletPublicKeys, 'So11111111111111111111111111111111111111112');
+
             for (const walletInfo of connectedWallets) {
               const { user, wallet } = walletInfo;
-              const settings = user.settings || defaultSettings;
-              const userEntryAmounts = settings.entryAmounts || [0.05, 0.1, 0.25, 0.5, 1];
+              const walletPublicKey = wallet.publicKey;
+
+              // Fetch the wallet's settings
+              const walletSettings = user.wallets.find(w => w.publicKey === walletPublicKey)?.settings || defaultSettings;
+              const userEntryAmounts = walletSettings.entryAmounts || defaultSettings.entryAmounts;
 
               // Map initiating user's selected amount to this user's settings
               const mappedAmount = mapSelectionToUserSettings(
                 initiatingEntryAmounts,
                 userEntryAmounts,
-                selectionIndex
+                selectionIndex,
+                // selectedAmount
               );
 
-              const userAdjustedAmount = Math.floor(mappedAmount * 10 ** inputTokenInfo.decimals);
+              // Check user's SOL balance
+              const userSolBalance = solBalances[walletPublicKey]; // In SOL units
 
-              // Create swap preview for this user
+              const requiredAmount = mappedAmount;
+
+              // Estimate transaction fee (Set a standard fee or fetch estimate)
+              const estimatedFee = 0.000005; // Approximate fee
+
+              if (userSolBalance < requiredAmount + estimatedFee) {
+                console.log(`Insufficient SOL balance for wallet ${walletPublicKey}`);
+                const userDiscord = await interaction.client.users.fetch(user.discordId);
+                await userDiscord.send({
+                  content: `Insufficient SOL balance in wallet ${truncatedString(walletPublicKey)}. Required: ${(requiredAmount + estimatedFee).toFixed(6)} SOL, Available: ${userSolBalance.toFixed(6)} SOL.`,
+                });
+                continue;
+              }
+
+              // Proceed to create swap preview and execute swap
+              const adjustedAmount = Math.floor(mappedAmount * 10 ** inputTokenInfo.decimals);
+
               const { quoteData: userQuoteData, estimatedOutput: userEstimatedOutput } = await createSwapPreview(
-                userAdjustedAmount,
+                adjustedAmount,
                 inputToken,
                 outputTokenAddress,
-                settings
+                walletSettings
               );
 
-              // Execute the swap for this user's wallet
               const swapResult = await executeSwapForUser({
                 interaction,
                 user,
                 wallet,
-                selectedAmount: userAdjustedAmount,
-                settings,
+                selectedAmount: adjustedAmount,
+                settings: walletSettings,
                 outputTokenAddress,
                 inputTokenAddress: inputToken,
                 isBuyOperation: true,
@@ -307,8 +332,10 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
 
               for (const walletInfo of connectedWallets) {
                 const { user, wallet } = walletInfo;
-                const settings = user.settings || defaultSettings;
-                const userEntryAmounts = settings.entryAmounts || initiatingEntryAmounts;
+                // Fetch the wallet's settings
+                const walletSettings = user.wallets.find(w => w.publicKey === wallet.publicKey)?.settings || defaultSettings;
+
+                const userEntryAmounts = walletSettings.entryAmounts || initiatingEntryAmounts;
 
                 // Use the custom amount for all users
                 const mappedAmount = customAmount;
@@ -320,7 +347,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                   userAdjustedAmount,
                   inputToken,
                   outputTokenAddress,
-                  settings
+                  walletSettings
                 );
 
                 // Execute the swap for this user's wallet
@@ -329,7 +356,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                   user,
                   wallet,
                   selectedAmount: userAdjustedAmount,
-                  settings,
+                  settings: walletSettings,
                   outputTokenAddress,
                   inputTokenAddress: inputToken,
                   isBuyOperation: true,

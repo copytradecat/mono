@@ -1,5 +1,5 @@
 import { Connection, PublicKey, LAMPORTS_PER_SOL, VersionedTransaction } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from '@solana/spl-token';
 import dotenv from 'dotenv';
 import { RateLimiter } from 'limiter';
 import { Metaplex, token } from '@metaplex-foundation/js';
@@ -13,45 +13,85 @@ const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 const jupiterApiClient = createJupiterApiClient({ basePath: process.env.NEXT_PUBLIC_SOLANA_RPC_URL_INFURA! });
 const metaplex = Metaplex.make(connection);
 
-
 export async function rateLimitedRequest<T>(fn: () => Promise<T>): Promise<T> {
   // Ensure the limiter is correctly set up
   // const { RateLimiter } = Limiter;
   const limiter = new RateLimiter({ tokensPerInterval: 5, interval: 'second' });
   await limiter.removeTokens(1);
-  return fn();
+  return await fn();
 }
 
-async function getTokenMetadata(mintAddresses: string[]) {
-  const metadata: { [key: string]: { symbol: string; name: string; uri: string; address: string; decimals: number } } = {};
+// let lastRequestTime = 0;
+// const requestInterval = 100; // Minimum interval between requests in milliseconds
+// export async function rateLimitedRequest<T>(fn: () => Promise<T>): Promise<T> {
+//   const now = Date.now();
+//   const timeSinceLastRequest = now - lastRequestTime;
+
+//   if (timeSinceLastRequest < requestInterval) {
+//     await new Promise((resolve) => setTimeout(resolve, requestInterval - timeSinceLastRequest));
+//   }
+
+//   lastRequestTime = Date.now();
+//   return await fn();
+// }
+
+interface TokenMetadata {
+  symbol: string;
+  name: string;
+  uri: string;
+  address: string;
+  decimals: number;
+}
+
+const tokenMetadataCache: {
+  [address: string]: { metadata: TokenMetadata; lastUpdated: number };
+} = {};
+
+async function getTokenMetadata(mintAddresses: string[]): Promise<{ [key: string]: TokenMetadata }> {
+  const metadata: { [key: string]: TokenMetadata } = {};
 
   const metadataPromises = mintAddresses.map(async (address) => {
     try {
+      // Check if metadata is in cache and not expired
+      const cachedEntry = tokenMetadataCache[address];
+      const cacheTTL = 24 * 60 * 60 * 1000; // 24 hours
+      if (cachedEntry && (Date.now() - cachedEntry.lastUpdated) < cacheTTL) {
+        metadata[address] = cachedEntry.metadata;
+        return;
+      }
+
       const mintPublicKey = new PublicKey(address);
       const nft = await metaplex.nfts().findByMint({ mintAddress: mintPublicKey });
 
-      metadata[address] = {
+      const tokenMeta: TokenMetadata = {
         symbol: nft.symbol,
         name: nft.name,
         uri: nft.uri,
         address: address,
         decimals: nft.mint.decimals,
       };
+
+      metadata[address] = tokenMeta;
+
+      // Cache the metadata
+      tokenMetadataCache[address] = { metadata: tokenMeta, lastUpdated: Date.now() };
     } catch (error) {
       console.error(`Error fetching metadata for token ${address}:`, error);
       // Fallback to Jupiter API if Metaplex fails
       try {
-        const response = await fetch(`https://api.jup.ag/v4/token/${address}`);
-        if (response.ok) {
-          const data = await response.json();
-          metadata[address] = {
-            symbol: data.symbol,
-            name: data.name,
-            uri: data.uri,
-            address: address,
-            decimals: data.decimals,
-          };
-        }
+        const tokenInfo = await getTokenInfo(address);
+        const tokenMeta: TokenMetadata = {
+          symbol: tokenInfo.symbol,
+          name: tokenInfo.name,
+          uri: tokenInfo.logoURI,
+          address: address,
+          decimals: tokenInfo.decimals,
+        };
+
+        metadata[address] = tokenMeta;
+
+        // Cache the metadata
+        tokenMetadataCache[address] = { metadata: tokenMeta, lastUpdated: Date.now() };
       } catch (fallbackError) {
         console.error(`Fallback error fetching metadata for token ${address}:`, fallbackError);
       }
@@ -62,8 +102,19 @@ async function getTokenMetadata(mintAddresses: string[]) {
   return metadata;
 }
 
+const tokenInfoCache: { [address: string]: any } = {};
 
-export async function getTokenInfo(tokenAddress: string) {
+export async function getTokenInfo(tokenAddress: string): Promise<any> {
+  if (tokenInfoCache[tokenAddress]) {
+    return tokenInfoCache[tokenAddress];
+  }
+
+  const tokenInfo = await fetchTokenInfo(tokenAddress);
+  tokenInfoCache[tokenAddress] = tokenInfo;
+  return tokenInfo;
+}
+
+async function fetchTokenInfo(tokenAddress: string): Promise<any> {
   if (tokenAddress === 'So11111111111111111111111111111111111111112') {
     return {"address":"So11111111111111111111111111111111111111112","name":"Wrapped SOL","symbol":"SOL","decimals":9,"logoURI":"https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png","tags":["verified","community","strict"],"daily_volume":119732114.11683102,"created_at":"2024-04-26T10:56:58.893768Z","freeze_authority":null,"mint_authority":null,"permanent_delegate":null,"minted_at":null,"extensions":{"coingeckoId":"wrapped-solana"}};
   }
@@ -205,6 +256,7 @@ export async function getSwapTransaction(
     // prioritizationFeeLamports: priorityFee === 'auto' ? 'auto' : priorityFee * LAMPORTS_PER_SOL,
     computeUnitPriceMicroLamports: transactionSpeed === 'medium' ? 0 : "auto",
     ...(settings.slippageType === 'dynamic' && {dynamicSlippage: {maxBps:300}}),
+    ...(settings.slippageType === 'fixed' && {slippageBps: settings.slippage}),
   };
 
   const swapTransaction = await jupiterApiClient.swapPost({
@@ -231,6 +283,7 @@ export async function executeSwap(connection: Connection, swapTransaction: strin
 export async function getTokenBalance(walletAddress: string, tokenAddress: string): Promise<{
   balance: number;
   decimals: number;
+  symbol: string;
 }> {
   const walletPublicKey = new PublicKey(walletAddress);
   const tokenPublicKey = new PublicKey(tokenAddress);
@@ -241,15 +294,64 @@ export async function getTokenBalance(walletAddress: string, tokenAddress: strin
     })
   );
 
-  if (tokenAccounts.value.length === 0) {
-    // No token accounts found
-    const decimals = (await getTokenInfo(tokenAddress)).decimals;
-    return { balance: 0, decimals };
+  const { decimals, symbol } = await getTokenMetadata([tokenAddress])[tokenAddress];
+  let balance = 0;
+
+  if (tokenAccounts.value.length > 0) {
+    const tokenAmount = tokenAccounts.value[0].account.data.parsed.info.tokenAmount;
+    balance = parseFloat(tokenAmount.amount) / Math.pow(10, decimals);
   }
 
-  const tokenAmount = tokenAccounts.value[0].account.data.parsed.info.tokenAmount;
-  const balance = parseFloat(tokenAmount.amount) / Math.pow(10, tokenAmount.decimals);
-  const decimals = tokenAmount.decimals;
+  return { balance, decimals, symbol };
+}
 
-  return { balance, decimals };
+export async function getBalancesForWallets(walletAddresses: string[], tokenAddress: string): Promise<{ [walletAddress: string]: number }> {
+  const balancePromises = walletAddresses.map(walletAddress =>
+    rateLimitedRequest(async () => {
+      const { balance } = await getTokenBalance(walletAddress, tokenAddress);
+      return { walletAddress, balance };
+    })
+  );
+
+  const results = await Promise.all(balancePromises);
+  const balances: { [walletAddress: string]: number } = {};
+  results.forEach(result => {
+    balances[result.walletAddress] = result.balance;
+  });
+  return balances;
+}
+
+export async function getMultipleTokenBalances(walletAddress: string, tokenAddresses: string[]): Promise<{ [tokenAddress: string]: number }> {
+  const accountPublicKeys = tokenAddresses.map(tokenAddress => {
+    // Get associated token account public key
+    return getAssociatedTokenAddressSync(
+      new PublicKey(tokenAddress),
+      new PublicKey(walletAddress)
+    );
+  });
+
+  // Fetch multiple accounts in a single request
+  const accountInfos = await connection.getMultipleAccountsInfo(accountPublicKeys);
+
+  const balances: { [tokenAddress: string]: number } = {};
+
+  for (let i = 0; i < tokenAddresses.length; i++) {
+    const accountInfo = accountInfos[i];
+    const tokenAddress = tokenAddresses[i];
+
+    if (accountInfo) {
+      const tokenAmountData = parseTokenAccountData(accountInfo.data);
+      balances[tokenAddress] = tokenAmountData.amount;
+    } else {
+      balances[tokenAddress] = 0;
+    }
+  }
+
+  return balances;
+}
+
+function parseTokenAccountData(data: Buffer): { amount: number } {
+  const accountInfo = AccountLayout.decode(data);
+  const amount = Number(accountInfo.amount);
+  return { amount };
 }

@@ -10,7 +10,7 @@ import {
   createSwapPreview,
   executeSwapForUser,
 } from './swap-base';
-import { getTokenInfo, getTokenBalance } from '../../src/services/jupiter.service';
+import { getTokenInfo, getTokenBalance, rateLimitedRequest } from '../../src/services/jupiter.service';
 import { defaultSettings } from '../../src/components/BotSettings';
 import { getConnectedWalletsInChannel, mapSelectionToUserSettings } from './utils';
 
@@ -89,7 +89,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
         const selectionIndex = initiatingExitPercentages.indexOf(selectedPercentage);
 
         // Calculate amount based on initiating user's wallet balance
-        const { balance: initiatingBalance } = await getTokenBalance(initiatingWallet.publicKey, inputTokenAddress);
+        const { balance: initiatingBalance } = await rateLimitedRequest(() => getTokenBalance(initiatingWallet.publicKey, inputTokenAddress));
         const amountToSell = (initiatingBalance * selectedPercentage) / 100;
         const adjustedAmount = Math.floor(amountToSell * 10 ** inputTokenInfo.decimals);
 
@@ -142,8 +142,9 @@ export async function handleSellCommand(interaction: CommandInteraction) {
 
             for (const walletInfo of connectedWallets) {
               const { user, wallet } = walletInfo;
-              const settings = user.settings || defaultSettings;
-              const userExitPercentages = settings.exitPercentages || defaultSettings.exitPercentages;
+              // Fetch the wallet's settings
+              const walletSettings = user.wallets.find(w => w.publicKey === wallet.publicKey)?.settings || defaultSettings;
+              const userExitPercentages = walletSettings.exitPercentages || defaultSettings.exitPercentages;
 
               // Map initiating user's selected percentage to this user's settings
               const mappedPercentage = mapSelectionToUserSettings(
@@ -153,7 +154,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
               );
 
               // Fetch token balance
-              const { balance: tokenBalance } = await getTokenBalance(wallet.publicKey, inputTokenAddress);
+              const { balance: tokenBalance } = await rateLimitedRequest(() => getTokenBalance(wallet.publicKey, inputTokenAddress));
               const decimals = inputTokenInfo.decimals;
 
               if (typeof tokenBalance !== 'number' || isNaN(tokenBalance) || tokenBalance <= 0) {
@@ -171,12 +172,18 @@ export async function handleSellCommand(interaction: CommandInteraction) {
                 continue;
               }
 
+              // Skip if token balance is too low
+              if(tokenBalance < userAdjustedAmount) {
+                console.log(`Token balance too low for wallet ${wallet.publicKey}`);
+                continue;
+              }
+
               // Create swap preview
               const { quoteData: userQuoteData, estimatedOutput: userEstimatedOutput } = await createSwapPreview(
                 userAdjustedAmount,
                 inputTokenAddress,
                 outputToken,
-                settings
+                walletSettings
               );
 
               // Execute the swap for this user's wallet
@@ -185,7 +192,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
                 user,
                 wallet,
                 selectedAmount: userAdjustedAmount,
-                settings,
+                settings: walletSettings,
                 outputTokenAddress: outputToken,
                 inputTokenAddress: inputTokenAddress,
                 isBuyOperation: false,
@@ -212,7 +219,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
               const rate = (estimatedOutput) / ((mappedPercentage / 100) * tokenBalance);
 
               if (swapResult.success) {
-                return `${user.username || user.discordId} sold ${(mappedPercentage).toFixed(2)}% of their ${inputTokenInfo.symbol} for ${estimatedOutput.toFixed(outputTokenInfo.decimals)} ${outputTokenInfo.symbol} at rate ${rate.toFixed(6)}.`;
+                return `${user.username || user.discordId} sold ${(mappedPercentage).toFixed(2)}% of their ${inputTokenInfo.symbol} for ${estimatedOutput.toFixed(6)} ${outputTokenInfo.symbol} at rate ${rate.toFixed(6)}.`;
               } else {
                 return `${user.username || user.discordId} attempted to sell but the transaction failed.`;
               }

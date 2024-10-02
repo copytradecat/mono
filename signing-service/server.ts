@@ -124,8 +124,13 @@ app.post('/sign-and-send', async (req, res) => {
       }
     }
   } catch (error) {
-    console.error('Error signing and sending transaction:', error);
-    res.status(500).json({ error: 'Failed to sign and send transaction' });
+    console.error('Error in /sign-and-send:', error);
+
+    res.status(500).json({
+      error: 'Failed to sign and send transaction',
+      details: error.message,
+      logs: error.stack, // Include stack trace if helpful
+    });
   }
 });
 
