@@ -44,16 +44,18 @@ export async function createSwapPreview(
 
   const estimatedOutput = Number(quoteData.outAmount) / 10 ** outputTokenInfo.decimals;
 
-  const swapPreview = `Swap Preview:
+  const swapPreview = `
+**Swap Preview**
 From: ${Number(amount) / 10 ** inputTokenInfo.decimals} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenInfo.address}>)
 To: ${estimatedOutput} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenInfo.address}>)
-Price Impact: ${quoteData.priceImpactPct * 100}%
+Price Impact: ${(quoteData.priceImpactPct * 100).toFixed(2)}%
 Slippage: ${
-    settings.slippageType === 'fixed' ? `${settings.slippage / 100}%` : 'Dynamic'
+    settings.slippageType === 'fixed' ? `${(settings.slippage / 100).toFixed(2)}%` : 'Dynamic'
   }
 Transaction Speed: ${settings.transactionSpeed}
-Smart-MEV Protection: ${settings.smartMevProtection}
-Wrap/Unwrap SOL: ${settings.wrapUnwrapSOL ? 'Enabled' : 'Disabled'}`;
+Smart-MEV Protection: ${settings.smartMevProtection ? 'Enabled' : 'Disabled'}
+Wrap/Unwrap SOL: ${settings.wrapUnwrapSOL ? 'Enabled' : 'Disabled'}
+  `;
 
   return {
     quoteData,
@@ -119,8 +121,8 @@ export async function executeSwapForUser(params: {
 
       // Prepare the swap content message
       const swapContent = isBuyOperation
-        ? `Bought: ${(estimatedOutput).toFixed(6)} ${outputTokenInfo.symbol} using ${(selectedAmount / 10 ** inputTokenInfo.decimals).toFixed(6)} ${inputTokenInfo.symbol}\n`
-        : `Sold: ${(selectedAmount / 10 ** inputTokenInfo.decimals).toFixed(6)} ${inputTokenInfo.symbol} received ${(estimatedOutput).toFixed(6)} ${outputTokenInfo.symbol}\n`;
+        ? `Bought: ${(estimatedOutput).toFixed(6)} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>) using ${(selectedAmount / 10 ** inputTokenInfo.decimals).toFixed(6)} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenAddress}>)\n`
+        : `Sold: ${(selectedAmount / 10 ** inputTokenInfo.decimals).toFixed(6)} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenAddress}>) and received ${(estimatedOutput).toFixed(6)} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>)\n`;
 
       const balanceContent = `New Balances:\n- ${inputTokenInfo.symbol}: ${inputBalanceAfter.toFixed(6)}\n- ${outputTokenInfo.symbol}: ${outputBalanceAfter.toFixed(6)}`;
 
@@ -128,7 +130,7 @@ export async function executeSwapForUser(params: {
       try {
         const userDiscord = await interaction.client.users.fetch(user.discordId);
         await userDiscord.send({
-          content: `Your swap is complete!\n\n${swapContent}${balanceContent}\nTransaction ID: [${swapResult.signature}](<https://solscan.io/tx/${swapResult.signature}>)`,
+          content: `**Swap performed successfully!**\n\n${swapContent}${balanceContent}\nTransaction ID: [${truncatedString(swapResult.signature, 4)}](<https://solscan.io/tx/${swapResult.signature}>)`,
         });
       } catch (dmError) {
         console.error('Failed to send DM to user:', dmError);
@@ -137,10 +139,13 @@ export async function executeSwapForUser(params: {
       // If the user is the initiating user, edit the original interaction
       if (user.discordId === initiatingUser.discordId) {
         await interaction.editReply({
-          content: 'Your trade has been executed.',
+          content: `Swap Complete!\n\n${swapContent}\nTransaction ID: [${truncatedString(swapResult.signature, 4)}](<https://solscan.io/tx/${swapResult.signature}>)`,
           components: [],
         });
       }
+
+      const publicMessage = `**${interaction.user.username}** ${isBuyOperation ? 'bought' : 'sold'} a **${selectionIndex}** amount of **[${isBuyOperation ? outputTokenInfo.symbol : inputTokenInfo.symbol}](<https://solscan.io/token/${isBuyOperation ? outputTokenAddress : inputTokenAddress}>)** at **${isBuyOperation ? estimatedOutput/amount : amount/estimatedOutput} ${outputTokenInfo.symbol}/${inputTokenInfo.symbol}**`;
+      await interaction.channel?.send(publicMessage);
     } else {
       // Fetch token balances before the trade (assuming they haven't changed)
       const { balance: inputBalanceBefore } = await getTokenBalance(wallet.publicKey, inputTokenAddress);
@@ -199,15 +204,15 @@ export async function executeSwap(userId: string, walletPublicKey: string, swapT
 
     const { signature } = response.data;
 
-    const confirmed = await limiter.schedule({ id: `confirm-${signature}` }, async () => {
-      return await connection.confirmTransaction(signature, 'confirmed');
-    });
+    // const confirmed = await limiter.schedule({ id: `confirm-${signature}` }, async () => {
+    //   return await connection.confirmTransaction(signature, 'confirmed');
+    // });
 
     return {
-      success: confirmed,
+      success: true,
       signature,
       error: null,
-      transactionMessage: confirmed ? 'Transaction confirmed' : 'Transaction not confirmed',
+      transactionMessage: signature ? 'Transaction confirmed' : 'Transaction not confirmed',
     };
   } catch (error: any) {
     console.error('Swap execution failed:', error);

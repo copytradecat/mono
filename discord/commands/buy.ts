@@ -29,7 +29,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
   const channelId = interaction.channelId;
 
   try {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply();
   } catch (error) {
     console.error('Error deferring reply:', error);
     return;
@@ -80,7 +80,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
     }
 
     await interaction.editReply({
-      content: 'Select the amount you wish to buy:',
+      content: `Select the amount of ${outputTokenInfo.symbol} ([${truncatedString(outputTokenAddress, 4)}](<https://solscan.io/token/${outputTokenAddress}>)) you wish to buy:`,
       components: buttonRows,
     });
 
@@ -129,7 +129,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
           );
 
           await btnInteraction.editReply({
-            content: `Swap Summary:\n${swapPreview}\n\nYou have 5 seconds to confirm or cancel the swap.`,
+            content: `**Swap Summary:**\n${swapPreview}\n\nSubmitting swap in 5 seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`,
             components: [actionRow],
           });
 
@@ -151,7 +151,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                 swapCollector.stop();
 
                 await i.editReply({
-                  content: `Executing swap...`,
+                  content: `Processing swaps...`,
                   components: [],
                 });
 
@@ -257,7 +257,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                 });
 
                 // Send public messages to the channel
-                await interaction.channel?.send(`**${initiatingUser.username || initiatingUser.discordId}** executed a buy order:\n` + publicMessages.join('\n'));
+                await interaction.channel?.send(`  **${initiatingUser.username || initiatingUser.discordId}** executed a buy order:\n` + publicMessages.join('\n'));
               } else if (i.customId === 'cancel_swap') {
                 swapCollector.stop();
                 await i.editReply({
@@ -373,7 +373,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                     swapCollector.stop();
 
                     await i.editReply({
-                      content: 'Executing swap...',
+                      content: 'Processing swaps...',
                       components: [],
                     });
 

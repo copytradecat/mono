@@ -21,7 +21,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
   const channelId = interaction.channelId;
 
   try {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply();
   } catch (error) {
     console.error('Error deferring reply:', error);
     return;
@@ -72,7 +72,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
     }
 
     await interaction.editReply({
-      content: 'Select the percentage you wish to sell:',
+      content: `Select the percentage of ${inputTokenInfo.symbol} ([${truncatedString(inputTokenAddress, 4)}](<https://solscan.io/token/${inputTokenAddress}>)) you wish to sell:`,
       components: buttonRows,
     });
 
@@ -110,7 +110,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
           );
 
           await btnInteraction.editReply({
-            content: `You have selected to sell ${selectedPercentage}%. You have 5 seconds to confirm or cancel the swap.`,
+            content: `Preparing to sell ${selectedPercentage}% of your [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenAddress}>) position.`,
             components: [actionRow],
           });
 
@@ -194,6 +194,9 @@ export async function handleSellCommand(interaction: CommandInteraction) {
                           walletSettings
                         );
 
+// confirmation "swap now", and "cancel" button here. 
+
+
                         // Execute the swap for this user's wallet
                         const swapResult = await executeSwapForUser({
                           interaction,
@@ -237,7 +240,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
                 });
 
                 // Send public messages to the channel
-                await interaction.channel?.send(`**${initiatingUser.username || initiatingUser.discordId}** executed a sell order:\n` + publicMessages.join('\n'));
+                await interaction.channel?.send(`  **${initiatingUser.username || initiatingUser.discordId}** executed a sell order:\n` + publicMessages.join('\n'));
               } else if (i.customId === 'cancel_swap') {
                 swapCollector.stop();
                 await i.editReply({
@@ -445,7 +448,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
                     });
 
                     // Send public messages to the channel
-                    await interaction.channel?.send(`**${initiatingUser.username || initiatingUser.discordId}** executed a sell order:\n` + publicMessages.join('\n'));
+                    await interaction.channel?.send(  `**${initiatingUser.username || initiatingUser.discordId}** executed a sell order:\n` + publicMessages.join('\n'));
                   } else if (i.customId === 'cancel_swap') {
                     swapCollector.stop();
                     await i.editReply({

@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 dotenv.config({ path: ['.env.local', '.env'] });
 
 const limiter = new Bottleneck({
-  minTime: process.env.RATE_LIMIT_MIN_TIME ? parseInt(process.env.RATE_LIMIT_MIN_TIME) : 200,
+  minTime: process.env.RATE_LIMIT_MIN_TIME ? parseInt(process.env.RATE_LIMIT_MIN_TIME) : 240,
   maxConcurrent: 5,    // If you want to limit concurrent jobs
   maxRetries: 5,       // Retries failed jobs up to 5 times
   retryDelay: 800,     // Wait 800ms before retrying
