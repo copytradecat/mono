@@ -8,12 +8,14 @@ import {
 import {
   getUser,
   createSwapPreview,
-  executeSwapForUser,
+  promptUserConfirmation,
+  executeSwapsForUsers,
+  generateSelectionButtons,
+  swapTime,
 } from './swap-base';
 import { getTokenInfo, getTokenBalance } from '../../src/services/jupiter.service';
 import { defaultSettings } from '../../src/components/BotSettings';
-import { truncatedString, getConnectedWalletsInChannel, mapSelectionToUserSettings } from '../../src/lib/utils';
-import pLimit from 'p-limit';
+import { getConnectedWalletsInChannel } from '../../src/lib/utils';
 
 export async function handleSellCommand(interaction: CommandInteraction) {
   const inputTokenAddress = interaction.options.getString('token', true);
@@ -30,217 +32,164 @@ export async function handleSellCommand(interaction: CommandInteraction) {
   try {
     const initiatingUser = await getUser(initiatingUserId);
     const initiatingWallet = initiatingUser.wallets[0];
-    const outputToken = 'So11111111111111111111111111111111111111112'; // SOL mint address
+    const outputTokenAddress = 'So11111111111111111111111111111111111111112'; // SOL mint address
     const inputTokenInfo = await getTokenInfo(inputTokenAddress);
-    const outputTokenInfo = await getTokenInfo(outputToken);
+    const outputTokenInfo = await getTokenInfo(outputTokenAddress);
     const initiatingExitPercentages = initiatingUser.settings.exitPercentages || defaultSettings.exitPercentages;
     const initiatingSettings = initiatingUser.settings || defaultSettings;
 
     // Fetch all connected wallets in this channel
     const connectedWallets = await getConnectedWalletsInChannel(channelId);
 
-    // Combine percentage buttons with custom and cancel buttons
-    const buttons = initiatingExitPercentages.map((percentage) =>
+    // Generate percentage buttons using users' preset exitPercentages
+    const percentageButtons = initiatingExitPercentages.map((percentage: number, index: number) =>
       new ButtonBuilder()
-        .setCustomId(`percentage_${percentage}`)
+        .setCustomId(`percentage_${index}`)
         .setLabel(`${percentage}%`)
         .setStyle(ButtonStyle.Primary)
     );
 
     // Add custom and cancel buttons
-    buttons.push(
-      new ButtonBuilder()
-        .setCustomId('custom')
-        .setLabel('Custom percentage')
-        .setStyle(ButtonStyle.Secondary)
-    );
-    buttons.push(
-      new ButtonBuilder()
-        .setCustomId('cancel')
-        .setLabel('Cancel')
-        .setStyle(ButtonStyle.Danger)
-    );
+    const customButton = new ButtonBuilder()
+      .setCustomId('custom')
+      .setLabel('Custom')
+      .setStyle(ButtonStyle.Secondary);
 
-    // Split buttons into chunks of up to 5
+    const cancelButton = new ButtonBuilder()
+      .setCustomId('cancel')
+      .setLabel('Cancel')
+      .setStyle(ButtonStyle.Danger);
+
+    // Assemble buttons into ActionRows
     const buttonRows: ActionRowBuilder<ButtonBuilder>[] = [];
-    for (let i = 0; i < buttons.length; i += 5) {
-      buttonRows.push(
-        new ActionRowBuilder<ButtonBuilder>().addComponents(
-          buttons.slice(i, i + 5)
-        )
-      );
+    const maxButtonsPerRow = 5;
+
+    let currentRow = new ActionRowBuilder<ButtonBuilder>();
+    for (const button of percentageButtons) {
+      if (currentRow.components.length >= maxButtonsPerRow) {
+        // Only add the row if it has components
+        if (currentRow.components.length > 0) {
+          buttonRows.push(currentRow);
+        }
+        currentRow = new ActionRowBuilder<ButtonBuilder>();
+      }
+      currentRow.addComponents(button);
+    }
+
+    // Add custom and cancel buttons
+    if (currentRow.components.length >= maxButtonsPerRow) {
+      buttonRows.push(currentRow);
+      currentRow = new ActionRowBuilder<ButtonBuilder>();
+    }
+    currentRow.addComponents(customButton);
+
+    if (currentRow.components.length >= maxButtonsPerRow) {
+      buttonRows.push(currentRow);
+      currentRow = new ActionRowBuilder<ButtonBuilder>();
+    }
+    currentRow.addComponents(cancelButton);
+
+    // Add any remaining buttons
+    if (currentRow.components.length > 0) {
+      buttonRows.push(currentRow);
+    }
+
+    // Ensure we have at least one ActionRow with components
+    if (buttonRows.length === 0) {
+      currentRow = new ActionRowBuilder<ButtonBuilder>();
+      currentRow.addComponents(cancelButton);
+      buttonRows.push(currentRow);
     }
 
     await interaction.editReply({
-      content: `Select the percentage of ${inputTokenInfo.symbol} ([${truncatedString(inputTokenAddress, 4)}](<https://solscan.io/token/${inputTokenAddress}>)) you wish to sell:`,
+      content: `Select a percentage of your ${inputTokenInfo.symbol} to sell:`,
       components: buttonRows,
     });
 
-    const filter = (btnInteraction: any) => btnInteraction.user.id === initiatingUserId;
-
     const collector = interaction.channel?.createMessageComponentCollector({
-      filter,
       componentType: ComponentType.Button,
-      time: 30000, // 30 seconds to make a selection
+      time: 30000, // 30 seconds
     });
-
-    let selectedPercentage: number = 0;
-    let selectionIndex: number = -1;
 
     collector?.on('collect', async (btnInteraction) => {
       try {
-        await btnInteraction.deferUpdate();
+        if (btnInteraction.isRepliable()) {
+          await btnInteraction.deferUpdate();
+        } else {
+          console.warn('Interaction not repliable.');
+          return;
+        }
+
         if (btnInteraction.customId.startsWith('percentage_')) {
-          selectedPercentage = parseFloat(btnInteraction.customId.replace('percentage_', ''));
-          selectionIndex = initiatingExitPercentages.indexOf(selectedPercentage);
+          const index = parseInt(btnInteraction.customId.replace('percentage_', ''));
+          const selectedPercentage = initiatingExitPercentages[index];
+          const selectionIndex = index;
+
           collector.stop();
 
-          const percentageLabel = selectionIndex !== -1 ? `Level ${selectionIndex + 1}` : 'Custom percentage';
+          // For swap preview, we'll need to calculate the amount based on user's balance
+          const { balance: tokenBalance } = await getTokenBalance(initiatingWallet.publicKey, inputTokenAddress);
+          const amountToSell = (selectedPercentage / 100) * tokenBalance;
 
-          // Prepare swap summary with "Swap Now" and "Cancel" buttons
-          const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder()
-              .setCustomId('swap_now')
-              .setLabel('Swap Now')
-              .setStyle(ButtonStyle.Primary),
-            new ButtonBuilder()
-              .setCustomId('cancel_swap')
-              .setLabel('Cancel')
-              .setStyle(ButtonStyle.Danger)
+          // Create swap preview
+          const adjustedAmount = Math.floor(amountToSell);
+
+          if (adjustedAmount <= 0) {
+            await interaction.editReply({
+              content: 'Your balance is insufficient to perform this swap.',
+              components: [],
+            });
+            return;
+          }
+
+          // Proceed to create swap preview
+          const { quoteData, swapPreview, estimatedOutput } = await createSwapPreview(
+            adjustedAmount,
+            inputTokenAddress,
+            outputTokenAddress,
+            initiatingSettings
           );
 
-          await btnInteraction.editReply({
-            content: `Preparing to sell ${selectedPercentage}% of your [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenAddress}>) position.`,
-            components: [actionRow],
-          });
-
-          const swapFilter = (i: any) =>
-            i.user.id === initiatingUserId &&
-            (i.customId === 'swap_now' || i.customId === 'cancel_swap');
-
-          const swapCollector = interaction.channel?.createMessageComponentCollector({
-            filter: swapFilter,
-            componentType: ComponentType.Button,
-            time: 5000, // 5 seconds to confirm
-          });
+          // Prompt user confirmation
+          const swapCollector = await promptUserConfirmation(
+            interaction,
+            `**Swap Preview**\n${swapPreview}\n\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
+          );
 
           swapCollector?.on('collect', async (i) => {
             try {
-              await i.deferUpdate(); // Defer the interaction
+              if (i.isRepliable()) {
+                await i.deferUpdate();
+              } else {
+                console.warn('Interaction not repliable.');
+                return;
+              }
 
               if (i.customId === 'swap_now') {
                 swapCollector.stop();
 
                 await i.editReply({
-                  content: `Executing swap...`,
+                  content: 'Processing swaps...',
                   components: [],
                 });
 
-                // Proceed to execute swaps for all connected wallets
-                const tradeResults = [];
-
-                const limit = pLimit(3); // Limit to 3 concurrent swaps
-
-                await Promise.all(
-                  connectedWallets.map(walletInfo =>
-                    limit(async () => {
-                      try {
-                        const { user, wallet } = walletInfo;
-
-                        // Fetch the wallet's settings
-                        const walletSettings = user.wallets.find(w => w.publicKey === wallet.publicKey)?.settings
-                          || user.settings  // User's default settings
-                          || defaultSettings;
-                        const userExitPercentages = walletSettings.exitPercentages || defaultSettings.exitPercentages;
-
-                        // Map initiating user's selected percentage to this user's settings
-                        const mappedPercentage = mapSelectionToUserSettings(
-                          initiatingExitPercentages,
-                          userExitPercentages,
-                          selectionIndex
-                        );
-
-                        // Fetch token balance using rateLimitedRequest
-                        const { balance: tokenBalance } = await getTokenBalance(wallet.publicKey, inputTokenAddress);
-
-                        const decimals = inputTokenInfo.decimals;
-
-                        if (typeof tokenBalance !== 'number' || isNaN(tokenBalance) || tokenBalance <= 0) {
-                          console.log(`Invalid token balance for wallet ${wallet.publicKey}`);
-                          return;
-                        }
-
-                        // Calculate amount to sell
-                        const amount = tokenBalance * (mappedPercentage / 100);
-                        const userAdjustedAmount = Math.floor(amount * Math.pow(10, decimals));
-
-                        // Ensure adjustedAmount is valid
-                        if (!Number.isFinite(userAdjustedAmount) || userAdjustedAmount <= 0) {
-                          console.log(`Calculated adjusted amount is invalid for wallet ${wallet.publicKey}: ${userAdjustedAmount}`);
-                          return;
-                        }
-
-                        // Skip if token balance is too low
-                        if (tokenBalance < amount) {
-                          console.log(`Token balance too low for wallet ${wallet.publicKey}`);
-                          return;
-                        }
-
-                        // Create swap preview
-                        const { quoteData: userQuoteData, estimatedOutput: userEstimatedOutput } = await createSwapPreview(
-                          userAdjustedAmount,
-                          inputTokenAddress,
-                          outputToken,
-                          walletSettings
-                        );
-
-// confirmation "swap now", and "cancel" button here. 
-
-
-                        // Execute the swap for this user's wallet
-                        const swapResult = await executeSwapForUser({
-                          interaction,
-                          user,
-                          wallet,
-                          selectedAmount: userAdjustedAmount,
-                          settings: walletSettings,
-                          outputTokenAddress: outputToken,
-                          inputTokenAddress: inputTokenAddress,
-                          isBuyOperation: false,
-                          inputTokenInfo,
-                          outputTokenInfo,
-                          estimatedOutput: userEstimatedOutput,
-                          initiatingUser,
-                          quoteData: userQuoteData,
-                        });
-
-                        tradeResults.push({
-                          user,
-                          swapResult,
-                          mappedPercentage,
-                          estimatedOutput: userEstimatedOutput,
-                          inputTokenInfo,
-                          outputTokenInfo,
-                        });
-                      } catch (error) {
-                        console.error(`Error executing swap for wallet ${walletInfo.wallet.publicKey}:`, error);
-                      }
-                    })
-                  )
-                );
-
-                // Prepare public message
-                const publicMessages = tradeResults.map((result) => {
-                  const { user, swapResult, mappedPercentage, estimatedOutput, inputTokenInfo, outputTokenInfo } = result;
-                  if (swapResult.success) {
-                    return `${user.username || user.discordId} sold ${mappedPercentage}% of their ${inputTokenInfo.symbol} for ${estimatedOutput.toFixed(6)} ${outputTokenInfo.symbol}.`;
-                  } else {
-                    return `${user.username || user.discordId} attempted to sell but the transaction failed.`;
-                  }
+                // Execute swaps for users
+                const tradeResults = await executeSwapsForUsers({
+                  interaction,
+                  connectedWallets,
+                  selectionIndex,
+                  isBuyOperation: false,
+                  inputTokenInfo,
+                  outputTokenInfo,
+                  inputTokenAddress,
+                  outputTokenAddress,
+                  initiatingUser,
+                  initiatingSettings,
+                  initiatingExitPercentages,
                 });
 
-                // Send public messages to the channel
-                await interaction.channel?.send(`  **${initiatingUser.username || initiatingUser.discordId}** executed a sell order:\n` + publicMessages.join('\n'));
+                // All messaging is handled within executeSwapForUser
+
               } else if (i.customId === 'cancel_swap') {
                 swapCollector.stop();
                 await i.editReply({
@@ -251,46 +200,21 @@ export async function handleSellCommand(interaction: CommandInteraction) {
             } catch (error) {
               console.error('Error in swapCollector:', error);
               try {
-                if (i.replied || i.deferred) {
-                  await i.editReply({
-                    content: 'An error occurred during the swap execution.',
-                    ephemeral: true,
-                  });
-                } else {
-                  await i.editReply({
-                    content: 'An error occurred during the swap execution.',
-                    ephemeral: true,
-                  });
-                }
+                await i.editReply({
+                  content: 'An error occurred during the swap execution.',
+                });
               } catch (followUpError) {
                 console.error('Error sending follow-up message:', followUpError);
               }
             }
           });
 
-          swapCollector?.on('end', async (_, reason) => {
-            if (reason === 'time') {
-              try {
-                await interaction.editReply({
-                  content: 'Transaction timed out.',
-                  components: [],
-                });
-              } catch (error) {
-                console.error('Error editing reply on timeout:', error);
-              }
-            }
-          });
-
-        } else if (btnInteraction.customId === 'cancel') {
-          collector.stop();
-          await btnInteraction.editReply({
-            content: 'Transaction cancelled.',
-            components: [],
-          });
         } else if (btnInteraction.customId === 'custom') {
           collector.stop();
+
+          // Prompt the user to enter a custom percentage
           await btnInteraction.editReply({
-            content: 'Please enter a custom percentage (e.g., 25 for 25%):',
+            content: 'Please enter a custom percentage (0 - 100):',
             components: [],
           });
 
@@ -309,146 +233,73 @@ export async function handleSellCommand(interaction: CommandInteraction) {
               if (isNaN(customPercentage) || customPercentage <= 0 || customPercentage > 100) {
                 await interaction.editReply({
                   content: 'Invalid percentage entered. Transaction cancelled.',
-                  ephemeral: true,
                 });
                 return;
               }
 
-              // Prepare swap summary with "Swap Now" and "Cancel" buttons
-              const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder()
-                  .setCustomId('swap_now')
-                  .setLabel('Swap Now')
-                  .setStyle(ButtonStyle.Success),
-                new ButtonBuilder()
-                  .setCustomId('cancel_swap')
-                  .setLabel('Cancel')
-                  .setStyle(ButtonStyle.Danger)
+              // For swap preview, calculate the amount
+              const { balance: tokenBalance } = await getTokenBalance(initiatingWallet.publicKey, inputTokenAddress);
+              const amountToSell = (customPercentage / 100) * tokenBalance;
+
+              // Create swap preview
+              const adjustedAmount = Math.floor(amountToSell);
+
+              if (adjustedAmount <= 0) {
+                await interaction.editReply({
+                  content: 'Your balance is insufficient to perform this swap.',
+                  components: [],
+                });
+                return;
+              }
+
+              // Proceed to create swap preview
+              const { quoteData, swapPreview, estimatedOutput } = await createSwapPreview(
+                adjustedAmount,
+                inputTokenAddress,
+                outputTokenAddress,
+                initiatingSettings
               );
 
-              await interaction.editReply({
-                content: `You have selected to sell ${customPercentage}%. You have 30 seconds to confirm or cancel the swap.`,
-                components: [actionRow],
-                ephemeral: true,
-              });
-
-              const swapFilter = (i: any) =>
-                i.user.id === initiatingUserId &&
-                (i.customId === 'swap_now' || i.customId === 'cancel_swap');
-
-              const swapCollector = interaction.channel?.createMessageComponentCollector({
-                filter: swapFilter,
-                componentType: ComponentType.Button,
-                time: 5000, // 5 seconds to confirm
-              });
+              // Prompt user confirmation
+              const swapCollector = await promptUserConfirmation(
+                interaction,
+                `**Swap Preview**\n${swapPreview}\n\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
+              );
 
               swapCollector?.on('collect', async (i) => {
                 try {
+                  if (i.isRepliable()) {
+                    await i.deferUpdate();
+                  } else {
+                    console.warn('Interaction not repliable.');
+                    return;
+                  }
+
                   if (i.customId === 'swap_now') {
                     swapCollector.stop();
 
                     await i.editReply({
-                      content: 'Executing swap...',
+                      content: 'Processing swaps...',
                       components: [],
                     });
 
-                    // Proceed to execute swaps for all connected wallets
-                    const tradeResults = [];
-
-                    const limit = pLimit(3); // Limit to 3 concurrent swaps
-
-                    await Promise.all(
-                      connectedWallets.map(walletInfo =>
-                        limit(async () => {
-                          try {
-                            const { user, wallet } = walletInfo;
-
-                            // Fetch the wallet's settings
-                            const walletSettings = user.wallets.find(w => w.publicKey === wallet.publicKey)?.settings
-                              || user.settings  // User's default settings
-                              || defaultSettings;
-
-                            // Use the custom percentage for all users
-                            const mappedPercentage = customPercentage;
-
-                            // Fetch token balance using rateLimitedRequest
-                            const { balance: tokenBalance } = await getTokenBalance(wallet.publicKey, inputTokenAddress);
-
-                            const decimals = inputTokenInfo.decimals;
-
-                            if (typeof tokenBalance !== 'number' || isNaN(tokenBalance) || tokenBalance <= 0) {
-                              console.log(`Invalid token balance for wallet ${wallet.publicKey}`);
-                              return;
-                            }
-
-                            // Calculate amount to sell
-                            const amount = tokenBalance * (mappedPercentage / 100);
-                            const userAdjustedAmount = Math.floor(amount * Math.pow(10, decimals));
-
-                            // Ensure adjustedAmount is valid
-                            if (!Number.isFinite(userAdjustedAmount) || userAdjustedAmount <= 0) {
-                              console.log(`Calculated adjusted amount is invalid for wallet ${wallet.publicKey}: ${userAdjustedAmount}`);
-                              return;
-                            }
-
-                            // Skip if token balance is too low
-                            if (tokenBalance < amount) {
-                              console.log(`Token balance too low for wallet ${wallet.publicKey}`);
-                              return;
-                            }
-
-                            // Create swap preview
-                            const { quoteData: userQuoteData, estimatedOutput: userEstimatedOutput } = await createSwapPreview(
-                              userAdjustedAmount,
-                              inputTokenAddress,
-                              outputToken,
-                              walletSettings
-                            );
-
-                            // Execute the swap for this user's wallet
-                            const swapResult = await executeSwapForUser({
-                              interaction,
-                              user,
-                              wallet,
-                              selectedAmount: userAdjustedAmount,
-                              settings: walletSettings,
-                              outputTokenAddress: outputToken,
-                              inputTokenAddress: inputTokenAddress,
-                              isBuyOperation: false,
-                              inputTokenInfo,
-                              outputTokenInfo,
-                              estimatedOutput: userEstimatedOutput,
-                              initiatingUser,
-                              quoteData: userQuoteData,
-                            });
-
-                            tradeResults.push({
-                              user,
-                              swapResult,
-                              mappedPercentage,
-                              estimatedOutput: userEstimatedOutput,
-                              inputTokenInfo,
-                              outputTokenInfo,
-                            });
-                          } catch (error) {
-                            console.error(`Error executing swap for wallet ${walletInfo.wallet.publicKey}:`, error);
-                          }
-                        })
-                      )
-                    );
-
-                    // Prepare public message
-                    const publicMessages = tradeResults.map((result) => {
-                      const { user, swapResult, mappedPercentage, estimatedOutput, inputTokenInfo, outputTokenInfo } = result;
-                      if (swapResult.success) {
-                        return `${user.username || user.discordId} sold ${mappedPercentage}% of their ${inputTokenInfo.symbol} for ${estimatedOutput.toFixed(6)} ${outputTokenInfo.symbol}.`;
-                      } else {
-                        return `${user.username || user.discordId} attempted to sell but the transaction failed.`;
-                      }
+                    // Execute swaps for users
+                    const tradeResults = await executeSwapsForUsers({
+                      interaction,
+                      connectedWallets,
+                      selectionIndex: 'Custom',
+                      isBuyOperation: false,
+                      inputTokenInfo,
+                      outputTokenInfo,
+                      inputTokenAddress,
+                      outputTokenAddress,
+                      initiatingUser,
+                      initiatingSettings,
+                      customPercentage,
                     });
 
-                    // Send public messages to the channel
-                    await interaction.channel?.send(  `**${initiatingUser.username || initiatingUser.discordId}** executed a sell order:\n` + publicMessages.join('\n'));
+                    // All messaging is handled within executeSwapForUser
+
                   } else if (i.customId === 'cancel_swap') {
                     swapCollector.stop();
                     await i.editReply({
@@ -457,84 +308,62 @@ export async function handleSellCommand(interaction: CommandInteraction) {
                     });
                   }
                 } catch (error) {
-                  console.error('Error in swapCollector (custom percentage):', error);
-                  await i.editReply({
-                    content: 'An error occurred during the swap execution.',
-                    ephemeral: true,
-                  });
-                }
-              });
-
-              swapCollector?.on('end', async (_, reason) => {
-                if (reason === 'time') {
+                  console.error('Error in swapCollector:', error);
                   try {
-                    await interaction.editReply({
-                      content: 'Transaction timed out.',
-                      ephemeral: true,
+                    await i.editReply({
+                      content: 'An error occurred during the swap execution.',
                     });
-                  } catch (error) {
-                    console.error('Error following up on timeout:', error);
+                  } catch (followUpError) {
+                    console.error('Error sending follow-up message:', followUpError);
                   }
                 }
               });
 
             } catch (error) {
-              console.error('Error collecting custom percentage:', error);
+              console.error('Error in messageCollector:', error);
               await interaction.editReply({
-                content: 'An error occurred while processing your custom percentage.',
-                ephemeral: true,
+                content: 'An error occurred while processing your input.',
               });
             }
           });
 
-          messageCollector?.on('end', async (collected, reason) => {
-            if (collected.size === 0) {
-              try {
-                await interaction.editReply({
-                  content: 'No percentage entered. Transaction cancelled.',
-                  ephemeral: true,
-                });
-              } catch (error) {
-                console.error('Error following up on no percentage entered:', error);
-              }
-            }
+        } else if (btnInteraction.customId === 'cancel') {
+          collector.stop();
+          await btnInteraction.editReply({
+            content: 'Transaction cancelled.',
+            components: [],
           });
         }
+
       } catch (error) {
         console.error('Error in collector:', error);
-        await btnInteraction.editReply({
-          content: 'An error occurred while processing your selection.',
-          ephemeral: true,
-        });
+        try {
+          await btnInteraction.editReply({
+            content: 'An error occurred during the process.',
+          });
+        } catch (followUpError) {
+          console.error('Error sending follow-up message:', followUpError);
+        }
       }
     });
 
-    collector?.on('end', async () => {
-      if (selectedPercentage === 0 && selectionIndex === -1) {
+    collector?.on('end', async (_, reason) => {
+      if (reason === 'time') {
         try {
           await interaction.editReply({
-            content: 'No percentage selected. Transaction cancelled.',
+            content: 'Interaction timed out.',
             components: [],
           });
         } catch (error) {
-          console.error('Error editing reply on collector end:', error);
+          console.error('Error editing reply on timeout:', error);
         }
       }
     });
+
   } catch (error) {
     console.error('Error in handleSellCommand:', error);
-    if (interaction.deferred || interaction.replied) {
-      try {
-        await interaction.editReply('An error occurred while processing the sell command.');
-      } catch (err) {
-        console.error('Error editing reply in catch block:', err);
-      }
-    } else {
-      try {
-        await interaction.editReply('An error occurred while processing the sell command.');
-      } catch (err) {
-        console.error('Error replying in catch block:', err);
-      }
-    }
+    await interaction.editReply({
+      content: 'An error occurred while processing your request.',
+    });
   }
 }

@@ -1,4 +1,10 @@
-import { CommandInteraction } from 'discord.js';
+import {
+  CommandInteraction,
+  ButtonBuilder,
+  ButtonStyle,
+  ActionRowBuilder,
+  ComponentType,
+} from 'discord.js';
 import { getQuote, getSwapTransaction, getTokenInfo, getTokenBalance } from '../../src/services/jupiter.service';
 import UserAccount from '../../src/models/User';
 import Trade from '../../src/models/Trade';
@@ -6,7 +12,7 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import axios from 'axios';
 import { defaultSettings, Settings } from '../../src/components/BotSettings';
 import dotenv from 'dotenv';
-import { truncatedString } from '../../src/lib/utils';
+import { truncatedString, mapSelectionToUserSettings } from '../../src/lib/utils';
 import pLimit from 'p-limit';
 import limiter from '../../src/lib/limiter';
 
@@ -15,7 +21,176 @@ const API_BASE_URL = process.env.SIGNING_SERVICE_URL;
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 
 
-export const swapTime = 5000; // 5 seconds // time to cancel the transaction
+export const swapTime = 5000; // Time to confirm the swap (in milliseconds)
+
+// Function to generate selection buttons
+export function generateSelectionButtons(labels: string[], customIdPrefix: string) {
+  return labels.map((label, index) =>
+    new ButtonBuilder()
+      .setCustomId(`${customIdPrefix}_${index}`)
+      .setLabel(label)
+      .setStyle(ButtonStyle.Primary)
+  );
+}
+
+// Function to prompt user for confirmation
+export async function promptUserConfirmation(
+  interaction: CommandInteraction,
+  content: string,
+  ephemeral: boolean = false
+) {
+  const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId('swap_now')
+      .setLabel('Swap Now')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('cancel_swap')
+      .setLabel('Cancel')
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  await interaction.editReply({
+    content,
+    components: [actionRow],
+    ephemeral,
+  });
+
+  const filter = (i: any) =>
+    i.user.id === interaction.user.id && (i.customId === 'swap_now' || i.customId === 'cancel_swap');
+
+  const swapCollector = interaction.channel?.createMessageComponentCollector({
+    filter,
+    componentType: ComponentType.Button,
+    time: swapTime,
+  });
+
+  return swapCollector;
+}
+
+// Function to execute swaps for multiple users
+export async function executeSwapsForUsers(params: {
+  interaction: CommandInteraction;
+  connectedWallets: any[];
+  selectionIndex: number | 'Custom';
+  isBuyOperation: boolean;
+  inputTokenInfo: any;
+  outputTokenInfo: any;
+  inputTokenAddress: string;
+  outputTokenAddress: string;
+  initiatingUser: any;
+  initiatingSettings: Settings;
+  initiatingEntryAmounts?: number[];
+  initiatingExitPercentages?: number[];
+  customAmount?: number;
+  customPercentage?: number;
+}) {
+  const {
+    interaction,
+    connectedWallets,
+    selectionIndex,
+    isBuyOperation,
+    inputTokenInfo,
+    outputTokenInfo,
+    inputTokenAddress,
+    outputTokenAddress,
+    initiatingUser,
+    initiatingSettings,
+    initiatingEntryAmounts,
+    initiatingExitPercentages,
+    customAmount,
+    customPercentage,
+  } = params;
+
+  const tradeResults = [];
+
+  const limit = pLimit(3); // Limit concurrent swaps to prevent rate limits
+
+  await Promise.all(
+    connectedWallets.map(walletInfo =>
+      limit(async () => {
+        try {
+          const { user, wallet } = walletInfo;
+          const walletPublicKey = wallet.publicKey;
+
+          // Fetch the wallet's settings
+          const walletSettings = user.wallets.find((w: any) => w.publicKey === walletPublicKey)?.settings
+            || user.settings
+            || defaultSettings;
+
+          let adjustedAmount: number;
+          let mappedAmount: number;
+
+          if (isBuyOperation) {
+            const userEntryAmounts = walletSettings.entryAmounts || defaultSettings.entryAmounts;
+            // Map initiating user's selected amount to this user's settings
+            mappedAmount = customAmount || mapSelectionToUserSettings(
+              initiatingEntryAmounts!,
+              userEntryAmounts,
+              selectionIndex as number,
+            );
+
+            // Proceed to create swap preview and execute swap
+            adjustedAmount = Math.floor(mappedAmount * 10 ** inputTokenInfo.decimals);
+
+          } else {
+            const userExitPercentages = walletSettings.exitPercentages || defaultSettings.exitPercentages;
+            // Map initiating user's selected percentage to this user's settings
+            const mappedPercentage = customPercentage || mapSelectionToUserSettings(
+              initiatingExitPercentages!,
+              userExitPercentages,
+              selectionIndex as number,
+            );
+
+            // Get user's token balance
+            const { balance: tokenBalance } = await getTokenBalance(walletPublicKey, inputTokenAddress);
+
+            mappedAmount = (mappedPercentage / 100) * tokenBalance;
+            adjustedAmount = Math.floor(mappedAmount); // Amount in smallest unit
+          }
+
+          // Create swap preview
+          const { quoteData: userQuoteData, estimatedOutput: userEstimatedOutput } = await createSwapPreview(
+            adjustedAmount,
+            inputTokenAddress,
+            outputTokenAddress,
+            walletSettings
+          );
+
+          const swapResult = await executeSwapForUser({
+            interaction,
+            user,
+            wallet,
+            selectedAmount: adjustedAmount,
+            settings: walletSettings,
+            outputTokenAddress,
+            inputTokenAddress,
+            isBuyOperation,
+            inputTokenInfo,
+            outputTokenInfo,
+            estimatedOutput: userEstimatedOutput,
+            initiatingUser,
+            quoteData: userQuoteData,
+            selectionIndex,
+          });
+
+          tradeResults.push({
+            user,
+            swapResult,
+            mappedAmount,
+            estimatedOutput: userEstimatedOutput,
+            inputTokenInfo,
+            outputTokenInfo,
+          });
+        } catch (error) {
+          console.error(`Error executing swap for wallet ${walletInfo.wallet.publicKey}:`, error);
+        }
+      })
+    )
+  );
+
+  return tradeResults;
+}
 
 export async function getUser(userId: string) {
   const user = await UserAccount.findOne({ discordId: userId });
@@ -66,12 +241,13 @@ Wrap/Unwrap SOL: ${settings.wrapUnwrapSOL ? 'Enabled' : 'Disabled'}
   };
 }
 
+// Modify executeSwapForUser to include selectionIndex
 export async function executeSwapForUser(params: {
   interaction: CommandInteraction;
   user: any;
   wallet: any;
   selectedAmount: number;
-  settings: any;
+  settings: Settings;
   outputTokenAddress: string;
   inputTokenAddress: string;
   isBuyOperation: boolean;
@@ -80,6 +256,7 @@ export async function executeSwapForUser(params: {
   estimatedOutput: number;
   initiatingUser: any;
   quoteData: any;
+  selectionIndex?: number | 'Custom';
 }) {
   const {
     interaction,
@@ -95,6 +272,7 @@ export async function executeSwapForUser(params: {
     estimatedOutput,
     initiatingUser,
     quoteData,
+    selectionIndex,
   } = params;
 
   try {
@@ -110,6 +288,8 @@ export async function executeSwapForUser(params: {
     const { balance: inputBalanceAfter } = await getTokenBalance(wallet.publicKey, inputTokenAddress);
     const { balance: outputBalanceAfter } = await getTokenBalance(wallet.publicKey, outputTokenAddress);
 
+    const truncatedWallet = truncatedString(wallet.publicKey, 4);
+
     if (swapResult.success) {
       await recordTrade(
         user.discordId,
@@ -119,45 +299,90 @@ export async function executeSwapForUser(params: {
         isBuyOperation ? outputTokenAddress : inputTokenAddress
       );
 
-      // Prepare the swap content message
       const swapContent = isBuyOperation
-        ? `Bought: ${(estimatedOutput).toFixed(6)} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>) using ${(selectedAmount / 10 ** inputTokenInfo.decimals).toFixed(6)} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenAddress}>)\n`
-        : `Sold: ${(selectedAmount / 10 ** inputTokenInfo.decimals).toFixed(6)} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenAddress}>) and received ${(estimatedOutput).toFixed(6)} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>)\n`;
+        ? `Bought: ${(estimatedOutput).toFixed(6)} ${outputTokenInfo.symbol} using ${(selectedAmount / 10 ** inputTokenInfo.decimals).toFixed(6)} ${inputTokenInfo.symbol} from wallet ${truncatedWallet}\n`
+        : `Sold: ${(selectedAmount / 10 ** inputTokenInfo.decimals).toFixed(6)} ${inputTokenInfo.symbol} from wallet ${truncatedWallet}, received ${(estimatedOutput).toFixed(6)} ${outputTokenInfo.symbol}\n`;
 
       const balanceContent = `New Balances:\n- ${inputTokenInfo.symbol}: ${inputBalanceAfter.toFixed(6)}\n- ${outputTokenInfo.symbol}: ${outputBalanceAfter.toFixed(6)}`;
 
       // Send a direct message to the user about their trade
-      try {
-        const userDiscord = await interaction.client.users.fetch(user.discordId);
-        await userDiscord.send({
-          content: `**Swap performed successfully!**\n\n${swapContent}${balanceContent}\nTransaction ID: [${truncatedString(swapResult.signature, 4)}](<https://solscan.io/tx/${swapResult.signature}>)`,
-        });
-      } catch (dmError) {
-        console.error('Failed to send DM to user:', dmError);
-      }
-
-      // If the user is the initiating user, edit the original interaction
       if (user.discordId === initiatingUser.discordId) {
         await interaction.editReply({
-          content: `Swap Complete!\n\n${swapContent}\nTransaction ID: [${truncatedString(swapResult.signature, 4)}](<https://solscan.io/tx/${swapResult.signature}>)`,
+          content: `Swap Complete!\n\n${swapContent}\nTransaction ID: [${truncatedString(swapResult.signature, 4)}](<https://solscan.io/tx/${swapResult.signature}>)\n
+          Wallet: [${truncatedWallet}](<https://solscan.io/account/${wallet.publicKey}>)`,
           components: [],
         });
+      } else {
+        try {
+          const userDiscord = await interaction.client.users.fetch(user.discordId);
+          await userDiscord.send({
+            content: `**Swap performed successfully!**\n\n${swapContent}${balanceContent}\n
+            Transaction ID: [${truncatedString(swapResult.signature, 4)}](<https://solscan.io/tx/${swapResult.signature}>)\n
+            Wallet: [${truncatedWallet}](<https://solscan.io/account/${wallet.publicKey}>)`,
+          });
+        } catch (dmError) {
+          console.error('Failed to send DM to user:', dmError);
+        }
       }
 
-      const publicMessage = `**${interaction.user.username}** ${isBuyOperation ? 'bought' : 'sold'} a **${selectionIndex}** amount of **[${isBuyOperation ? outputTokenInfo.symbol : inputTokenInfo.symbol}](<https://solscan.io/token/${isBuyOperation ? outputTokenAddress : inputTokenAddress}>)** at **${isBuyOperation ? estimatedOutput/amount : amount/estimatedOutput} ${outputTokenInfo.symbol}/${inputTokenInfo.symbol}**`;
+      // Prepare public message
+      const selectionLabels = isBuyOperation
+        ? ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌', 'Massive 🦍', 'MEGAMOON 🌝']
+        : ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌'];
+
+      const selectionLabel =
+        selectionIndex !== undefined &&
+        selectionIndex !== 'Custom' &&
+        selectionLabels[selectionIndex]
+          ? selectionLabels[selectionIndex]
+          : 'Custom';
+
+      const publicMessage = `**${user.username || user.discordId}** ${
+        isBuyOperation ? 'bought' : 'sold'
+      } a **${selectionLabel}** amount of **[${isBuyOperation ? outputTokenInfo.symbol : inputTokenInfo.symbol}](<https://solscan.io/token/${
+        isBuyOperation ? outputTokenAddress : inputTokenAddress
+      }>)** at **${isBuyOperation ? estimatedOutput/selectedAmount : selectedAmount/estimatedOutput} ${outputTokenInfo.symbol}/${inputTokenInfo.symbol}**`;
+
+      // Send public message to the channel
       await interaction.channel?.send(publicMessage);
+
+      return swapResult;
     } else {
-      // Fetch token balances before the trade (assuming they haven't changed)
-      const { balance: inputBalanceBefore } = await getTokenBalance(wallet.publicKey, inputTokenAddress);
-      const { balance: outputBalanceBefore } = await getTokenBalance(wallet.publicKey, outputTokenAddress);
-
-      const balanceContent = `Current Balances:\n- ${inputTokenInfo.symbol}: ${inputBalanceBefore.toFixed(6)}\n- ${outputTokenInfo.symbol}: ${outputBalanceBefore.toFixed(6)}`;
-
-      let errorMessage = `Failed to execute trade for wallet ${wallet.publicKey}.\nReason: ${swapResult.transactionMessage}\nError Details: ${swapResult.error}\n\n${balanceContent}`;
+      let errorMessage = `Failed to execute ${isBuyOperation ? 'buy' : 'sell'} order for wallet ${truncatedWallet}.\nReason: ${swapResult.transactionMessage}\nError Details: ${swapResult.error}`;
       if (swapResult.signature) {
         errorMessage += `\nTransaction may still be processing. Check signature [${swapResult.signature}](<https://solscan.io/tx/${swapResult.signature}>).`;
       }
-      // Send error message to the user via DM
+
+      if (user.discordId === initiatingUser.discordId) {
+        await interaction.editReply({
+          content: errorMessage,
+          components: [],
+        });
+      } else {
+        try {
+          const userDiscord = await interaction.client.users.fetch(user.discordId);
+          await userDiscord.send({
+            content: errorMessage,
+          });
+        } catch (dmError) {
+          console.error('Failed to send DM to user:', dmError);
+        }
+      }
+
+      return swapResult;
+    }
+
+  } catch (error: any) {
+    console.error('Error executing swap:', error);
+    const truncatedWallet = truncatedString(wallet.publicKey, 4);
+    let errorMessage = `Failed to execute trade for wallet ${truncatedWallet}. Please try again later.`;
+
+    if (user.discordId === initiatingUser.discordId) {
+      await interaction.editReply({
+        content: errorMessage,
+        components: [],
+      });
+    } else {
       try {
         const userDiscord = await interaction.client.users.fetch(user.discordId);
         await userDiscord.send({
@@ -167,33 +392,13 @@ export async function executeSwapForUser(params: {
         console.error('Failed to send DM to user:', dmError);
       }
     }
-
-    return swapResult;
-  } catch (error: any) {
-    console.error('Error executing swap:', error);
-    // Fetch token balances before the trade (assuming they haven't changed)
-    const { balance: inputBalance } = await getTokenBalance(wallet.publicKey, inputTokenAddress);
-    const { balance: outputBalance } = await getTokenBalance(wallet.publicKey, outputTokenAddress);
-
-    const balanceContent = `Current Balances:\n- ${inputTokenInfo.symbol}: ${inputBalance.toFixed(6)}\n- ${outputTokenInfo.symbol}: ${outputBalance.toFixed(6)}`;
-
-    let errorMessage = `Failed to execute trade for wallet ${wallet.publicKey}. Please try again later.\n\n${balanceContent}`;
-    // Send error message to the user via DM
-    try {
-      const userDiscord = await interaction.client.users.fetch(user.discordId);
-      await userDiscord.send({
-        content: errorMessage,
-      });
-    } catch (dmError) {
-      console.error('Failed to send DM to user:', dmError);
-    }
     return { success: false, error: error.message };
   }
 }
 
+// Modify executeSwap to handle transaction confirmation
 export async function executeSwap(userId: string, walletPublicKey: string, swapTransaction: string) {
   try {
-    // Optional: If your signing server has rate limits, wrap this call
     const response = await limiter.schedule({ id: `execute-swap-${userId}` }, async () => {
       return axios.post(`${API_BASE_URL}/sign-and-send`, {
         userId,
@@ -204,15 +409,14 @@ export async function executeSwap(userId: string, walletPublicKey: string, swapT
 
     const { signature } = response.data;
 
-    // const confirmed = await limiter.schedule({ id: `confirm-${signature}` }, async () => {
-    //   return await connection.confirmTransaction(signature, 'confirmed');
-    // });
+    // Optionally wait for the transaction to be confirmed
+    // const confirmed = await connection.confirmTransaction(signature, 'confirmed');
 
     return {
       success: true,
       signature,
       error: null,
-      transactionMessage: signature ? 'Transaction confirmed' : 'Transaction not confirmed',
+      transactionMessage: signature ? 'Transaction submitted' : 'Transaction not submitted',
     };
   } catch (error: any) {
     console.error('Swap execution failed:', error);

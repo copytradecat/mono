@@ -6,6 +6,7 @@ import { useWallets } from '../hooks/useWallets';
 import axios from 'axios';
 import pLimit from 'p-limit';
 import { getTokenBalances } from '../services/jupiter.service';
+import { PresetSchema, SettingsSchema, WalletSchema } from '../models/User';
 
 interface TokenBalance {
   mint: string;
@@ -21,7 +22,7 @@ export default function WalletManagement() {
   const [walletCreated, setWalletCreated] = useState(false);
   const [walletSeed, setWalletSeed] = useState('');
   const [publicAddress, setPublicAddress] = useState<string | null>(null);
-  const [presets, setPresets] = useState([]);
+  const [presets, setPresets] = useState<typeof PresetSchema[]>([]);
 
   const fetchTokenBalances = async (publicKey: string) => {
     const limit = pLimit(10); // Limit to 10 concurrent requests
@@ -29,23 +30,23 @@ export default function WalletManagement() {
     try {
       const tokenAccountsResponse = await getTokenBalances(publicKey);
 
-      const tokenAccounts = tokenAccountsResponse.value;
+      const { balances, metadata } = tokenAccountsResponse;
 
-      const balancesPromises = tokenAccounts.map((accountInfo) =>
+      const balancesPromises = Object.entries(balances).map(([mintAddress, balance]) =>
         limit(async () => {
-          const mintAddress = accountInfo.account.data.parsed.info.mint;
-          const tokenAmountData = accountInfo.account.data.parsed.info.tokenAmount;
-          const amount = parseFloat(tokenAmountData.amount) / Math.pow(10, tokenAmountData.decimals);
+          const tokenMetadata = metadata[mintAddress];
+          const amount = parseFloat(balance.toString()) / Math.pow(10, tokenMetadata.decimals);
 
           return { mint: mintAddress, balance: amount };
         })
       );
 
-      const balances = await Promise.all(balancesPromises);
+      const fetchedBalances = await Promise.all(balancesPromises);
 
-      setTokenBalances(balances);
+      setTokenBalances(fetchedBalances);
     } catch (error) {
       console.error('Error fetching token balances:', error);
+      setTokenBalances([]);
     }
   };
 
@@ -158,7 +159,7 @@ export default function WalletManagement() {
     setPresets(response.data);
   };
 
-  const applyPresetToWallet = async (walletId, presetName) => {
+  const applyPresetToWallet = async (walletId: string, presetName: string) => {
     await axios.post(`/api/wallets/${walletId}/apply-preset`, { presetName });
     fetchWallets();
   };
@@ -190,9 +191,9 @@ export default function WalletManagement() {
         <div key={index}>
           <p>Wallet {index + 1}: {wallet.publicKey || 'No public key'}</p>
           <button onClick={() => handleRemoveWallet(wallet.publicKey)}>Remove</button>
-          <label htmlFor={`preset-select-${wallet._id}`}>Apply Preset:</label>
+          <label htmlFor={`preset-select-${wallet.publicKey}`}>Apply Preset:</label>
           <select
-            id={`preset-select-${wallet._id}`}
+            id={`preset-select-${wallet.publicKey}`}
             value={wallet.presetName || ''}
             onChange={(e) => applyPresetToWallet(wallet._id, e.target.value)}
           >
