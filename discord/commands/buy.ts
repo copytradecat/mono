@@ -7,45 +7,58 @@ import {
 } from 'discord.js';
 import {
   getUser,
-  getBalance,
   createSwapPreview,
-  executeSwap,
-  recordTrade,
+  promptUserConfirmation,
+  executeSwapsForUsers,
+  generateSelectionButtons,
   swapTime,
-  executeSwapTransaction,
 } from './swap-base';
-import { getSwapTransaction, getTokenInfo } from '../../src/services/jupiter.service';
+import { getTokenInfo, getTokenBalance } from '../../src/services/jupiter.service';
 import { defaultSettings } from '../../src/components/BotSettings';
-import { truncatedString } from '../../src/lib/utils';
+import { getConnectedWalletsInChannel, truncatedString } from '../../src/lib/utils';
 
 export async function handleBuyCommand(interaction: CommandInteraction) {
-  const outputTokenAddress = interaction.options.getString('token', true);
-  const userId = interaction.user.id;
-
-  await interaction.deferReply({ ephemeral: true });
-
   try {
-    const user = await getUser(userId);
-    const wallet = user.wallets[0];
+    // Check if the interaction is still valid
+    if (!interaction.isRepliable()) {
+      console.log('Interaction is no longer valid');
+      return;
+    }
+
+    try {
+      await interaction.deferReply({ ephemeral: true });
+    } catch (error) {
+      console.error('Error deferring reply:', error);
+      return;
+    }
+
+    const outputTokenAddress = interaction.options.getString('token', true);
+    const initiatingUserId = interaction.user.id;
+    const channelId = interaction.channelId;
+
+    const initiatingUser = await getUser(initiatingUserId);
+    const initiatingWallet = initiatingUser.wallets.find((wallet: any) => wallet.connectedChannels[0] === channelId);
     const inputToken = 'So11111111111111111111111111111111111111112'; // SOL mint address
     const inputTokenInfo = await getTokenInfo(inputToken);
     const outputTokenInfo = await getTokenInfo(outputTokenAddress);
-    const entryAmounts = user.settings.entryAmounts || [0.05, 0.1, 0.25, 0.5, 1];
-    const settings = user.settings || defaultSettings;
+    const initiatingEntryAmounts = initiatingUser.settings.entryAmounts || defaultSettings.entryAmounts;
+    const initiatingSettings = initiatingUser.settings || defaultSettings;
 
-    const balanceLamports = await getBalance(wallet.publicKey);
-    const balance = balanceLamports / 10 ** 9; // Convert lamports to SOL
+    // Fetch all connected wallets in this channel
+    const connectedWallets = await getConnectedWalletsInChannel(channelId);
 
-    const buttons = entryAmounts.map(amount => 
+    // Generate amount buttons using users' preset entryAmounts
+    const amountButtons = initiatingEntryAmounts.map((amount: number, index: number) =>
       new ButtonBuilder()
-        .setCustomId(`amount_${amount}`)
-        .setLabel(`${amount} SOL`)
+        .setCustomId(`amount_${index}`)
+        .setLabel(`${amount} ${inputTokenInfo.symbol}`)
         .setStyle(ButtonStyle.Primary)
     );
 
+    // Add custom and cancel buttons
     const customButton = new ButtonBuilder()
       .setCustomId('custom')
-      .setLabel('Custom amount')
+      .setLabel('Custom')
       .setStyle(ButtonStyle.Secondary);
 
     const cancelButton = new ButtonBuilder()
@@ -53,195 +66,303 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
       .setLabel('Cancel')
       .setStyle(ButtonStyle.Danger);
 
-    const rows = [];
-    for (let i = 0; i < buttons.length; i += 5) {
-      rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(buttons.slice(i, i + 5)));
-    }
-    rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(customButton, cancelButton));
+    // Assemble buttons into ActionRows
+    const buttonRows: ActionRowBuilder<ButtonBuilder>[] = [];
+    const maxButtonsPerRow = 5;
 
-    const response = await interaction.editReply({
-      content: `Select your entry size for buying ${outputTokenInfo.symbol} ([${truncatedString(outputTokenAddress, 4)}](<https://solscan.io/token/${outputTokenAddress}>)):`,
-      components: rows,
+    let currentRow = new ActionRowBuilder<ButtonBuilder>();
+    for (const button of amountButtons) {
+      if (currentRow.components.length >= maxButtonsPerRow) {
+        // Only add the row if it has components
+        if (currentRow.components.length > 0) {
+          buttonRows.push(currentRow);
+        }
+        currentRow = new ActionRowBuilder<ButtonBuilder>();
+      }
+      currentRow.addComponents(button);
+    }
+
+    // Add custom and cancel buttons
+    if (currentRow.components.length >= maxButtonsPerRow) {
+      buttonRows.push(currentRow);
+      currentRow = new ActionRowBuilder<ButtonBuilder>();
+    }
+    currentRow.addComponents(customButton);
+
+    if (currentRow.components.length >= maxButtonsPerRow) {
+      buttonRows.push(currentRow);
+      currentRow = new ActionRowBuilder<ButtonBuilder>();
+    }
+    currentRow.addComponents(cancelButton);
+
+    // Add any remaining buttons
+    if (currentRow.components.length > 0) {
+      buttonRows.push(currentRow);
+    }
+
+    // Ensure we have at least one ActionRow with components
+    if (buttonRows.length === 0) {
+      currentRow = new ActionRowBuilder<ButtonBuilder>();
+      currentRow.addComponents(cancelButton);
+      buttonRows.push(currentRow);
+    }
+
+    await interaction.editReply({
+      content: `Select the amount of ${outputTokenInfo.symbol} ([${truncatedString(outputTokenAddress, 4)}](<https://solscan.io/token/${outputTokenAddress}>)) you wish to buy:`,
+      components: buttonRows,
     });
 
-    try {
-      const collectorFilter = (i: { user: { id: string } }) => i.user.id === interaction.user.id;
-      const confirmation = await response.awaitMessageComponent({
-        filter: collectorFilter,
-        // Remove the time limit or increase it significantly
-        // time: 60000,
-      });
+    const collector = interaction.channel?.createMessageComponentCollector({
+      componentType: ComponentType.Button,
+      time: 60000, // 60 seconds
+    });
 
-      await confirmation.deferUpdate();
-
-      if (confirmation.customId === 'cancel') {
-        await interaction.editReply({ content: 'Buy order cancelled.', components: [] });
-        return;
-      }
-
-      let selectedAmount: number;
-      if (confirmation.customId === 'custom') {
-        await interaction.editReply({
-          content: 'Please enter the custom amount in SOL:',
-          components: [],
-        });
-        try {
-          const customAmountResponse = await interaction.channel!.awaitMessages({
-            filter: (m) => m.author.id === interaction.user.id,
-            max: 1,
-            time: 30000,
-            errors: ['time'],
-          });
-          selectedAmount = parseFloat(customAmountResponse.first()!.content);
-          if (isNaN(selectedAmount) || selectedAmount <= 0) {
-            await interaction.editReply({
-              content: 'Invalid amount. Buy order cancelled.',
-              components: [],
-            });
-            return;
-          }
-        } catch (error) {
-          await interaction.editReply({
-            content: 'No amount provided. Buy order cancelled.',
-            components: [],
-          });
+    collector.on('collect', async (btnInteraction) => {
+      try {
+        if (!btnInteraction.isRepliable()) {
+          console.log('Button interaction is no longer valid');
           return;
         }
-      } else {
-        selectedAmount = parseFloat(confirmation.customId.split('_')[1]);
-      }
+        await btnInteraction.deferUpdate();
 
-      let requiredBalance = selectedAmount;
+        if (btnInteraction.customId.startsWith('amount_')) {
+          const index = parseInt(btnInteraction.customId.replace('amount_', ''));
+          const selectedAmount = initiatingEntryAmounts[index];
+          const selectionIndex = index;
 
-      if (inputToken === 'So11111111111111111111111111111111111111112') {
-        requiredBalance = selectedAmount + 0.005; // Add 0.005 SOL for transaction fees (only for SOL)
-      }
-      if (balance < requiredBalance) {
-        await interaction.editReply({
-          content: `Insufficient balance. You need at least ${requiredBalance} ${inputTokenInfo.symbol} for this transaction.`,
-          components: [],
-        });
-        return;
-      }
+          collector.stop();
 
-      const adjustedAmount = Math.floor(selectedAmount * 10 ** inputTokenInfo.decimals);
+          // Create swap preview
+          const adjustedAmount = Math.floor(selectedAmount * 10 ** inputTokenInfo.decimals);
 
-      const { quoteData, swapPreview, estimatedOutput } = await createSwapPreview(
-        adjustedAmount,
-        inputToken,
-        outputTokenAddress,
-        settings
-      );
-
-      const executeButton = new ButtonBuilder()
-        .setCustomId('execute_swap')
-        .setLabel('Swap Now')
-        .setStyle(ButtonStyle.Primary);
-
-      const cancelButton = new ButtonBuilder()
-        .setCustomId('cancel_swap')
-        .setLabel('Cancel')
-        .setStyle(ButtonStyle.Danger);
-
-      const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(executeButton, cancelButton);
-      const fiveSecondsFromNow = Math.floor(Date.now() / 1000) + 5;
-      await interaction.editReply({
-        content: `${swapPreview}\n\nSubmitting swap in 5 seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`,
-        components: [buttonRow],
-      });
-
-      try {
-        const buttonCollector = (await interaction.fetchReply()).createMessageComponentCollector({
-          componentType: ComponentType.Button,
-          time: 5000, // Set to 5 seconds
-        });
-
-        let transactionCancelled = false;
-        let transactionExecuted = false;
-
-        buttonCollector.on('collect', async (btnInteraction) => {
-          if (btnInteraction.user.id === userId) {
-            if (btnInteraction.customId === 'cancel_swap') {
-              transactionCancelled = true;
-              buttonCollector.stop();
-              await btnInteraction.update({
-                content: 'Transaction cancelled.',
-                components: [],
-              });
-            } else if (btnInteraction.customId === 'execute_swap') {
-              transactionExecuted = true;
-              buttonCollector.stop();
-              await btnInteraction.update({
-                content: 'Processing your swap...',
-                components: [],
-              });
-              await executeSwapTransaction(
-                interaction,
-                userId,
-                wallet,
-                quoteData,
-                settings,
-                selectedAmount,
-                inputToken,
-                outputTokenAddress,
-                inputTokenInfo,
-                outputTokenInfo,
-                estimatedOutput,
-                true, // isBuyOperation
-                ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌', 'Massive 🦍', 'MEGAMOON 🌝'],
-                entryAmounts
-              );
-            }
-          } else {
-            await btnInteraction.reply({ content: 'You cannot use this button.', ephemeral: true });
-          }
-        });
-
-        buttonCollector.on('end', async (collected) => {
-          if (!transactionCancelled && !transactionExecuted) {
-            // If no button was pressed, execute the swap automatically
-            await interaction.editReply({
-              content: 'Processing your swap...',
-              components: [],
-            });
-            await executeSwapTransaction(
-              interaction,
-              userId,
-              wallet,
-              quoteData,
-              settings,
-              selectedAmount,
+          try {
+            const { quoteData, swapPreview, estimatedOutput } = await createSwapPreview(
+              adjustedAmount,
               inputToken,
               outputTokenAddress,
+              initiatingSettings,
               inputTokenInfo,
-              outputTokenInfo,
-              estimatedOutput,
-              true, // isBuyOperation
-              ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌', 'Massive 🦍', 'MEGAMOON 🌝'],
-              entryAmounts
+              outputTokenInfo
             );
-          }
-        });
 
-      } catch (error) {
-        console.error('Error in button collector:', error);
-        await interaction.followUp({
-          content: 'An error occurred while processing your buy order.',
-          ephemeral: true,
-        });
+            // Prompt user confirmation
+            const userResponse = await promptUserConfirmation(
+              interaction,
+              `${swapPreview}\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
+            );
+
+            if (userResponse === 'swap_now' || userResponse === 'timeout') {
+              await interaction.editReply({
+                content: 'Processing swaps...',
+                components: [],
+              });
+
+              // Execute swaps for users
+              const tradeResults = await executeSwapsForUsers({
+                interaction,
+                connectedWallets,
+                selectionIndex,
+                isBuyOperation: true,
+                inputTokenInfo,
+                outputTokenInfo,
+                inputTokenAddress: inputToken,
+                outputTokenAddress,
+                initiatingUser,
+                initiatingSettings,
+                initiatingEntryAmounts,
+                channelId
+              });
+
+              // All messaging is handled within executeSwapsForUsers
+
+            } else if (userResponse === 'cancel_swap') {
+              await interaction.editReply({
+                content: 'Swap cancelled by user.',
+                components: [],
+              });
+            }
+          } catch (error: any) {
+            console.error('Error in swap process:', error);
+            await interaction.editReply({
+              content: `An error occurred during the swap process: ${error.message}`,
+              components: [],
+            });
+          }
+        } else if (btnInteraction.customId === 'custom') {
+          collector.stop();
+
+          // Prompt the user to enter a custom amount
+          await btnInteraction.editReply({
+            content: 'Please enter a custom amount (in SOL):',
+            components: [],
+          });
+
+          // Create a message collector to collect the user's input
+          const messageFilter = (msg: any) => msg.author.id === initiatingUserId;
+          const messageCollector = interaction.channel?.createMessageCollector({
+            filter: messageFilter,
+            max: 1,
+            time: 30000, // 30 seconds to enter amount
+          });
+
+          messageCollector?.on('collect', async (message: any) => {
+            try {
+              const input = message.content.trim();
+              const customAmount = parseFloat(input);
+              if (isNaN(customAmount) || customAmount <= 0) {
+                await interaction.editReply({
+                  content: 'Invalid amount entered. Transaction cancelled.',
+                });
+                return;
+              }
+
+              // Create swap preview
+              const adjustedAmount = Math.floor(customAmount * 10 ** inputTokenInfo.decimals);
+              let requiredBalance = adjustedAmount;
+
+              // if (inputToken === 'So11111111111111111111111111111111111111112') {
+              //   requiredBalance = adjustedAmount + 0.005; // Add 0.005 SOL for transaction fees (only for SOL)
+              // }
+              // if (balance < requiredBalance) {
+              if(adjustedAmount <= 0) {
+                await interaction.editReply({
+                  // content: `Insufficient balance. You need at least ${requiredBalance} ${inputTokenInfo.symbol} for this transaction.`,
+                  content: 'Trade amount must be greater than 0.',
+                  components: [],
+                });
+                return;
+              }
+
+              const { quoteData, swapPreview, estimatedOutput } = await createSwapPreview(
+                adjustedAmount,
+                inputToken,
+                outputTokenAddress,
+                initiatingSettings,
+                inputTokenInfo,
+                outputTokenInfo
+              );
+
+              // Prompt user confirmation
+              const userResponse = await promptUserConfirmation(
+                interaction,
+                `${swapPreview}\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
+              );
+
+              if (userResponse === 'swap_now' || userResponse === 'timeout') {
+                userResponse.on('collect', async (i) => {
+                  try {
+                    if (i.isRepliable()) {
+                      await i.deferUpdate();
+                    } else {
+                      console.warn('Interaction not repliable.');
+                      return;
+                    }
+
+                    if (i.customId === 'swap_now') {
+                      userResponse.stop();
+
+                      await i.editReply({
+                        content: 'Processing swaps...',
+                        components: [],
+                      });
+
+                      // Execute swaps for users
+                      const tradeResults = await executeSwapsForUsers({
+                        interaction,
+                        connectedWallets,
+                        selectionIndex: 'Custom',
+                        isBuyOperation: true,
+                        inputTokenInfo,
+                        outputTokenInfo,
+                        inputTokenAddress: inputToken,
+                        outputTokenAddress,
+                        initiatingUser,
+                        initiatingSettings,
+                        customAmount,
+                        channelId
+                      });
+
+                      // All messaging is handled within executeSwapForUser
+
+                    } else if (i.customId === 'cancel_swap') {
+                      userResponse.stop();
+                      await i.editReply({
+                        content: 'Transaction cancelled.',
+                        components: [],
+                      });
+                    }
+                  } catch (error) {
+                    console.error('Error in userResponse:', error);
+                    try {
+                      await i.editReply({
+                        content: 'An error occurred during the swap execution.',
+                      });
+                    } catch (followUpError) {
+                      console.error('Error sending follow-up message:', followUpError);
+                    }
+                  }
+                });
+              } else if (userResponse === 'cancel_swap') {
+                await interaction.editReply({
+                  content: 'Swap cancelled.',
+                  components: [],
+                });
+              }
+
+            } catch (error) {
+              console.error('Error in messageCollector:', error);
+              await interaction.editReply({
+                content: 'An error occurred while processing your input.',
+              });
+            }
+          });
+
+        } else if (btnInteraction.customId === 'cancel') {
+          collector.stop();
+          await btnInteraction.editReply({
+            content: 'Transaction cancelled.',
+            components: [],
+          });
+        }
+
+      } catch (error: any) {
+        console.error('Error in collector:', error);
+        try {
+          await btnInteraction.followUp({
+            content: `An error occurred during the process: ${error.message}`,
+            ephemeral: true,
+          });
+        } catch (followUpError) {
+          console.error('Error sending follow-up message:', followUpError);
+        }
       }
-    } catch (error) {
-      console.error('Buy order timed out or was cancelled:', error);
-      await interaction.editReply({
-        content: 'Buy order timed out or was cancelled. Please try again.',
-        components: [],
-      });
-    }
+    });
+
+    collector?.on('end', async (_, reason) => {
+      if (reason === 'time') {
+        try {
+          await interaction.editReply({
+            content: 'Interaction timed out.',
+            components: [],
+          });
+        } catch (error) {
+          console.error('Error editing reply on timeout:', error);
+        }
+      }
+    });
+
   } catch (error) {
     console.error('Error in handleBuyCommand:', error);
-    await interaction.editReply({
-      content: 'An error occurred while processing your buy order.',
-      components: [],
-    });
+    if (interaction.isRepliable()) {
+      try {
+        await interaction.editReply({
+          content: 'An error occurred while processing your request.',
+        });
+      } catch (editError) {
+        console.error('Error editing reply:', editError);
+      }
+    } else {
+      console.log('Interaction is no longer valid for error response');
+    }
   }
 }

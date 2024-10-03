@@ -4,7 +4,7 @@ import { getTokenBalances } from '../services/jupiter.service';
 import Link from 'next/link';
 import axios from 'axios';
 import { useWallets } from '../hooks/useWallets';
-
+import { debounce } from '../lib/limiter';
 interface AggregateBalance {
   [key: string]: number;
 }
@@ -15,25 +15,25 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
   const [balances, setBalances] = useState<any>({});
   const [aggregateBalance, setAggregateBalance] = useState<AggregateBalance>({});
 
-  const fetchAggregateBalance = useCallback(async () => {
-    try {
-      const response = await axios.get('/api/get-aggregate-balance');
-      setAggregateBalance(response.data.aggregateBalance);
-    } catch (error) {
-      console.error('Failed to fetch aggregate balance:', error);
-      setAggregateBalance({});
-    }
-  }, []);
+  // const fetchAggregateBalance = useCallback(async () => {
+  //   try {
+  //     const response = await axios.get('/api/get-aggregate-balance');
+  //     setAggregateBalance(response.data.aggregateBalance);
+  //   } catch (error) {
+  //     console.error('Failed to fetch aggregate balance:', error);
+  //     setAggregateBalance({});
+  //   }
+  // }, []);
 
-  useEffect(() => {
-    if (session) {
-      fetchAggregateBalance();
-    }
-  }, [session, fetchAggregateBalance]);
+  // useEffect(() => {
+  //   if (session) {
+  //     fetchAggregateBalance();
+  //   }
+  // }, [session, fetchAggregateBalance]);
 
   useEffect(() => {
     if (selectedWallet) {
-      fetchBalances(selectedWallet);
+      debounce(fetchBalances(selectedWallet), 1000);
     }
   }, [selectedWallet]);
 
@@ -50,8 +50,8 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
       console.error('Error fetching balances:', error);
       setBalances((prevBalances: { [key: string]: { balances: any, metadata: any, error: string | null } }) => ({
         ...prevBalances,
-        [pubKey]: { 
-          balances: prevBalances[pubKey]?.balances || {}, 
+        [pubKey]: {
+          balances: prevBalances[pubKey]?.balances || {},
           metadata: prevBalances[pubKey]?.metadata || {},
           error: 'Failed to fetch balances'
         }

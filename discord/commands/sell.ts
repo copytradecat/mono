@@ -8,52 +8,55 @@ import {
 import {
   getUser,
   createSwapPreview,
-  executeSwap,
-  recordTrade,
+  promptUserConfirmation,
+  executeSwapsForUsers,
   swapTime,
-  executeSwapTransaction
 } from './swap-base';
-import { Connection, PublicKey } from '@solana/web3.js';
-import { rateLimitedRequest, getTokenInfo, getSwapTransaction, getTokenBalance } from '../../src/services/jupiter.service';
+import { getTokenInfo, getTokenBalance } from '../../src/services/jupiter.service';
 import { defaultSettings } from '../../src/components/BotSettings';
-import { truncatedString } from '../../src/lib/utils';
-
-const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
+import { getConnectedWalletsInChannel } from '../../src/lib/utils';
 
 export async function handleSellCommand(interaction: CommandInteraction) {
-  const inputTokenAddress = interaction.options.getString('token', true);
-  const userId = interaction.user.id;
-
-  await interaction.deferReply({ ephemeral: true });
-
   try {
-    const user = await getUser(userId);
-    const wallet = user.wallets[0];
-    const outputToken = 'So11111111111111111111111111111111111111112'; // SOL mint address
-
-    const exitPercentages = user.settings.exitPercentages || defaultSettings.exitPercentages;
-    const settings = user.settings || defaultSettings;
-
-    // Fetch token balance and info
-    let { balance: tokenBalance, decimals } = await getTokenBalance(wallet.publicKey, inputTokenAddress);
-    const inputTokenInfo = await getTokenInfo(inputTokenAddress);
-    const outputTokenInfo = outputToken==='So11111111111111111111111111111111111111112' ? await getTokenInfo(outputToken) : {"address":"So11111111111111111111111111111111111111112","name":"Wrapped SOL","symbol":"SOL","decimals":9,"logoURI":"https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png","tags":["verified","community","strict"],"daily_volume":112990735.53921615,"created_at":"2024-04-26T10:56:58.893768Z","freeze_authority":null,"mint_authority":null,"permanent_delegate":null,"minted_at":null,"extensions":{"coingeckoId":"wrapped-solana"}};
-
-    if (tokenBalance === 0) {
-      await interaction.editReply("You don't have any balance for this token.");
+    if (!interaction.isRepliable()) {
+      console.log('Interaction is no longer valid');
       return;
     }
 
-    const buttons = exitPercentages.map(percentage => 
+    try {
+      await interaction.deferReply({ ephemeral: true });
+    } catch (error) {
+      console.error('Error deferring reply:', error);
+      return;
+    }
+
+    const inputTokenAddress = interaction.options.getString('token', true);
+    const initiatingUserId = interaction.user.id;
+    const channelId = interaction.channelId;
+
+    const initiatingUser = await getUser(initiatingUserId);
+    const initiatingWallet = initiatingUser.wallets.find((wallet: any) => wallet.connectedChannels[0] === channelId);
+    const outputTokenAddress = 'So11111111111111111111111111111111111111112'; // SOL mint address
+    const inputTokenInfo = await getTokenInfo(inputTokenAddress);
+    const outputTokenInfo = await getTokenInfo(outputTokenAddress);
+    const initiatingExitPercentages = initiatingUser.settings.exitPercentages || defaultSettings.exitPercentages;
+    const initiatingSettings = initiatingUser.settings || defaultSettings;
+
+    // Fetch all connected wallets in this channel
+    const connectedWallets = await getConnectedWalletsInChannel(channelId);
+
+    // Generate percentage buttons using users' preset exitPercentages
+    const percentageButtons = initiatingExitPercentages.map((percentage: number, index: number) =>
       new ButtonBuilder()
-        .setCustomId(`percentage_${percentage}`)
+        .setCustomId(`percentage_${index}`)
         .setLabel(`${percentage}%`)
         .setStyle(ButtonStyle.Primary)
     );
 
+    // Add custom and cancel buttons
     const customButton = new ButtonBuilder()
       .setCustomId('custom')
-      .setLabel('Custom percentage')
+      .setLabel('Custom')
       .setStyle(ButtonStyle.Secondary);
 
     const cancelButton = new ButtonBuilder()
@@ -61,188 +64,355 @@ export async function handleSellCommand(interaction: CommandInteraction) {
       .setLabel('Cancel')
       .setStyle(ButtonStyle.Danger);
 
-    const rows = [];
-    for (let i = 0; i < buttons.length; i += 5) {
-      rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(buttons.slice(i, i + 5)));
-    }
-    rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(customButton, cancelButton));
+    // Assemble buttons into ActionRows
+    const buttonRows: ActionRowBuilder<ButtonBuilder>[] = [];
+    const maxButtonsPerRow = 5;
 
-    const response = await interaction.editReply({
-      content: `Select your exit percentage for selling ${inputTokenInfo.symbol} ([${truncatedString(inputTokenAddress, 4)}](<https://solscan.io/token/${inputTokenAddress}>)):`,
-      components: rows,
+    let currentRow = new ActionRowBuilder<ButtonBuilder>();
+    for (const button of percentageButtons) {
+      if (currentRow.components.length >= maxButtonsPerRow) {
+        // Only add the row if it has components
+        if (currentRow.components.length > 0) {
+          buttonRows.push(currentRow);
+        }
+        currentRow = new ActionRowBuilder<ButtonBuilder>();
+      }
+      currentRow.addComponents(button);
+    }
+
+    // Add custom and cancel buttons
+    if (currentRow.components.length >= maxButtonsPerRow) {
+      buttonRows.push(currentRow);
+      currentRow = new ActionRowBuilder<ButtonBuilder>();
+    }
+    currentRow.addComponents(customButton);
+
+    if (currentRow.components.length >= maxButtonsPerRow) {
+      buttonRows.push(currentRow);
+      currentRow = new ActionRowBuilder<ButtonBuilder>();
+    }
+    currentRow.addComponents(cancelButton);
+
+    // Add any remaining buttons
+    if (currentRow.components.length > 0) {
+      buttonRows.push(currentRow);
+    }
+
+    // Ensure we have at least one ActionRow with components
+    if (buttonRows.length === 0) {
+      currentRow = new ActionRowBuilder<ButtonBuilder>();
+      currentRow.addComponents(cancelButton);
+      buttonRows.push(currentRow);
+    }
+
+    await interaction.editReply({
+      content: `Select a percentage of your ${inputTokenInfo.symbol} to sell:`,
+      components: buttonRows,
     });
 
-    try {
-      const collectorFilter = (i: { user: { id: string } }) => i.user.id === interaction.user.id;
-      const confirmation = await response.awaitMessageComponent({
-        filter: collectorFilter,
-        // Remove the time limit or increase it significantly
-        // time: 60000,
-      });
+    const collector = interaction.channel?.createMessageComponentCollector({
+      componentType: ComponentType.Button,
+      time: 60000, // 60 seconds
+    });
 
-      await confirmation.deferUpdate();
-
-      if (confirmation.customId === 'cancel') {
-        await interaction.editReply({ content: 'Sell order cancelled.', components: [] });
-        return;
-      }
-
-      let exitPercentage: number;
-      if (confirmation.customId === 'custom') {
-        await interaction.editReply({
-          content: 'Please enter the custom exit percentage (enter 20 for 20%):',
-          components: [],
-        });
-        try {
-          const customPercentageResponse = await interaction.channel!.awaitMessages({
-            filter: (m) => m.author.id === interaction.user.id,
-            max: 1,
-            time: 30000,
-            errors: ['time'],
-          });
-          exitPercentage = parseFloat(customPercentageResponse.first()!.content);
-          if (isNaN(exitPercentage) || exitPercentage <= 0 || exitPercentage > 100) {
-            await interaction.editReply({
-              content: 'Invalid percentage. Sell order cancelled.',
-              components: [],
-            });
-            return;
-          }
-        } catch (error) {
-          await interaction.editReply({
-            content: 'No percentage provided. Sell order cancelled.',
-            components: [],
-          });
+    collector?.on('collect', async (btnInteraction) => {
+      try {
+        if (!btnInteraction.isRepliable()) {
+          console.log('Button interaction is no longer valid');
           return;
         }
-      } else {
-        exitPercentage = parseFloat(confirmation.customId.split('_')[1]);
-      }
+        await btnInteraction.deferUpdate();
 
-      const amount = tokenBalance * (exitPercentage / 100);
-      const adjustedAmount = Math.floor(amount * 10 ** decimals);
+        if (btnInteraction.customId.startsWith('percentage_')) {
+          const index = parseInt(btnInteraction.customId.replace('percentage_', ''));
+          const selectedPercentage = initiatingExitPercentages[index];
+          const selectionIndex = index;
 
-      await interaction.editReply({
-        content: `You have chosen to sell **${exitPercentage}%** of your **${inputTokenInfo.symbol}** balance.`,
-        components: [],
-      });
+          collector.stop();
 
-      const { quoteData, swapPreview, estimatedOutput } = await createSwapPreview(
-        adjustedAmount,
-        inputTokenAddress,
-        outputToken,
-        settings
-      );
+          // Calculate the amount to sell
+          const { balance: tokenBalance } = await getTokenBalance(initiatingWallet.publicKey, inputTokenAddress);
+          const adjustedAmount = Math.floor((selectedPercentage / 100) * tokenBalance);
 
-      const executeButton = new ButtonBuilder()
-        .setCustomId('execute_swap')
-        .setLabel('Swap Now')
-        .setStyle(ButtonStyle.Primary);
-
-      const cancelButton = new ButtonBuilder()
-        .setCustomId('cancel_swap')
-        .setLabel('Cancel')
-        .setStyle(ButtonStyle.Danger);
-
-      const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(executeButton, cancelButton);
-      const fiveSecondsFromNow = Math.floor(Date.now() / 1000) + 8;
-      await interaction.editReply({
-        content: `${swapPreview}\n\nSubmitting swap in 5 seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`,
-        components: [buttonRow],
-      });
-
-      try {
-        const buttonCollector = (await interaction.fetchReply()).createMessageComponentCollector({
-          componentType: ComponentType.Button,
-          time: 5000, // Set to 5 seconds
-        });
-
-        let transactionCancelled = false;
-        let transactionExecuted = false;
-
-        buttonCollector.on('collect', async (btnInteraction) => {
-          if (btnInteraction.user.id === userId) {
-            if (btnInteraction.customId === 'cancel_swap') {
-              transactionCancelled = true;
-              buttonCollector.stop();
-              await btnInteraction.update({
-                content: 'Transaction cancelled.',
+          if (adjustedAmount <= 0) {
+            if (interaction.isRepliable()) {
+              await interaction.editReply({
+                content:  `Your balance is insufficient to perform this swap.\nTrading ${adjustedAmount} but have only ${tokenBalance} ${inputTokenInfo.symbol}`,
                 components: [],
               });
-            } else if (btnInteraction.customId === 'execute_swap') {
-              transactionExecuted = true;
-              buttonCollector.stop();
-              await btnInteraction.update({
-                content: 'Processing your swap...',
-                components: [],
-              });
-              await executeSwapTransaction(
+            } else {
+              console.log('Interaction is no longer valid for editing reply\n(Your balance is insufficient to perform this swap.\)');
+            }
+            return;
+          }
+
+          // Create swap preview
+          try {
+            const { quoteData, swapPreview, estimatedOutput } = await createSwapPreview(
+              adjustedAmount,
+              inputTokenAddress,
+              outputTokenAddress,
+              initiatingSettings,
+              inputTokenInfo,
+              outputTokenInfo
+            );
+
+            // Prompt user confirmation
+            const userResponse = await promptUserConfirmation(
+              interaction,
+              `${swapPreview}\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
+            );
+
+            if (userResponse === 'swap_now' || userResponse === 'timeout') {
+              if (interaction.isRepliable()) {
+                await interaction.editReply({
+                  content: 'Processing swaps...',
+                  components: [],
+                });
+              } else {
+                console.log('Interaction is no longer valid for editing reply\n(Processing swaps...)');
+              }
+
+              // Execute swaps for users
+              const tradeResults = await executeSwapsForUsers({
                 interaction,
-                userId,
-                wallet,
-                quoteData,
-                settings,
-                amount,
-                inputTokenAddress,
-                outputToken,
+                connectedWallets,
+                selectionIndex,
+                isBuyOperation: false,
                 inputTokenInfo,
                 outputTokenInfo,
-                estimatedOutput,
-                false, // isBuyOperation
-                ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌'],
-                exitPercentages
-              );
-            }
-          } else {
-            await btnInteraction.reply({ content: 'You cannot use this button.', ephemeral: true });
-          }
-        });
+                inputTokenAddress,
+                outputTokenAddress,
+                initiatingUser,
+                initiatingSettings,
+                initiatingExitPercentages,
+                channelId
+              });
 
-        buttonCollector.on('end', async (collected) => {
-          if (!transactionCancelled && !transactionExecuted) {
-            // If no button was pressed, execute the swap automatically
-            await interaction.editReply({
-              content: 'Processing your swap...',
+              // All messaging is handled within executeSwapsForUsers
+
+            } else if (userResponse === 'cancel_swap') {
+              if (interaction.isRepliable()) {
+                await interaction.editReply({
+                  content: 'Swap cancelled by user.',
+                  components: [],
+                });
+              } else {
+                console.log('Interaction is no longer valid for editing reply\n(Swap cancelled by user.)');
+              }
+            }
+          } catch (error: any) {
+            console.error('Error in swap process:', error);
+            if (interaction.isRepliable()) {
+              await interaction.editReply({
+                content: `An error occurred during the swap process: ${error.message}`,
+                components: [],
+              });
+            } else {
+              console.log('Interaction is no longer valid for editing reply\n(An error occurred during the swap process:)');
+            }
+          }
+        } else if (btnInteraction.customId === 'custom') {
+          collector.stop();
+
+          // Prompt the user to enter a custom percentage
+          if (interaction.isRepliable()) {
+            await btnInteraction.editReply({
+              content: 'Please enter a custom percentage (0 - 100):',
               components: [],
             });
-            await executeSwapTransaction(
-              interaction,
-              userId,
-              wallet,
-              quoteData,
-              settings,
-              amount,
-              inputTokenAddress,
-              outputToken,
-              inputTokenInfo,
-              outputTokenInfo,
-              estimatedOutput,
-              false, // isBuyOperation
-              ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌'],
-              exitPercentages
-            );
+          } else {
+            console.log('Interaction is no longer valid for editing reply\n(Please enter a custom percentage (0 - 100):)');
           }
-        });
 
-      } catch (error) {
-        console.error('Error in button collector:', error);
-        await interaction.followUp({
-          content: 'An error occurred while processing your sell order.',
-          ephemeral: true,
-        });
+          // Create a message collector to collect the user's input
+          const messageFilter = (msg: any) => msg.author.id === initiatingUserId;
+          const messageCollector = interaction.channel?.createMessageCollector({
+            filter: messageFilter,
+            max: 1,
+            time: 30000, // 30 seconds to enter percentage
+          });
+
+          messageCollector?.on('collect', async (message: any) => {
+            try {
+              const input = message.content.trim();
+              const customPercentage = parseFloat(input);
+              if (isNaN(customPercentage) || customPercentage <= 0 || customPercentage > 100) {
+                if (interaction.isRepliable()) {
+                  await interaction.editReply({
+                    content: 'Invalid percentage entered. Transaction cancelled.',
+                    components: [],
+                  });
+                } else {
+                  console.log('Interaction is no longer valid for editing reply\n(Invalid percentage entered. Transaction cancelled.) ');
+                }
+                return;
+              }
+
+              // Calculate the amount to sell
+              const { balance: tokenBalance } = await getTokenBalance(initiatingWallet.publicKey, inputTokenAddress);
+              const adjustedAmount = Math.floor((customPercentage / 100) * tokenBalance);
+
+              if (adjustedAmount <= 0) {
+                if (interaction.isRepliable()) {
+                  await interaction.editReply({
+                    content: `Your balance is insufficient to perform this swap.\nTrading ${adjustedAmount} but have only ${tokenBalance} ${inputTokenInfo.symbol}`,
+                    components: [],
+                  });
+                } else {
+                  console.log('Interaction is no longer valid for editing reply\n(Your balance is insufficient to perform this swap.)');
+                }
+                return;
+              }
+
+              // Create swap preview
+              try {
+                const { quoteData, swapPreview, estimatedOutput } = await createSwapPreview(
+                  adjustedAmount,
+                  inputTokenAddress,
+                  outputTokenAddress,
+                  initiatingSettings,
+                  inputTokenInfo,
+                  outputTokenInfo
+                );
+
+                // Prompt user confirmation
+                const userResponse = await promptUserConfirmation(
+                  interaction,
+                  `${swapPreview}\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
+                );
+
+                if (userResponse === 'swap_now' || userResponse === 'timeout') {
+                  if (interaction.isRepliable()) {
+                    await interaction.editReply({
+                      content: 'Processing swaps...',
+                      components: [],
+                    });
+                  } else {
+                    console.log('Interaction is no longer valid for editing reply\n(Processing swaps...)');
+                  }
+
+                  // Execute swaps for users
+                  const tradeResults = await executeSwapsForUsers({
+                    interaction,
+                    connectedWallets,
+                    selectionIndex: 'Custom',
+                    isBuyOperation: false,
+                    inputTokenInfo,
+                    outputTokenInfo,
+                    inputTokenAddress,
+                    outputTokenAddress,
+                    initiatingUser,
+                    initiatingSettings,
+                    customPercentage,
+                    channelId
+                  });
+
+                  // All messaging is handled within executeSwapsForUsers
+
+                } else if (userResponse === 'cancel_swap') {
+                  if (interaction.isRepliable()) {
+                    await interaction.editReply({
+                      content: 'Swap cancelled by user.',
+                      components: [],
+                    });
+                  } else {
+                    console.log('Interaction is no longer valid for editing reply\n(Swap cancelled by user.)');
+                  }
+                }
+              } catch (error: any) {
+                console.error('Error in swap process:', error);
+                if (interaction.isRepliable()) {
+                  await interaction.editReply({
+                    content: `An error occurred during the swap process: ${error.message}`,
+                    components: [],
+                  });
+                } else {
+                  console.log('Interaction is no longer valid for editing reply\n(An error occurred during the swap process:)');
+                }
+              }
+            } catch (error: any) {
+              console.error('Error in message collector:', error);
+              if (interaction.isRepliable()) {
+                await interaction.editReply({
+                  content: 'An error occurred while processing your input.',
+                  components: [],
+                });
+              } else {
+                console.log('Interaction is no longer valid for editing reply\n(An error occurred while processing your input.)');
+              }
+            }
+          });
+
+          messageCollector?.on('end', async (_, reason) => {
+            if (reason === 'time') {
+              if (interaction.isRepliable()) {
+                await interaction.editReply({
+                  content: 'Interaction timed out.',
+                  components: [],
+                });
+              } else {
+                console.log('Interaction is no longer valid for editing reply\n(Interaction timed out.)');
+              }
+            }
+          });
+        } else if (btnInteraction.customId === 'cancel') {
+          collector.stop();
+          if (interaction.isRepliable()) {
+            await btnInteraction.editReply({
+              content: 'Transaction cancelled.',
+              components: [],
+            });
+          } else {
+            console.log('Interaction is no longer valid for editing reply\n(Transaction cancelled.)');
+          }
+        }
+      } catch (error: any) {
+        console.error('Error in collector:', error);
+        try {
+          if (btnInteraction.isRepliable()) {
+            await btnInteraction.followUp({
+              content: `An error occurred during the process: ${error.message}`,
+              ephemeral: true,
+            });
+          } else {
+            console.log('Interaction is no longer valid for following up\n(An error occurred during the process:)');
+          }
+        } catch (followUpError) {
+          console.error('Error sending follow-up message:', followUpError);
+        }
       }
-    } catch (error) {
-      console.error('Sell order timed out or was cancelled:', error);
-      await interaction.editReply({
-        content: 'Sell order timed out or was cancelled. Please try again.',
-        components: [],
-      });
-    }
+    });
+
+    collector?.on('end', async (_, reason) => {
+      if (reason === 'time') {
+        try {
+          if (interaction.isRepliable()) {
+            await interaction.editReply({
+              content: 'Interaction timed out.',
+              components: [],
+            });
+          } else {
+            console.log('Interaction is no longer valid for editing reply\n(Interaction timed out.)');
+          }
+        } catch (error) {
+          console.error('Error editing reply on timeout:', error);
+        }
+      }
+    });
+
   } catch (error) {
     console.error('Error in handleSellCommand:', error);
-    await interaction.editReply({
-      content: 'An error occurred while processing your sell order.',
-      components: [],
-    });
+    if (interaction.isRepliable()) {
+      try {
+        await interaction.editReply({
+          content: 'An error occurred while processing your request.',
+        });
+      } catch (editError) {
+        console.error('Error editing reply:', editError);
+      }
+    } else {
+      console.log('Interaction is no longer valid for error response');
+    }
   }
 }

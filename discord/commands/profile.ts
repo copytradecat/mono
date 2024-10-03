@@ -1,12 +1,10 @@
 import { CommandInteraction } from "discord.js";
 import User from '../../src/models/User';
 import { Connection, PublicKey } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import dotenv from 'dotenv';
+import { getTokenBalances } from '../../src/services/jupiter.service';
 
 dotenv.config();
-
-const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 
 export async function handleProfile(interaction: CommandInteraction) {
   try {
@@ -18,9 +16,7 @@ export async function handleProfile(interaction: CommandInteraction) {
     const walletAddress = user.wallets[0].publicKey;
     const publicKey = new PublicKey(walletAddress);
 
-    const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
-      programId: TOKEN_PROGRAM_ID,
-    });
+    const tokenAccounts = await getTokenBalances(publicKey);
 
     const balances = tokenAccounts.value.map((accountInfo) => ({
       mint: accountInfo.account.data.parsed.info.mint,
