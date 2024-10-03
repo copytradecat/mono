@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
+import axios from 'axios';
 
 export interface Settings {
   slippage: number;
@@ -24,32 +25,46 @@ export const defaultSettings: Settings = {
   wrapUnwrapSOL: true,
 };
 
-export default function BotSettings() {
+interface BotSettingsProps {
+  walletPublicKey?: string;
+  initialSettings?: Settings;
+  onSave?: (settings: Settings) => void;
+}
+
+export default function BotSettings({ walletPublicKey, initialSettings, onSave }: BotSettingsProps) {
   const { data: session } = useSession();
-  const [settings, setSettings] = useState<Settings>(defaultSettings);
-  const [fetchedSettings, setFetchedSettings] = useState<Settings>();
+  const [settings, setSettings] = useState<Settings>(initialSettings || defaultSettings);
   const [isLoading, setIsLoading] = useState(false);
+  const [unSaved, setUnSaved] = useState(false);
 
   const fetchSettings = useCallback(async () => {
-    const response = await fetch('/api/bot-settings');
-    if (response.ok) {
-      const data = await response.json();
-      setSettings({ ...defaultSettings, ...data.settings });
-      setFetchedSettings({ ...defaultSettings, ...data.settings });
+    if (!session || initialSettings) return;
+
+    try {
+      const response = await axios.get('/api/bot-settings', {
+        params: { walletPublicKey }
+      });
+      setSettings({ ...defaultSettings, ...response.data.settings });
+    } catch (error) {
+      console.error('Error fetching settings:', error);
     }
-  }, []);
+  }, [session, walletPublicKey, initialSettings]);
 
   useEffect(() => {
-    if (session) {
-      fetchSettings();
-    }
-  }, [session, fetchSettings]);
+    fetchSettings();
+  }, [fetchSettings]);
 
-  const updateSetting = (key, value) => {
-    setSettings((prevSettings) => ({
-      ...prevSettings,
-      [key]: value,
-    }));
+  const updateSetting = (key: keyof Settings, value: any) => {
+    setSettings(prevSettings => {
+      const newSettings = { ...prevSettings, [key]: value };
+      setUnSaved(true);
+      return newSettings;
+    });
+    if(JSON.stringify(initialSettings,null,2)!==JSON.stringify(settings,null,2)){
+      setUnSaved(true);
+    } else {
+      setUnSaved(false);
+    }
   };
 
   const validateAndSaveSettings = () => {
@@ -62,9 +77,10 @@ export default function BotSettings() {
     }
 
     // Save settings
+    handleSaveSettings();
   };
 
-  const isIncreasingArray = (arr) => {
+  const isIncreasingArray = (arr: number[]) => {
     for (let i = 0; i < arr.length - 1; i++) {
       if (arr[i] >= arr[i + 1]) {
         return false;
@@ -76,19 +92,22 @@ export default function BotSettings() {
   const handleSaveSettings = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/bot-settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings }),
-      });
+      if (onSave) {
+        onSave(settings);
+      } else {
+        const response = await axios.post('/api/bot-settings', {
+          settings,
+          walletPublicKey,
+          presetName: null
+        });
 
-      if (!response.ok) {
-        throw new Error('Failed to save settings');
+        if (response.status === 200) {
+          alert('Settings saved successfully');
+          setUnSaved(false);
+        } else {
+          throw new Error('Failed to save settings');
+        }
       }
-
-      const data = await response.json();
-      setFetchedSettings(data.settings);
-      alert('Settings saved successfully');
     } catch (error) {
       console.error('Error saving settings:', error);
       alert('Failed to save settings');
@@ -99,28 +118,10 @@ export default function BotSettings() {
 
   return (
     <div className="p-4 bg-white shadow rounded-lg">
-      <h2 className="text-2xl font-bold mb-4">Bot Settings</h2>
+      <h2 className="text-2xl font-bold mb-4">
+        Bot Settings {walletPublicKey ? `for ${walletPublicKey.slice(0, 6)}...${walletPublicKey.slice(-4)}` : ''}
+      </h2>
       <div>
-        <table>
-          <tbody>
-            <tr>
-              <td>Saved Settings</td>
-              <td>Unsaved Settings</td>
-            </tr>
-            <tr>
-              <td>
-                <pre className="bg-gray-100 p-2 rounded">
-                  {JSON.stringify(fetchedSettings, null, 2)}
-                </pre>
-              </td>
-              <td>
-                <pre className="bg-gray-100 p-2 rounded">
-                  {JSON.stringify(settings, null, 2)}
-                </pre>
-              </td>
-            </tr>
-          </tbody>
-        </table>
 
         {/* Slippage Type */}
         <h3 className="text-xl font-semibold mb-2">Slippage Type</h3>
@@ -234,13 +235,42 @@ export default function BotSettings() {
             />
           ))}
         </div>
-        <button
-          onClick={validateAndSaveSettings}
-          disabled={isLoading}
-          className="mt-6 bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-        >
-          {isLoading ? 'Saving...' : 'Save Settings'}
-        </button>
+
+        {unSaved && (
+          <>
+          <div className="mb-4">
+            <p className="text-red-500">Unsaved changes detected. Please save or discard them.</p>
+          </div>
+          <table className="mb-4">
+            <tbody>
+              <tr>
+                <td>Current Settings</td>
+                <td>Unsaved Settings</td>
+              </tr>
+              <tr>
+                <td>
+                  <pre className="bg-gray-100 p-2 rounded">
+                    {JSON.stringify(initialSettings, null, 2)}
+                  </pre>
+                </td>
+                <td>
+                  <pre className="bg-gray-100 p-2 rounded">
+                    {JSON.stringify(settings, null, 2)}
+                  </pre>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <button
+            onClick={validateAndSaveSettings}
+            className="bg-green-500 text-white px-4 py-2 rounded mt-4"
+            disabled={isLoading}
+          >
+            {isLoading ? 'Saving...' : 'Save Settings'}
+          </button>
+        </>
+        )}
       </div>
     </div>
   );

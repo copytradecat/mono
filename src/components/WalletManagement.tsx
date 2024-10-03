@@ -7,6 +7,8 @@ import axios from 'axios';
 import pLimit from 'p-limit';
 import { getTokenBalances } from '../services/jupiter.service';
 import { PresetSchema, SettingsSchema, WalletSchema } from '../models/User';
+import PresetManager from './PresetManager';
+import BotSettings from './BotSettings';
 
 interface TokenBalance {
   mint: string;
@@ -23,6 +25,9 @@ export default function WalletManagement() {
   const [walletSeed, setWalletSeed] = useState('');
   const [publicAddress, setPublicAddress] = useState<string | null>(null);
   const [presets, setPresets] = useState<typeof PresetSchema[]>([]);
+  const [showPresetManager, setShowPresetManager] = useState(false);
+  const [showSettingsManager, setShowSettingsManager] = useState(false);
+  const [selectedWalletForSettings, setSelectedWalletForSettings] = useState<string | null>(null);
 
   const fetchTokenBalances = async (publicKey: string) => {
     const limit = pLimit(3); // Limit to 3 concurrent requests
@@ -206,6 +211,21 @@ export default function WalletManagement() {
     }
   };
 
+  const handleApplyPreset = async (walletPublicKey: string, presetName: string) => {
+    try {
+      await axios.post(`/api/wallets/${walletPublicKey}/apply-preset`, { presetName });
+      fetchWallets();
+    } catch (error) {
+      console.error('Error applying preset:', error);
+      alert('Failed to apply preset. Please try again.');
+    }
+  };
+
+  const handleOpenSettingsManager = (walletPublicKey: string) => {
+    setSelectedWalletForSettings(walletPublicKey);
+    setShowSettingsManager(true);
+  };
+
   return (
     <div>
       <h1 className="text-3xl font-bold mb-6">Wallet Management</h1>
@@ -232,7 +252,7 @@ export default function WalletManagement() {
       {wallets.map((wallet, index) => (
         <div key={index} className="mb-4 p-4 border rounded">
           <p>Wallet {index + 1}: {wallet.publicKey || 'No public key'}</p>
-          <p>Connected Channel: {wallet.connectedChannels[0] || 'None'}</p>
+          <p>Connected Channel: {wallet.connectedChannels[0] || 'None'} &nbsp;
           {wallet.connectedChannels[0] ? (
             <button onClick={() => handleDisconnectChannel(wallet.publicKey)} className="bg-red-500 text-white px-2 py-1 rounded text-sm mr-2">
               Disconnect Channel
@@ -242,10 +262,63 @@ export default function WalletManagement() {
               <input type="text" name="channelId" placeholder="Enter Channel ID" className="mr-2 p-1 border rounded" />
               <button type="submit" className="bg-green-500 text-white px-2 py-1 rounded text-sm">Connect Channel</button>
             </form>
-          )}
+          )}</p>
+          <div className="mt-2">
+            <select
+              value={wallet.presetName || ''}
+              onChange={(e) => handleApplyPreset(wallet.publicKey, e.target.value)}
+              className="mr-2 p-1 border rounded"
+            >
+              <option value="">Select Preset</option>
+              {presets.map((preset) => (
+                <option key={preset._id} value={preset.name}>{preset.name}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => handleOpenSettingsManager(wallet.publicKey)}
+              className="bg-blue-500 text-white px-2 py-1 rounded text-sm"
+            >
+              Manage Settings
+            </button>
+          </div>
           <button onClick={() => handleRemoveWallet(wallet.publicKey)} className="bg-red-500 text-white px-2 py-1 rounded text-sm mt-2">Remove</button>
         </div>
       ))}
+
+      <button
+        onClick={() => setShowPresetManager(true)}
+        className="bg-green-500 text-white px-4 py-2 rounded mt-4"
+      >
+        Manage Presets
+      </button>
+
+      {showPresetManager && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white p-6 rounded">
+            <PresetManager />
+            <button
+              onClick={() => setShowPresetManager(false)}
+              className="bg-red-500 text-white px-4 py-2 rounded mt-4"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showSettingsManager && selectedWalletForSettings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white p-6 rounded">
+            <BotSettings walletPublicKey={selectedWalletForSettings} />
+            <button
+              onClick={() => setShowSettingsManager(false)}
+              className="bg-red-500 text-white px-4 py-2 rounded mt-4"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

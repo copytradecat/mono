@@ -28,7 +28,7 @@ const Dashboard = withSubscriptionCheck(() => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div>
           <WalletManager selectedWallet={selectedWallet} setSelectedWallet={setSelectedWallet} />
-          <ChannelManager selectedWallet={selectedWallet} />
+          {/* <ChannelManager selectedWallet={selectedWallet} /> */}
         </div>
         <div>
           {false &&selectedWallet && (

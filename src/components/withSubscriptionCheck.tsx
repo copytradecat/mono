@@ -37,8 +37,8 @@ export function withSubscriptionCheck<P extends object>(WrappedComponent: React.
     if (!hasAccess) {
       return (
         <div>
-          <h1>Access Denied</h1>
-          <p>You don't have access to this feature. Please upgrade your subscription.</p>
+          <h1>Beta Access Only</h1>
+          <p>Please wait while we process your subscription.</p>
         </div>
       );
     }
