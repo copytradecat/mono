@@ -38,7 +38,7 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave }
   const [unSaved, setUnSaved] = useState(false);
 
   const fetchSettings = useCallback(async () => {
-    if (!session || initialSettings) return;
+    if (!session) return;
 
     try {
       const response = await axios.get('/api/bot-settings', {
@@ -48,7 +48,7 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave }
     } catch (error) {
       console.error('Error fetching settings:', error);
     }
-  }, [session, walletPublicKey, initialSettings]);
+  }, [session, walletPublicKey]);
 
   useEffect(() => {
     fetchSettings();

@@ -32,9 +32,9 @@ const Dashboard = withSubscriptionCheck(() => {
         </div>
         <div>
           {false &&selectedWallet && (
-            <TradingInterface selectedWallet={selectedWallet} userId={session?.user?.name || ''} />
+            <TradingInterface selectedWallet={selectedWallet} userId={session?.user?.name ?? ''} />
           )}
-          <BotSettings />
+          <BotSettings walletPublicKey={selectedWallet} />
         </div>
       </div>
     </div>

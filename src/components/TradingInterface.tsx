@@ -23,7 +23,9 @@ export default function TradingInterface({ selectedWallet, userId }: TradingInte
 
   const fetchSettings = async () => {
     try {
-      const response = await axios.get('/api/bot-settings');
+      const response = await axios.get('/api/bot-settings', {
+        params: { walletPublicKey: selectedWallet }
+      });
       setSettings(response.data.settings);
     } catch (error) {
       console.error('Error fetching settings:', error);

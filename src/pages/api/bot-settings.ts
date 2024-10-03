@@ -32,7 +32,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       let settings;
       if (walletPublicKey) {
         const wallet = user.wallets.find((w: any) => w.publicKey === walletPublicKey);
-        settings = wallet ? wallet.settings : user.settings;
+        settings = wallet?.settings || user.settings;
       } else {
         settings = user.settings;
       }
