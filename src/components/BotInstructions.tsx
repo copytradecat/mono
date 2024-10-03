@@ -41,7 +41,22 @@ export default function BotInstructions() {
           <code className="bg-gray-200 px-1 rounded">/ct register</code> to start using
           the bot.
         </li>
-      </ol>
+        <li>
+          If you need help, join our support server:
+          <ul>
+            <li className="ml-8">
+                <a
+                  className="text-blue-500 hover:underline"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  href="https://discord.gg/sAVYWMkyZz"
+                >
+                  Support Server
+                </a>
+            </li>
+          </ul>
+        </li>
+      </ol>      
     </div>
   );
 }

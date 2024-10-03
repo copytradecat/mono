@@ -2,8 +2,7 @@ import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from 'di
 import dotenv from 'dotenv';
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, Transaction, SystemProgram, SendTransactionError } from '@solana/web3.js';
 import fs from 'fs';
-import { getQuote, getSwapTransaction, executeSwap } from '../src/services/jupiter.service';
-import { rateLimitedRequest } from '../src/services/jupiter.service';
+import { getQuote, getBalance, getSwapTransaction, executeSwap } from '../src/services/jupiter.service';
 
 dotenv.config({ path: ['../.env.local', '../.env'] });
 
@@ -105,7 +104,7 @@ async function simulateCommandResponse(command: string, options: any): Promise<s
         if (!options.wallet) {
           return 'No wallet specified. Please link a wallet first.';
         }
-        const balance = await rateLimitedRequest(() => connection.getBalance(new PublicKey(options.wallet)));
+        const balance = await getBalance(options.wallet);
         console.log(`Balance for wallet ${options.wallet}: ${balance / LAMPORTS_PER_SOL} SOL`);
         return `Your current balance: ${balance / LAMPORTS_PER_SOL} SOL`;
       } catch (error) {

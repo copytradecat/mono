@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { Connection, PublicKey } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
-import { rateLimitedRequest } from '../services/jupiter.service';
 import { Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { useWallets } from '../hooks/useWallets';
+import axios from 'axios';
+import pLimit from 'p-limit';
+import { getTokenBalances } from '../services/jupiter.service';
+import { PresetSchema, SettingsSchema, WalletSchema } from '../models/User';
 
 interface TokenBalance {
   mint: string;
@@ -21,32 +22,38 @@ export default function WalletManagement() {
   const [walletCreated, setWalletCreated] = useState(false);
   const [walletSeed, setWalletSeed] = useState('');
   const [publicAddress, setPublicAddress] = useState<string | null>(null);
+  const [presets, setPresets] = useState<typeof PresetSchema[]>([]);
 
   const fetchTokenBalances = async (publicKey: string) => {
-    const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
-    const pubKey = new PublicKey(publicKey);
+    const limit = pLimit(3); // Limit to 3 concurrent requests
 
     try {
-      const tokenAccounts = await rateLimitedRequest(() => 
-        connection.getParsedTokenAccountsByOwner(pubKey, {
-          programId: TOKEN_PROGRAM_ID,
+      const tokenAccountsResponse = await getTokenBalances(publicKey);
+
+      const { balances, metadata } = tokenAccountsResponse;
+
+      const balancesPromises = Object.entries(balances).map(([mintAddress, balance]) =>
+        limit(async () => {
+          const tokenMetadata = metadata[mintAddress];
+          const amount = parseFloat(balance.toString()) / Math.pow(10, tokenMetadata.decimals);
+
+          return { mint: mintAddress, balance: amount };
         })
       );
 
-      const balances = tokenAccounts.value.map((accountInfo) => ({
-        mint: accountInfo.account.data.parsed.info.mint,
-        balance: accountInfo.account.data.parsed.info.tokenAmount.uiAmount,
-      }));
+      const fetchedBalances = await Promise.all(balancesPromises);
 
-      setTokenBalances(balances);
+      setTokenBalances(fetchedBalances);
     } catch (error) {
       console.error('Error fetching token balances:', error);
+      setTokenBalances([]);
     }
   };
 
   useEffect(() => {
     if (session) {
       fetchWallets();
+      // fetchPresets();
     }
   }, [session, fetchWallets]);
 
@@ -147,6 +154,16 @@ export default function WalletManagement() {
     }
   };
 
+  // const fetchPresets = async () => {
+  //   const response = await axios.get('/api/presets');
+  //   setPresets(response.data);
+  // };
+
+  const applyPresetToWallet = async (walletId: string, presetName: string) => {
+    await axios.post(`/api/wallets/${walletId}/apply-preset`, { presetName });
+    fetchWallets();
+  };
+
   return (
     <div>
       <h1>Wallet Management</h1>
@@ -174,6 +191,19 @@ export default function WalletManagement() {
         <div key={index}>
           <p>Wallet {index + 1}: {wallet.publicKey || 'No public key'}</p>
           <button onClick={() => handleRemoveWallet(wallet.publicKey)}>Remove</button>
+          <label htmlFor={`preset-select-${wallet.publicKey}`}>Apply Preset:</label>
+          <select
+            id={`preset-select-${wallet.publicKey}`}
+            value={wallet.presetName || ''}
+            onChange={(e) => applyPresetToWallet(wallet._id, e.target.value)}
+          >
+            <option value="">Select a preset</option>
+            {presets.map((preset) => (
+              <option key={preset._id} value={preset.name}>
+                {preset.name}
+              </option>
+            ))}
+          </select>
         </div>
       ))}
     </div>

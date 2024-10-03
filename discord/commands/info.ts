@@ -1,10 +1,6 @@
 import { CommandInteraction } from "discord.js";
 import User from '../../src/models/User';
-import { getTokenBalances } from '../../src/services/jupiter.service';
-import { Connection, PublicKey } from '@solana/web3.js';
-import { rateLimitedRequest } from '../../src/services/jupiter.service';
-
-const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
+import { getBalance, getTokenBalances } from '../../src/services/jupiter.service';
 
 export async function handleInfo(interaction: CommandInteraction) {
   try {
@@ -17,8 +13,7 @@ export async function handleInfo(interaction: CommandInteraction) {
     let infoMessage = "Your Wallet Information:\n\n";
 
     for (const wallet of user.wallets) {
-      const publicKey = new PublicKey(wallet.publicKey);
-      const solBalance = await rateLimitedRequest(() => connection.getBalance(publicKey));
+      const solBalance = await getBalance(wallet.publicKey);
       const tokenBalances = await getTokenBalances(wallet.publicKey);
 
       infoMessage += `Wallet: ${wallet.publicKey}\n`;

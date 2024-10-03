@@ -14,7 +14,7 @@ export interface Settings {
 }
 
 export const defaultSettings: Settings = {
-  slippage: 3.0,
+  slippage: 300,
   slippageType: 'fixed',
   smartMevProtection: 'secure',
   transactionSpeed: 'medium',
@@ -45,8 +45,32 @@ export default function BotSettings() {
     }
   }, [session, fetchSettings]);
 
-  const updateSetting = (setting: keyof Settings, value: any) => {
-    setSettings((prev) => ({ ...prev, [setting]: value }));
+  const updateSetting = (key, value) => {
+    setSettings((prevSettings) => ({
+      ...prevSettings,
+      [key]: value,
+    }));
+  };
+
+  const validateAndSaveSettings = () => {
+    const isValidEntryAmounts = isIncreasingArray(settings.entryAmounts);
+    const isValidExitPercentages = isIncreasingArray(settings.exitPercentages);
+
+    if (!isValidEntryAmounts || !isValidExitPercentages) {
+      alert('Entry Amounts and Exit Percentages must be in increasing order.');
+      return;
+    }
+
+    // Save settings
+  };
+
+  const isIncreasingArray = (arr) => {
+    for (let i = 0; i < arr.length - 1; i++) {
+      if (arr[i] >= arr[i + 1]) {
+        return false;
+      }
+    }
+    return true;
   };
 
   const handleSaveSettings = async () => {
@@ -211,7 +235,7 @@ export default function BotSettings() {
           ))}
         </div>
         <button
-          onClick={handleSaveSettings}
+          onClick={validateAndSaveSettings}
           disabled={isLoading}
           className="mt-6 bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
         >

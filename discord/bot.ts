@@ -82,12 +82,21 @@ startBot();
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isCommand()) return;
 
-  const { commandName } = interaction;
+  try {
+    const { commandName } = interaction;
 
-  if (commandName === 'ct') {
-    const subcommand = interaction.options.getSubcommand();
-    const args = interaction.options.data.map(option => option.value as string);
-    await handleCommand(interaction, subcommand, args);
+    if (commandName === 'ct') {
+      const subcommand = interaction.options.getSubcommand();
+      const args = interaction.options.data.map(option => option.value as string);
+      await handleCommand(interaction, subcommand, args);
+    }
+  } catch (error) {
+    console.error('Error handling interaction:', error);
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply('An error occurred while processing your request.');
+    } else {
+      await interaction.reply('An error occurred while processing your request.');
+    }
   }
 });
 

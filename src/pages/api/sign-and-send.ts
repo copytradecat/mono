@@ -20,10 +20,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const userId = session.user.name; // Should be the discordId
 
     // console.log('Request body:', JSON.stringify(req.body, null, 2));
-    console.log('User ID:', userId);
+    console.log('Sending request to signing service for userId:', userId);
 
     try {
-      console.log('Sending request to signing service');
+      // console.log('Sending request to signing service');
       const normalizedWalletPublicKey = walletPublicKey;
       const response = await axios.post(`${SIGNING_SERVICE_URL}/sign-and-send`, {
         userId,
@@ -31,7 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         serializedTransaction,
       });
 
-      console.log('Response from signing service:', JSON.stringify(response.data, null, 2));
+      // console.log('Response from signing service:', JSON.stringify(response.data, null, 2));
       res.status(200).json({ signature: response.data.signature });
     } catch (error: unknown) {
       if (error instanceof Error) {
