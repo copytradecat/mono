@@ -8,9 +8,6 @@ import { encrypt } from '../../lib/encryption';
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     const session = await getServerSession(req, res, authOptions);
-    console.log('Session:', JSON.stringify(session, null, 2));
-    console.log('Session user:', JSON.stringify(session?.user, null, 2));
-
     if (!session) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -19,19 +16,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    // console.log('Request body:', JSON.stringify(req.body, null, 2));
-    const { publicKey, secretData, type } = req.body;
-
-    // console.log('Received wallet data:', { 
-    //   publicKey, 
-    //   type, 
-    //   secretDataLength: secretData?.length,
-    //   sessionUserId: session.user?.name,
-    //   sessionUserEmail: session.user?.email
-    // });
+    const { publicKey, secretData, type, channelId } = req.body;
 
     if (!publicKey || !secretData || !type) {
-      return res.status(400).json({ error: 'Missing required fields', received: { publicKey: !!publicKey, secretData: !!secretData, type: !!type } });
+      return res.status(400).json({ error: 'Missing required fields', received: { publicKey: !!publicKey, secretData: !!secretData, type: !!type, channelId: !!channelId } });
     }
 
     if (typeof secretData !== 'string') {
@@ -40,6 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     await connectDB();
     const encryptedSecretData = encrypt(secretData);
+
     const normalizedPublicKey = publicKey;
 
     const existingUser = await User.findOne({ 
@@ -63,7 +52,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             publicKey: normalizedPublicKey,
             encryptedSecretData,
             secretType: type,
-            connectedChannels: []
+            connectedChannels: [channelId]
           }
         },
         $setOnInsert: {
@@ -73,8 +62,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
       { new: true, upsert: true }
     );
-
-    console.log('User after update:', JSON.stringify(user, null, 2));
 
     if (!user) {
       throw new Error('User not found or not updated');

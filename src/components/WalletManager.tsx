@@ -87,9 +87,6 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
           {(wallets.find(w => w.publicKey === selectedWallet)?.connectedChannels || []).map((channel, index) => (
             <p key={index} className="mb-1">{channel}</p>
           ))}
-          <Link href={`/wallet-info/${selectedWallet}`} className="text-blue-500 hover:underline mt-4 inline-block">
-            View Detailed Information
-          </Link>
         </div>
       )}
     </div>

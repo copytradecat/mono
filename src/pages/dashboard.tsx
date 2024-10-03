@@ -31,7 +31,7 @@ const Dashboard = withSubscriptionCheck(() => {
           <ChannelManager selectedWallet={selectedWallet} />
         </div>
         <div>
-          {selectedWallet && (
+          {false &&selectedWallet && (
             <TradingInterface selectedWallet={selectedWallet} userId={session?.user?.name || ''} />
           )}
           <BotSettings />

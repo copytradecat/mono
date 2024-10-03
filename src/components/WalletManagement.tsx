@@ -164,46 +164,86 @@ export default function WalletManagement() {
     fetchWallets();
   };
 
+  const handleConnectChannel = async (event: React.FormEvent<HTMLFormElement>, publicKey: string) => {
+    event.preventDefault();
+    const channelId = (event.currentTarget.elements.namedItem('channelId') as HTMLInputElement).value;
+    try {
+      const response = await fetch('/api/connect-channel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publicKey, channelId }),
+      });
+
+      if (response.ok) {
+        console.log('Channel connected successfully');
+        fetchWallets();
+      } else {
+        alert('Failed to connect channel. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error connecting channel:', error);
+      alert('An error occurred while connecting the channel');
+    }
+  };
+
+  const handleDisconnectChannel = async (publicKey: string) => {
+    try {
+      const response = await fetch('/api/disconnect-channel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publicKey }),
+      });
+
+      if (response.ok) {
+        console.log('Channel disconnected successfully');
+        fetchWallets();
+      } else {
+        alert('Failed to disconnect channel. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error disconnecting channel:', error);
+      alert('An error occurred while disconnecting the channel');
+    }
+  };
+
   return (
     <div>
-      <h1>Wallet Management</h1>
-      <h3>Create or Import Wallet</h3>
+      <h1 className="text-3xl font-bold mb-6">Wallet Management</h1>
+      <h3 className="text-xl font-semibold mb-4">Create or Import Wallet</h3>
       {!walletCreated && (
-        <form onSubmit={handleImportWallet}>
-          <input type="text" name="seed" placeholder="Enter seed phrase" />
-          <button type="submit">Import Wallet</button>
+        <form onSubmit={handleImportWallet} className="mb-4">
+          <input type="text" name="seed" placeholder="Enter seed phrase" className="mr-2 p-2 border rounded" />
+          <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded">Import Wallet</button>
         </form>
       )}
-      {!walletCreated && <button onClick={handleCreateWallet}>Create New Wallet</button>}
+      {!walletCreated && <button onClick={handleCreateWallet} className="bg-green-500 text-white px-4 py-2 rounded mb-6">Create New Wallet</button>}
       {walletCreated && (
-        <div>
+        <div className="mb-6">
           <p>Public Address: {publicAddress?.toString()}</p>
-          <button onClick={() => setShowPrivateKey(!showPrivateKey)}>
+          <button onClick={() => setShowPrivateKey(!showPrivateKey)} className="bg-yellow-500 text-white px-4 py-2 rounded mr-2">
             {showPrivateKey ? 'Hide' : 'Reveal'} Private Key
           </button>
           {showPrivateKey && <p>Private Key: {walletSeed}</p>}
-          <button onClick={handleSaveWallet}>Save Wallet</button>
+          <button onClick={handleSaveWallet} className="bg-blue-500 text-white px-4 py-2 rounded">Save Wallet</button>
         </div>
       )}
 
-      <h3>Available Wallets:</h3>
+      <h3 className="text-xl font-semibold mb-4">Available Wallets:</h3>
       {wallets.map((wallet, index) => (
-        <div key={index}>
+        <div key={index} className="mb-4 p-4 border rounded">
           <p>Wallet {index + 1}: {wallet.publicKey || 'No public key'}</p>
-          <button onClick={() => handleRemoveWallet(wallet.publicKey)}>Remove</button>
-          <label htmlFor={`preset-select-${wallet.publicKey}`}>Apply Preset:</label>
-          <select
-            id={`preset-select-${wallet.publicKey}`}
-            value={wallet.presetName || ''}
-            onChange={(e) => applyPresetToWallet(wallet._id, e.target.value)}
-          >
-            <option value="">Select a preset</option>
-            {presets.map((preset) => (
-              <option key={preset._id} value={preset.name}>
-                {preset.name}
-              </option>
-            ))}
-          </select>
+          <p>Connected Channel: {wallet.connectedChannels[0] || 'None'}</p>
+          {wallet.connectedChannels[0] ? (
+            <button onClick={() => handleDisconnectChannel(wallet.publicKey)} className="bg-red-500 text-white px-2 py-1 rounded text-sm mr-2">
+              Disconnect Channel
+            </button>
+          ) : (
+            <form onSubmit={(e) => handleConnectChannel(e, wallet.publicKey)} className="mt-2">
+              <input type="text" name="channelId" placeholder="Enter Channel ID" className="mr-2 p-1 border rounded" />
+              <button type="submit" className="bg-green-500 text-white px-2 py-1 rounded text-sm">Connect Channel</button>
+            </form>
+          )}
+          <button onClick={() => handleRemoveWallet(wallet.publicKey)} className="bg-red-500 text-white px-2 py-1 rounded text-sm mt-2">Remove</button>
         </div>
       ))}
     </div>
