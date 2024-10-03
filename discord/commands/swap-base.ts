@@ -108,6 +108,7 @@ export async function executeSwapsForUsers(params: {
   initiatingExitPercentages?: number[];
   customAmount?: number;
   customPercentage?: number;
+  channelId?: string;
 }) {
   const {
     interaction,
@@ -124,6 +125,7 @@ export async function executeSwapsForUsers(params: {
     initiatingExitPercentages,
     customAmount,
     customPercentage,
+    channelId
   } = params;
 
   const tradeResults = [];
@@ -133,8 +135,16 @@ export async function executeSwapsForUsers(params: {
   const successfulSwaps: any[] = [];
   const failedSwaps: any[] = [];
 
-  if (!connectedWallets.some((walletInfo) => walletInfo.user.discordId === initiatingUser)) {
-    console.log(`Initiating user not found in connected wallets! ${initiatingUser}`);
+  if (!connectedWallets.some((walletInfo) => walletInfo.user.discordId === initiatingUser.discordId)) {
+    console.log(`\n\n\nInitiating user not found in connected wallets! Adding ${initiatingUser.discordId} to connected wallets.`)
+    const initiatingWallet = initiatingUser.wallets.find((wallet: any) => wallet.connectedChannels[0] === channelId );
+    if (initiatingWallet) {
+      connectedWallets.push({ user: initiatingUser.discordId, wallet: initiatingWallet });
+    } else {
+      console.log(`Initiating user ${initiatingUser.discordId} has not connected wallet to channel ${channelId}!`)
+    }
+  } else {
+    console.log(`\n\n\nInitiating user found in connected wallets!`)
   }
 
   // Modify your loop to collect results
@@ -251,14 +261,13 @@ export async function executeSwapsForUsers(params: {
     isBuyOperation ? 'bought' : 'sold'
   } a **${selectionLabel}** amount of **[${isBuyOperation ? outputTokenInfo.symbol : inputTokenInfo.symbol}](<https://solscan.io/token/${
     isBuyOperation ? outputTokenAddress : inputTokenAddress
-  }>)**.`;
+  }>)**.${ // include details about the number of followers who also swapped
+    successfulSwaps.length > 1 ? `\n${successfulSwaps.length - 1} follower(s) also executed the swap.` : ''
+  }`;
 
-  // Optionally, include details about the number of followers who also swapped
-  if (successfulSwaps.length > 1) {
-    publicMessage += `\n${successfulSwaps.length - 1} follower(s) also executed the swap.`;
-  }
-
-  await interaction.channel?.send(publicMessage);
+  // if (successfulSwaps.length > 0) {
+    await interaction.channel?.send(publicMessage);
+  // }
 
   return tradeResults;
 }
@@ -362,7 +371,7 @@ export async function executeSwapForUser(params: {
   user: any;
   wallet: any;
   selectedAmount: number;
-  settings: Settings;
+  settings: any;
   outputTokenAddress: string;
   inputTokenAddress: string;
   isBuyOperation: boolean;
@@ -397,7 +406,17 @@ export async function executeSwapForUser(params: {
       settings
     );
 
-    const swapResult = await executeSwap(user.discordId, wallet.publicKey, swapData.swapTransaction);
+    // Initial slippage and max slippage in basis points (e.g., 100 bps = 1%)
+    const originalSlippage = settings.slippage;
+    const maxSlippage = 500; // Maximum slippage of 5%
+
+    const swapResult = await executeSwap(
+      user.discordId,
+      wallet.publicKey,
+      swapData.swapTransaction,
+      originalSlippage,
+      maxSlippage
+    );
 
     // Fetch token balances after the trade
     const { balance: inputBalanceAfter } = await getTokenBalance(wallet.publicKey, inputTokenAddress);
@@ -498,11 +517,18 @@ export async function executeSwapForUser(params: {
 }
 
 // Modify executeSwap to handle transaction confirmation
-export async function executeSwap(userId: string, walletPublicKey: string, swapTransaction: string) {
+export async function executeSwap(
+  userId: string,
+  walletPublicKey: string,
+  swapTransaction: string,
+  originalSlippage: number,
+  maxSlippage: number
+) {
   const maxRetries = 5;
   const initialDelay = 1000; // 1 second
   let retryCount = 0;
   let delay = initialDelay;
+  let slippage = originalSlippage;
 
   while (retryCount < maxRetries) {
     try {
@@ -525,8 +551,54 @@ export async function executeSwap(userId: string, walletPublicKey: string, swapT
     } catch (error: any) {
       console.error(`Swap execution failed (attempt ${retryCount + 1}):`, error.message || error);
 
-      // If the error is due to rate limiting, wait and retry
-      if (error.response?.status === 429) {
+      // Extract transaction message from the error
+      let transactionMessage = '';
+
+      if (error.response?.data?.transactionMessage) {
+        transactionMessage = error.response.data.transactionMessage;
+      } else if (error.transactionMessage) {
+        transactionMessage = error.transactionMessage;
+      } else if (error.message) {
+        transactionMessage = error.message;
+      }
+
+      // Check if error is due to slippage tolerance exceeded
+      const isSlippageError =
+        transactionMessage &&
+        (transactionMessage.includes('custom program error: 0x1771') ||
+         transactionMessage.includes('Slippage tolerance exceeded'));
+
+      if (isSlippageError) {
+        console.log('Slippage tolerance exceeded. Adjusting slippage and retrying...');
+        // Increase slippage and retry
+        slippage = Math.min(slippage * 1.5, maxSlippage);
+        if (slippage > maxSlippage) {
+          // Exceeded maximum allowed slippage
+          return {
+            success: false,
+            error: 'Slippage tolerance exceeded and maximum slippage reached.',
+            transactionMessage: error.transactionMessage,
+            signature: 'No signature',
+          };
+        }
+
+        // Get a new swap transaction with increased slippage
+        const newSettings = {
+          ...settings,
+          slippage: slippage,
+        };
+
+        const newSwapData = await getSwapTransaction(
+          quoteData,
+          walletPublicKey,
+          newSettings
+        );
+
+        swapTransaction = newSwapData.swapTransaction;
+
+        retryCount++;
+        delay *= 2; // Exponential backoff
+      } else if (error.response?.status === 429) {
         console.log(`Rate limit hit, retrying after ${delay}ms...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
         retryCount++;
@@ -547,7 +619,7 @@ export async function executeSwap(userId: string, walletPublicKey: string, swapT
   return {
     success: false,
     error: 'Max retries reached',
-    transactionMessage: 'Failed to execute swap after multiple attempts due to rate limiting.',
+    transactionMessage: 'Failed to execute swap after multiple attempts.',
     signature: 'No signature',
   };
 }

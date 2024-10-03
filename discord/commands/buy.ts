@@ -37,7 +37,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
     const channelId = interaction.channelId;
 
     const initiatingUser = await getUser(initiatingUserId);
-    const initiatingWallet = initiatingUser.wallets[0];
+    const initiatingWallet = initiatingUser.wallets.find((wallet: any) => wallet.connectedChannels[0] === channelId);
     const inputToken = 'So11111111111111111111111111111111111111112'; // SOL mint address
     const inputTokenInfo = await getTokenInfo(inputToken);
     const outputTokenInfo = await getTokenInfo(outputTokenAddress);
@@ -170,6 +170,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                 initiatingUser,
                 initiatingSettings,
                 initiatingEntryAmounts,
+                channelId
               });
 
               // All messaging is handled within executeSwapsForUsers
@@ -278,6 +279,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                         initiatingUser,
                         initiatingSettings,
                         customAmount,
+                        channelId
                       });
 
                       // All messaging is handled within executeSwapForUser

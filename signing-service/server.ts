@@ -15,17 +15,17 @@ app.use(express.json());
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 
 app.post('/sign-and-send', async (req, res) => {
-  console.log('Received request in signing service');
+  // console.log('Received request in signing service');
   // console.log('Request body:', JSON.stringify(req.body, null, 2));
 
   const jobId = `sign-and-send-${Date.now()}`;
 
   try {
     await limiter.schedule({ id: jobId }, async () => {
-      console.log('Processing sign-and-send request');
+      // console.log('Processing sign-and-send request');
       const { userId, walletPublicKey, serializedTransaction } = req.body;
 
-      console.log('Connecting to database');
+      // console.log('Connecting to database');
       await connectDB();
 
       const user = await User.findOne({ discordId: userId });

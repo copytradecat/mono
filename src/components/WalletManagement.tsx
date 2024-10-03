@@ -53,7 +53,7 @@ export default function WalletManagement() {
   useEffect(() => {
     if (session) {
       fetchWallets();
-      fetchPresets();
+      // fetchPresets();
     }
   }, [session, fetchWallets]);
 
@@ -154,10 +154,10 @@ export default function WalletManagement() {
     }
   };
 
-  const fetchPresets = async () => {
-    const response = await axios.get('/api/presets');
-    setPresets(response.data);
-  };
+  // const fetchPresets = async () => {
+  //   const response = await axios.get('/api/presets');
+  //   setPresets(response.data);
+  // };
 
   const applyPresetToWallet = async (walletId: string, presetName: string) => {
     await axios.post(`/api/wallets/${walletId}/apply-preset`, { presetName });

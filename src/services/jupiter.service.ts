@@ -11,6 +11,7 @@ import limiter from '../lib/limiter';
 dotenv.config({ path: ['.env.local', '.env'] });
 
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
+// const jupiterApiClient = createJupiterApiClient({ basePath: process.env.NEXT_PUBLIC_SOLANA_RPC_URL_4JUPITER! });
 const jupiterApiClient = createJupiterApiClient({ basePath: process.env.NEXT_PUBLIC_SOLANA_RPC_URL_INFURA! });
 const metaplex = Metaplex.make(connection);
 
@@ -42,7 +43,7 @@ async function getTokenMetadata(mintAddresses: string[]): Promise<{ [key: string
       }
 
       const mintPublicKey = new PublicKey(address);
-      const nft = await limiter.schedule(async () => await metaplex.nfts().findByMint({ mintAddress: mintPublicKey }));
+      const nft = await limiter.schedule({id: `get-token-metadata-${address}`}, async () => await metaplex.nfts().findByMint({ mintAddress: mintPublicKey }));
 
       const tokenMeta: TokenMetadata = {
         symbol: nft.symbol,
