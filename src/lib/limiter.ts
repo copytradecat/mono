@@ -62,4 +62,14 @@ function logLimiterCounts() {
 // Set an interval to log counts every 10 seconds (adjust as needed)
 setInterval(logLimiterCounts, 10000); // Logs every 10 seconds
 
+export function debounce(func: any, timeout = 300){
+  let timer: any;
+  return (...args: any[]) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      func.apply(null, args);
+    }, timeout);
+  };
+}
+
 export default limiter;

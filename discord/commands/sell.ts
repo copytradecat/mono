@@ -18,18 +18,13 @@ import { defaultSettings } from '../../src/components/BotSettings';
 import { getConnectedWalletsInChannel } from '../../src/lib/utils';
 
 export async function handleSellCommand(interaction: CommandInteraction) {
-  const inputTokenAddress = interaction.options.getString('token', true);
-  const initiatingUserId = interaction.user.id;
-  const channelId = interaction.channelId;
-
   try {
-    await interaction.deferReply();
-  } catch (error) {
-    console.error('Error deferring reply:', error);
-    return;
-  }
+    await interaction.deferReply({ ephemeral: true }); // Make the interaction ephemeral
 
-  try {
+    const inputTokenAddress = interaction.options.getString('token', true);
+    const initiatingUserId = interaction.user.id;
+    const channelId = interaction.channelId;
+
     const initiatingUser = await getUser(initiatingUserId);
     const initiatingWallet = initiatingUser.wallets[0];
     const outputTokenAddress = 'So11111111111111111111111111111111111111112'; // SOL mint address
@@ -113,12 +108,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
 
     collector?.on('collect', async (btnInteraction) => {
       try {
-        if (btnInteraction.isRepliable()) {
-          await btnInteraction.deferUpdate();
-        } else {
-          console.warn('Interaction not repliable.');
-          return;
-        }
+        await btnInteraction.deferUpdate();
 
         if (btnInteraction.customId.startsWith('percentage_')) {
           const index = parseInt(btnInteraction.customId.replace('percentage_', ''));
@@ -128,12 +118,18 @@ export async function handleSellCommand(interaction: CommandInteraction) {
           collector.stop();
 
           // For swap preview, we'll need to calculate the amount based on user's balance
-          const { balance: tokenBalance } = await getTokenBalance(initiatingWallet.publicKey, inputTokenAddress);
+          const { balance: tokenBalanceRaw } = await getTokenBalance(initiatingWallet.publicKey, inputTokenAddress);
+
+          // Convert raw balance to human-readable balance
+          const tokenBalance = tokenBalanceRaw / (10 ** inputTokenInfo.decimals);
+
+          // Calculate the amount to sell (human-readable)
           const amountToSell = (selectedPercentage / 100) * tokenBalance;
 
-          // Create swap preview
-          const adjustedAmount = Math.floor(amountToSell);
+          // Convert the amount to sell back to raw amount
+          const adjustedAmount = Math.floor(amountToSell * (10 ** inputTokenInfo.decimals));
 
+          // Check if adjustedAmount is greater than zero
           if (adjustedAmount <= 0) {
             await interaction.editReply({
               content: 'Your balance is insufficient to perform this swap.',
@@ -147,13 +143,15 @@ export async function handleSellCommand(interaction: CommandInteraction) {
             adjustedAmount,
             inputTokenAddress,
             outputTokenAddress,
-            initiatingSettings
+            initiatingSettings,
+            inputTokenInfo,
+            outputTokenInfo
           );
 
           // Prompt user confirmation
           const swapCollector = await promptUserConfirmation(
             interaction,
-            `**Swap Preview**\n${swapPreview}\n\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
+            `${swapPreview}\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
           );
 
           swapCollector?.on('collect', async (i) => {
@@ -257,13 +255,15 @@ export async function handleSellCommand(interaction: CommandInteraction) {
                 adjustedAmount,
                 inputTokenAddress,
                 outputTokenAddress,
-                initiatingSettings
+                initiatingSettings,
+                inputTokenInfo,
+                outputTokenInfo
               );
 
               // Prompt user confirmation
               const swapCollector = await promptUserConfirmation(
                 interaction,
-                `**Swap Preview**\n${swapPreview}\n\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
+                `${swapPreview}\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
               );
 
               swapCollector?.on('collect', async (i) => {
@@ -338,8 +338,9 @@ export async function handleSellCommand(interaction: CommandInteraction) {
       } catch (error) {
         console.error('Error in collector:', error);
         try {
-          await btnInteraction.editReply({
+          await btnInteraction.followUp({
             content: 'An error occurred during the process.',
+            ephemeral: true,
           });
         } catch (followUpError) {
           console.error('Error sending follow-up message:', followUpError);
@@ -362,8 +363,12 @@ export async function handleSellCommand(interaction: CommandInteraction) {
 
   } catch (error) {
     console.error('Error in handleSellCommand:', error);
-    await interaction.editReply({
-      content: 'An error occurred while processing your request.',
-    });
+    try {
+      await interaction.editReply({
+        content: 'An error occurred while processing your request.',
+      });
+    } catch (editError) {
+      console.error('Error editing reply:', editError);
+    }
   }
 }

@@ -14,7 +14,7 @@ export interface Settings {
 }
 
 export const defaultSettings: Settings = {
-  slippage: 3.0,
+  slippage: 300,
   slippageType: 'fixed',
   smartMevProtection: 'secure',
   transactionSpeed: 'medium',

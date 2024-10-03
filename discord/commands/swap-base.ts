@@ -34,38 +34,50 @@ export function generateSelectionButtons(labels: string[], customIdPrefix: strin
 }
 
 // Function to prompt user for confirmation
-export async function promptUserConfirmation(
+export function promptUserConfirmation(
   interaction: CommandInteraction,
   content: string,
   ephemeral: boolean = false
-) {
-  const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId('swap_now')
-      .setLabel('Swap Now')
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('cancel_swap')
-      .setLabel('Cancel')
-      .setStyle(ButtonStyle.Danger)
-  );
+): Promise<boolean> {
+  return new Promise(async (resolve) => {
+    const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId('swap_now')
+        .setLabel('Swap Now')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId('cancel_swap')
+        .setLabel('Cancel')
+        .setStyle(ButtonStyle.Danger)
+    );
 
-  await interaction.editReply({
-    content,
-    components: [actionRow],
-    ephemeral,
+    await interaction.editReply({
+      content,
+      components: [actionRow],
+      ephemeral,
+    });
+
+    const filter = (i: any) =>
+      i.user.id === interaction.user.id && (i.customId === 'swap_now' || i.customId === 'cancel_swap');
+
+    const collector = interaction.channel?.createMessageComponentCollector({
+      filter,
+      componentType: ComponentType.Button,
+      time: swapTime,
+    });
+
+    collector?.on('collect', async (i) => {
+      await i.deferUpdate();
+      collector.stop();
+      resolve(i.customId === 'swap_now');
+    });
+
+    collector?.on('end', (collected, reason) => {
+      if (reason === 'time') {
+        resolve(false);
+      }
+    });
   });
-
-  const filter = (i: any) =>
-    i.user.id === interaction.user.id && (i.customId === 'swap_now' || i.customId === 'cancel_swap');
-
-  const swapCollector = interaction.channel?.createMessageComponentCollector({
-    filter,
-    componentType: ComponentType.Button,
-    time: swapTime,
-  });
-
-  return swapCollector;
 }
 
 // Function to execute swaps for multiple users
@@ -143,10 +155,11 @@ export async function executeSwapsForUsers(params: {
             );
 
             // Get user's token balance
-            const { balance: tokenBalance } = await getTokenBalance(walletPublicKey, inputTokenAddress);
+            const { balance: tokenBalanceRaw } = await getTokenBalance(walletPublicKey, inputTokenAddress);
+            const tokenBalance = tokenBalanceRaw;
 
             mappedAmount = (mappedPercentage / 100) * tokenBalance;
-            adjustedAmount = Math.floor(mappedAmount); // Amount in smallest unit
+            adjustedAmount = Math.floor(mappedAmount * (10 ** inputTokenInfo.decimals)); // Convert back to raw amount
           }
 
           // Create swap preview
@@ -154,7 +167,9 @@ export async function executeSwapsForUsers(params: {
             adjustedAmount,
             inputTokenAddress,
             outputTokenAddress,
-            walletSettings
+            walletSettings,
+            inputTokenInfo,
+            outputTokenInfo
           );
 
           const swapResult = await executeSwapForUser({
@@ -201,44 +216,55 @@ export async function getUser(userId: string) {
 }
 
 export async function createSwapPreview(
-  amount: number,
+  amount: number, // Raw amount in smallest units (integer)
   inputToken: string,
   outputToken: string,
-  settings: Settings
+  settings: Settings,
+  inputTokenInfo: any,
+  outputTokenInfo: any
 ) {
-  const quoteData = await getQuote(
-    inputToken,
-    outputToken,
-    amount,
-    settings.slippageType === 'fixed'
-      ? { type: 'fixed', value: settings.slippage }
-      : { type: 'dynamic' }
-  );
-  const inputTokenInfo = await getTokenInfo(inputToken);
-  const outputTokenInfo = await getTokenInfo(outputToken);
+  try {
+    const quoteData = await getQuote(
+      inputToken,
+      outputToken,
+      amount,
+      settings.slippageType === 'fixed'
+        ? { type: 'fixed', value: settings.slippage }
+        : { type: 'dynamic' }
+    );
 
-  const estimatedOutput = Number(quoteData.outAmount) / 10 ** outputTokenInfo.decimals;
+    if (!quoteData || !quoteData.outAmount) {
+      throw new Error('Quote data is invalid or incomplete.');
+    }
 
-  const swapPreview = `
-**Swap Preview**
-From: ${Number(amount) / 10 ** inputTokenInfo.decimals} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenInfo.address}>)
-To: ${estimatedOutput} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenInfo.address}>)
+    const estimatedOutputRaw = Number(quoteData.outAmount);
+
+    const amountHuman = amount / 10 ** inputTokenInfo.decimals;
+    const estimatedOutput = estimatedOutputRaw / 10 ** outputTokenInfo.decimals;
+
+    const swapPreview = `**Swap Preview**
+From: ${amountHuman.toFixed(6)} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputToken}>)
+To: ${estimatedOutput.toFixed(6)} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputToken}>)
 Price Impact: ${(quoteData.priceImpactPct * 100).toFixed(2)}%
 Slippage: ${
-    settings.slippageType === 'fixed' ? `${(settings.slippage / 100).toFixed(2)}%` : 'Dynamic'
-  }
+      settings.slippageType === 'fixed'
+        ? `${(settings.slippage / 100).toFixed(2)}%`
+        : 'Dynamic'
+    }
 Transaction Speed: ${settings.transactionSpeed}
 Smart-MEV Protection: ${settings.smartMevProtection ? 'Enabled' : 'Disabled'}
 Wrap/Unwrap SOL: ${settings.wrapUnwrapSOL ? 'Enabled' : 'Disabled'}
-  `;
+`;
 
-  return {
-    quoteData,
-    swapPreview,
-    estimatedOutput,
-    inputTokenInfo,
-    outputTokenInfo,
-  };
+    return {
+      quoteData,
+      swapPreview,
+      estimatedOutput,
+    };
+  } catch (error: any) {
+    console.error('Error creating swap preview:', error.message || error);
+    throw new Error(`Failed to create swap preview: ${error.message || 'Unknown error'}`);
+  }
 }
 
 // Modify executeSwapForUser to include selectionIndex
@@ -300,16 +326,15 @@ export async function executeSwapForUser(params: {
       );
 
       const swapContent = isBuyOperation
-        ? `Bought: ${(estimatedOutput).toFixed(6)} ${outputTokenInfo.symbol} using ${(selectedAmount / 10 ** inputTokenInfo.decimals).toFixed(6)} ${inputTokenInfo.symbol} from wallet ${truncatedWallet}\n`
-        : `Sold: ${(selectedAmount / 10 ** inputTokenInfo.decimals).toFixed(6)} ${inputTokenInfo.symbol} from wallet ${truncatedWallet}, received ${(estimatedOutput).toFixed(6)} ${outputTokenInfo.symbol}\n`;
+        ? `Bought **${(estimatedOutput).toFixed(6)} ${outputTokenInfo.symbol}** with **${(selectedAmount / 10 ** inputTokenInfo.decimals).toFixed(6)} ${inputTokenInfo.symbol}**\n`
+        : `Sold **${(selectedAmount / 10 ** inputTokenInfo.decimals).toFixed(6)} ${inputTokenInfo.symbol}** for **${(estimatedOutput).toFixed(6)} ${outputTokenInfo.symbol}**\n`;
 
       const balanceContent = `New Balances:\n- ${inputTokenInfo.symbol}: ${inputBalanceAfter.toFixed(6)}\n- ${outputTokenInfo.symbol}: ${outputBalanceAfter.toFixed(6)}`;
 
       // Send a direct message to the user about their trade
       if (user.discordId === initiatingUser.discordId) {
         await interaction.editReply({
-          content: `Swap Complete!\n\n${swapContent}\nTransaction ID: [${truncatedString(swapResult.signature, 4)}](<https://solscan.io/tx/${swapResult.signature}>)\n
-          Wallet: [${truncatedWallet}](<https://solscan.io/account/${wallet.publicKey}>)`,
+          content: `Swap Complete!\n\n${swapContent}\nTransaction ID: [${truncatedString(swapResult.signature, 4)}](<https://solscan.io/tx/${swapResult.signature}>)\nWallet: [${truncatedWallet}](<https://solscan.io/account/${wallet.publicKey}>)`,
           components: [],
         });
       } else {
@@ -341,16 +366,22 @@ export async function executeSwapForUser(params: {
         isBuyOperation ? 'bought' : 'sold'
       } a **${selectionLabel}** amount of **[${isBuyOperation ? outputTokenInfo.symbol : inputTokenInfo.symbol}](<https://solscan.io/token/${
         isBuyOperation ? outputTokenAddress : inputTokenAddress
-      }>)** at **${isBuyOperation ? estimatedOutput/selectedAmount : selectedAmount/estimatedOutput} ${outputTokenInfo.symbol}/${inputTokenInfo.symbol}**`;
+      }>)** at **${isBuyOperation ? (estimatedOutput/selectedAmount).toFixed(8) : (selectedAmount/estimatedOutput).toFixed(8)} ${outputTokenInfo.symbol}/${inputTokenInfo.symbol}**`;
 
       // Send public message to the channel
       await interaction.channel?.send(publicMessage);
 
       return swapResult;
     } else {
-      let errorMessage = `Failed to execute ${isBuyOperation ? 'buy' : 'sell'} order for wallet ${truncatedWallet}.\nReason: ${swapResult.transactionMessage}\nError Details: ${swapResult.error}`;
-      if (swapResult.signature) {
-        errorMessage += `\nTransaction may still be processing. Check signature [${swapResult.signature}](<https://solscan.io/tx/${swapResult.signature}>).`;
+      let errorMessage = `Failed to execute ${isBuyOperation ? 'buy' : 'sell'} order for wallet [${truncatedWallet}](<https://solscan.io/account/${wallet.publicKey}>).`;
+      if (swapResult.transactionMessage && swapResult.transactionMessage!="No additional information") {
+        errorMessage += `\nReason: ${swapResult.transactionMessage}`;
+      }
+      if (swapResult.error) {
+        errorMessage += `\nError Details: ${swapResult.error}`;
+      }
+      if (swapResult.signature && swapResult.signature!="No signature") {
+        errorMessage += `\nTransaction may still be processing.${swapResult.signature && `\nCheck signature [${swapResult.signature}](<https://solscan.io/tx/${swapResult.signature}>).`}`;
       }
 
       if (user.discordId === initiatingUser.discordId) {
@@ -375,7 +406,10 @@ export async function executeSwapForUser(params: {
   } catch (error: any) {
     console.error('Error executing swap:', error);
     const truncatedWallet = truncatedString(wallet.publicKey, 4);
-    let errorMessage = `Failed to execute trade for wallet ${truncatedWallet}. Please try again later.`;
+    let errorMessage = `Failed to execute ${isBuyOperation ? 'buy' : 'sell'} order for wallet [${truncatedWallet}](<https://solscan.io/account/${wallet.publicKey}>).\n`;
+    if (error.message) {
+      errorMessage += `Error Details: ${error.message}`;
+    }
 
     if (user.discordId === initiatingUser.discordId) {
       await interaction.editReply({
@@ -398,35 +432,57 @@ export async function executeSwapForUser(params: {
 
 // Modify executeSwap to handle transaction confirmation
 export async function executeSwap(userId: string, walletPublicKey: string, swapTransaction: string) {
-  try {
-    const response = await limiter.schedule({ id: `execute-swap-${userId}` }, async () => {
-      return axios.post(`${API_BASE_URL}/sign-and-send`, {
-        userId,
-        walletPublicKey,
-        serializedTransaction: swapTransaction,
+  const maxRetries = 3;
+  let retryCount = 0;
+
+  while (retryCount < maxRetries) {
+    try {
+      const response = await limiter.schedule({ id: `execute-swap-${userId}` }, async () => {
+        return axios.post(`${API_BASE_URL}/sign-and-send`, {
+          userId,
+          walletPublicKey,
+          serializedTransaction: swapTransaction,
+        });
       });
-    });
 
-    const { signature } = response.data;
+      const { signature } = response.data;
 
-    // Optionally wait for the transaction to be confirmed
-    // const confirmed = await connection.confirmTransaction(signature, 'confirmed');
+      // Optionally wait for the transaction to be confirmed
+      // const confirmed = await connection.confirmTransaction(signature, 'confirmed');
 
-    return {
-      success: true,
-      signature,
-      error: null,
-      transactionMessage: signature ? 'Transaction submitted' : 'Transaction not submitted',
-    };
-  } catch (error: any) {
-    console.error('Swap execution failed:', error);
-    return {
-      success: false,
-      error: error.response?.data?.error || error.message || 'Unknown error',
-      transactionMessage: error.response?.data?.transactionMessage || 'No additional information',
-      signature: error.response?.data?.signature || 'No signature',
-    };
+      return {
+        success: true,
+        signature,
+        error: null,
+        transactionMessage: signature ? 'Transaction submitted' : 'Transaction not submitted',
+      };
+    } catch (error: any) {
+      console.error(`Swap execution failed (attempt ${retryCount + 1}):`, error);
+
+      if (error.response?.status === 429) {
+        retryCount++;
+        if (retryCount < maxRetries) {
+          const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff
+          console.log(`Retrying after ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      } else {
+        return {
+          success: false,
+          error: error.response?.data?.error || error.message || 'Unknown error',
+          transactionMessage: error.response?.data?.transactionMessage || 'No additional information',
+          signature: error.response?.data?.signature || 'No signature',
+        };
+      }
+    }
   }
+
+  return {
+    success: false,
+    error: 'Max retries reached',
+    transactionMessage: 'Failed to execute swap after multiple attempts',
+    signature: 'No signature',
+  };
 }
 
 export async function recordTrade(

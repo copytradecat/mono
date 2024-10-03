@@ -18,18 +18,19 @@ import { defaultSettings } from '../../src/components/BotSettings';
 import { getConnectedWalletsInChannel, truncatedString } from '../../src/lib/utils';
 
 export async function handleBuyCommand(interaction: CommandInteraction) {
-  const outputTokenAddress = interaction.options.getString('token', true);
-  const initiatingUserId = interaction.user.id;
-  const channelId = interaction.channelId;
-
   try {
-    await interaction.deferReply();
-  } catch (error) {
-    console.error('Error deferring reply:', error);
-    return;
-  }
+    // Check if the interaction is still valid
+    if (!interaction.isRepliable()) {
+      console.log('Interaction is no longer valid');
+      return;
+    }
 
-  try {
+    await interaction.deferReply({ ephemeral: true }); // Make the interaction ephemeral
+
+    const outputTokenAddress = interaction.options.getString('token', true);
+    const initiatingUserId = interaction.user.id;
+    const channelId = interaction.channelId;
+
     const initiatingUser = await getUser(initiatingUserId);
     const initiatingWallet = initiatingUser.wallets[0];
     const inputToken = 'So11111111111111111111111111111111111111112'; // SOL mint address
@@ -111,14 +112,13 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
       time: 30000, // 30 seconds
     });
 
-    collector?.on('collect', async (btnInteraction) => {
+    collector.on('collect', async (btnInteraction) => {
       try {
-        if (btnInteraction.isRepliable()) {
-          await btnInteraction.deferUpdate();
-        } else {
-        console.warn('Interaction not repliable.');
+        if (!btnInteraction.isRepliable()) {
+          console.log('Button interaction is no longer valid');
           return;
         }
+        await btnInteraction.deferUpdate();
 
         if (btnInteraction.customId.startsWith('amount_')) {
           const index = parseInt(btnInteraction.customId.replace('amount_', ''));
@@ -130,72 +130,57 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
           // Create swap preview
           const adjustedAmount = Math.floor(selectedAmount * 10 ** inputTokenInfo.decimals);
 
-          const { quoteData, swapPreview, estimatedOutput } = await createSwapPreview(
-            adjustedAmount,
-            inputToken,
-            outputTokenAddress,
-            initiatingSettings
-          );
+          try {
+            const { quoteData, swapPreview, estimatedOutput } = await createSwapPreview(
+              adjustedAmount,
+              inputToken,
+              outputTokenAddress,
+              initiatingSettings,
+              inputTokenInfo,
+              outputTokenInfo
+            );
 
-          // Prompt user confirmation
-          const swapCollector = await promptUserConfirmation(
-            interaction,
-            `**Swap Preview**\n${swapPreview}\n\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
-          );
+            // Prompt user confirmation
+            const shouldSwap = await promptUserConfirmation(
+              interaction,
+              `${swapPreview}\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
+            );
 
-          swapCollector?.on('collect', async (i) => {
-            try {
-              if (i.isRepliable()) {
-                await i.deferUpdate();
-              } else {
-                console.warn('Interaction not repliable.');
-                return;
-              }
+            if (shouldSwap) {
+              await interaction.editReply({
+                content: 'Processing swaps...',
+                components: [],
+              });
 
-              if (i.customId === 'swap_now') {
-                swapCollector.stop();
+              // Execute swaps for users
+              const tradeResults = await executeSwapsForUsers({
+                interaction,
+                connectedWallets,
+                selectionIndex,
+                isBuyOperation: true,
+                inputTokenInfo,
+                outputTokenInfo,
+                inputTokenAddress: inputToken,
+                outputTokenAddress,
+                initiatingUser,
+                initiatingSettings,
+                initiatingEntryAmounts,
+              });
 
-                await i.editReply({
-                  content: 'Processing swaps...',
-                  components: [],
-                });
-
-                // Execute swaps for users
-                const tradeResults = await executeSwapsForUsers({
-                  interaction,
-                  connectedWallets,
-                  selectionIndex,
-                  isBuyOperation: true,
-                  inputTokenInfo,
-                  outputTokenInfo,
-                  inputTokenAddress: inputToken,
-                  outputTokenAddress,
-                  initiatingUser,
-                  initiatingSettings,
-                  initiatingEntryAmounts,
-                });
-
-                // All messaging is handled within executeSwapForUser
-
-              } else if (i.customId === 'cancel_swap') {
-                swapCollector.stop();
-                await i.editReply({
-                  content: 'Transaction cancelled.',
-                  components: [],
-                });
-              }
-            } catch (error) {
-              console.error('Error in swapCollector:', error);
-              try {
-                await i.editReply({
-                  content: 'An error occurred during the swap execution.',
-                });
-              } catch (followUpError) {
-                console.error('Error sending follow-up message:', followUpError);
-              }
+              // All messaging is handled within executeSwapForUser
+            } else {
+              await interaction.editReply({
+                content: 'Swap cancelled.',
+                components: [],
+              });
             }
-          });
-
+          } catch (error: any) {
+            console.error('Error in swap process:', error);
+            await interaction.editReply({
+              content: `An error occurred during the swap process: ${error.message}`,
+              components: [],
+            });
+          }
         } else if (btnInteraction.customId === 'custom') {
           collector.stop();
 
@@ -245,67 +230,76 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                 adjustedAmount,
                 inputToken,
                 outputTokenAddress,
-                initiatingSettings
+                initiatingSettings,
+                inputTokenInfo,
+                outputTokenInfo
               );
 
               // Prompt user confirmation
-              const swapCollector = await promptUserConfirmation(
+              const promptSwap = await promptUserConfirmation(
                 interaction,
-                `**Swap Preview**\n${swapPreview}\n\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
+                `${swapPreview}\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
               );
 
-              swapCollector?.on('collect', async (i) => {
-                try {
-                  if (i.isRepliable()) {
-                    await i.deferUpdate();
-                  } else {
-                    console.warn('Interaction not repliable.');
-                    return;
-                  }
-
-                  if (i.customId === 'swap_now') {
-                    swapCollector.stop();
-
-                    await i.editReply({
-                      content: 'Processing swaps...',
-                      components: [],
-                    });
-
-                    // Execute swaps for users
-                    const tradeResults = await executeSwapsForUsers({
-                      interaction,
-                      connectedWallets,
-                      selectionIndex: 'Custom',
-                      isBuyOperation: true,
-                      inputTokenInfo,
-                      outputTokenInfo,
-                      inputTokenAddress: inputToken,
-                      outputTokenAddress,
-                      initiatingUser,
-                      initiatingSettings,
-                      customAmount,
-                    });
-
-                    // All messaging is handled within executeSwapForUser
-
-                  } else if (i.customId === 'cancel_swap') {
-                    swapCollector.stop();
-                    await i.editReply({
-                      content: 'Transaction cancelled.',
-                      components: [],
-                    });
-                  }
-                } catch (error) {
-                  console.error('Error in swapCollector:', error);
+              if (promptSwap) {
+                promptSwap.on('collect', async (i) => {
                   try {
-                    await i.editReply({
-                      content: 'An error occurred during the swap execution.',
-                    });
-                  } catch (followUpError) {
-                    console.error('Error sending follow-up message:', followUpError);
+                    if (i.isRepliable()) {
+                      await i.deferUpdate();
+                    } else {
+                      console.warn('Interaction not repliable.');
+                      return;
+                    }
+
+                    if (i.customId === 'swap_now') {
+                      promptSwap.stop();
+
+                      await i.editReply({
+                        content: 'Processing swaps...',
+                        components: [],
+                      });
+
+                      // Execute swaps for users
+                      const tradeResults = await executeSwapsForUsers({
+                        interaction,
+                        connectedWallets,
+                        selectionIndex: 'Custom',
+                        isBuyOperation: true,
+                        inputTokenInfo,
+                        outputTokenInfo,
+                        inputTokenAddress: inputToken,
+                        outputTokenAddress,
+                        initiatingUser,
+                        initiatingSettings,
+                        customAmount,
+                      });
+
+                      // All messaging is handled within executeSwapForUser
+
+                    } else if (i.customId === 'cancel_swap') {
+                      promptSwap.stop();
+                      await i.editReply({
+                        content: 'Transaction cancelled.',
+                        components: [],
+                      });
+                    }
+                  } catch (error) {
+                    console.error('Error in promptSwap:', error);
+                    try {
+                      await i.editReply({
+                        content: 'An error occurred during the swap execution.',
+                      });
+                    } catch (followUpError) {
+                      console.error('Error sending follow-up message:', followUpError);
+                    }
                   }
-                }
-              });
+                });
+              } else {
+                await interaction.editReply({
+                  content: 'Swap cancelled.',
+                  components: [],
+                });
+              }
 
             } catch (error) {
               console.error('Error in messageCollector:', error);
@@ -323,11 +317,12 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
           });
         }
 
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error in collector:', error);
         try {
-          await btnInteraction.editReply({
-            content: 'An error occurred during the process.',
+          await btnInteraction.followUp({
+            content: `An error occurred during the process: ${error.message}`,
+            ephemeral: true,
           });
         } catch (followUpError) {
           console.error('Error sending follow-up message:', followUpError);
@@ -350,8 +345,16 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
 
   } catch (error) {
     console.error('Error in handleBuyCommand:', error);
-    await interaction.editReply({
-      content: 'An error occurred while processing your request.',
-    });
+    if (interaction.isRepliable()) {
+      try {
+        await interaction.editReply({
+          content: 'An error occurred while processing your request.',
+        });
+      } catch (editError) {
+        console.error('Error editing reply:', editError);
+      }
+    } else {
+      console.log('Interaction is no longer valid for error response');
+    }
   }
 }

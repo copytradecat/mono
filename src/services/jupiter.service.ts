@@ -213,39 +213,50 @@ export async function getAggregateBalance(wallets: string[]) {
   return aggregateBalance;
 }
 
-export async function getQuote(inputToken: string, outputToken: string, amount: number, slippageSettings: { type: 'fixed' | 'dynamic', value?: number }): Promise<QuoteResponse> {
-  const baseParams: QuoteGetRequest = {
-    inputMint: inputToken,
-    outputMint: outputToken,
-    amount: amount,
-  };
-
-  const params: QuoteGetRequest = slippageSettings.type === 'fixed' 
-    ? {
-        ...baseParams,
-        slippageBps: Math.floor(slippageSettings.value!),
-      }
-    : {
-        ...baseParams,
-        autoSlippage: true,
-        autoSlippageCollisionUsdValue: 1_000,
-        maxAutoSlippageBps: 1000, // 10%
-        minimizeSlippage: true,
-        onlyDirectRoutes: false,
-        asLegacyTransaction: false,
-      };
-
+export async function getQuote(
+  inputToken: string,
+  outputToken: string,
+  amount: number,
+  slippageSettings: { type: 'fixed' | 'dynamic'; value?: number }
+): Promise<QuoteResponse> {
   try {
-    const quote = await limiter.schedule({id: `get-quote-${inputToken}-${outputToken}-${amount}`}, async () => await jupiterApiClient.quoteGet(params));
+    const baseParams: QuoteGetRequest = {
+      inputMint: inputToken,
+      outputMint: outputToken,
+      amount: amount,
+    };
 
-    if (!quote) {
-      throw new Error('Failed to get quote');
+    const response = await limiter.schedule(
+      { id: `get-quote-${inputToken}-${outputToken}-${amount}` },
+      async () => {
+        return await jupiterApiClient.quoteGet({
+          ...baseParams,
+          ...(slippageSettings.type === 'dynamic' && {
+            autoSlippage: true,
+            autoSlippageCollisionUsdValue: 1_000,
+            maxAutoSlippageBps: 1000, // 10%
+            onlyDirectRoutes: false,
+            asLegacyTransaction: false,
+          }),
+          ...(slippageSettings.type === 'fixed' && {
+            slippageBps: slippageSettings.value,
+          }),
+        });
+      }
+    );
+
+    return response;
+  } catch (error: any) {
+    // Log the full error response for debugging
+    if (error.response) {
+      console.error('Full error response:', error.response.data);
+    } else {
+      console.error('Error getting quote:', error.message);
     }
 
-    return quote;
-  } catch (error) {
-    console.error('Error getting quote:', error);
-    throw error;
+    throw new Error(
+      `Failed to get quote: ${error.response?.data?.message || error.message}`
+    );
   }
 }
 
