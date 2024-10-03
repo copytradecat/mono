@@ -32,7 +32,7 @@ limiter.on('dropped', (jobInfo) => {
 });
 
 limiter.on('executing', (jobInfo) => {
-  console.log(`Job ${jobInfo.options.id} is executing`);
+  console.log(`Job ${jobInfo.options.id} is executing at ${new Date().toISOString()}`);
 });
 
 limiter.on('received', (jobInfo) => {

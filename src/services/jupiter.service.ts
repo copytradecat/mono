@@ -83,24 +83,20 @@ async function getTokenMetadata(mintAddresses: string[]): Promise<{ [key: string
   return metadata;
 }
 
-const tokenInfoCache: {
-  [address: string]: { info: any; lastUpdated: number };
-} = {};
+const tokenInfoCache: { [address: string]: { info: any; lastUpdated: number } } = {};
 
 export async function getTokenInfo(tokenAddress: string): Promise<any> {
   const cachedEntry = tokenInfoCache[tokenAddress];
   const cacheTTL = 24 * 60 * 60 * 1000; // 24 hours
 
-  if (cachedEntry && (Date.now() - cachedEntry.lastUpdated) < cacheTTL) {
+  if (cachedEntry && Date.now() - cachedEntry.lastUpdated < cacheTTL) {
     return cachedEntry.info;
   }
 
   // Fetch token info from the source
   const tokenInfo = await fetchTokenInfo(tokenAddress);
 
-  // Cache the info with a timestamp
   tokenInfoCache[tokenAddress] = { info: tokenInfo, lastUpdated: Date.now() };
-
   return tokenInfo;
 }
 
@@ -278,8 +274,10 @@ export async function getSwapTransaction(
     ...(settings.slippageType === 'fixed' && {slippageBps: settings.slippage}),
   };
 
-  const swapTransaction = await jupiterApiClient.swapPost({
-    swapRequest,
+  const swapTransaction = await limiter.schedule({ id: `get-swap-transaction-${userPublicKey}` }, async () => {
+    return await jupiterApiClient.swapPost({
+      swapRequest,
+    });
   });
 
   if (!swapTransaction) {
@@ -299,32 +297,32 @@ export async function executeSwap(connection: Connection, swapTransaction: strin
   return await limiter.schedule({id: `execute-swap-${signer}` }, async () => await connection.sendTransaction(transaction));
 }
 
-export async function getTokenBalance(walletAddress: string, tokenAddress: string): Promise<{
-  balance: number;
-  decimals: number;
-  symbol: string;
-}> {
-  try {
-      const walletPublicKey = new PublicKey(walletAddress);
-      const tokenPublicKey = new PublicKey(tokenAddress);
+export async function getTokenBalance(
+  walletAddress: string,
+  tokenAddress: string
+): Promise<{ balance: number; decimals: number; symbol: string }> {
+  // For SOL
+  if (tokenAddress === 'So11111111111111111111111111111111111111112' || tokenAddress === 'SOL') {
+    const balanceLamports = await getBalance(walletAddress);
+    return { balance: balanceLamports, decimals: 9, symbol: 'SOL' }; // Return lamports
+  } else {
+    // For SPL Tokens
+    // balance should be in raw units (smallest units)
+    const tokenAccounts = await connection.getParsedTokenAccountsByOwner(new PublicKey(walletAddress), {
+      mint: new PublicKey(tokenAddress),
+    });
 
-      const tokenAccounts = await limiter.schedule(async () => await connection.getParsedTokenAccountsByOwner(walletPublicKey, {
-          mint: tokenPublicKey,
-        }));
+    let balance = 0;
+    const tokenMetadata = await getTokenMetadata([tokenAddress]);
+    const { decimals, symbol } = tokenMetadata[tokenAddress];
 
-      const tokenMetadata = await getTokenMetadata([tokenAddress]);
-      const { decimals, symbol } = tokenMetadata[tokenAddress];
-      let balance = 0;
+    if (tokenAccounts.value.length > 0) {
+      const tokenAmount = tokenAccounts.value[0].account.data.parsed.info.tokenAmount;
+      balance = Number(tokenAmount.amount);
+      // Do not divide by decimals here
+    }
 
-      if (tokenAccounts.value.length > 0) {
-        const tokenAmount = tokenAccounts.value[0].account.data.parsed.info.tokenAmount;
-        balance = parseFloat(tokenAmount.amount) / Math.pow(10, decimals);
-      }
-
-      return { balance, decimals, symbol };
-  } catch (error) {
-    console.error('Error fetching token balance:', error);
-    throw error;
+    return { balance, decimals, symbol };
   }
 }
 

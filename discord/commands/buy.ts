@@ -141,12 +141,12 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
             );
 
             // Prompt user confirmation
-            const shouldSwap = await promptUserConfirmation(
+            const userResponse = await promptUserConfirmation(
               interaction,
               `${swapPreview}\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
             );
 
-            if (shouldSwap) {
+            if (userResponse === 'swap_now') {
               await interaction.editReply({
                 content: 'Processing swaps...',
                 components: [],
@@ -167,12 +167,16 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                 initiatingEntryAmounts,
               });
 
-              // All messaging is handled within executeSwapForUser
-            } else {
+              // All messaging is handled within executeSwapsForUsers
+
+            } else if (userResponse === 'cancel_swap') {
               await interaction.editReply({
-                content: 'Swap cancelled.',
+                content: 'Swap cancelled by user.',
                 components: [],
               });
+            } else if (userResponse === 'timeout') {
+              // The 'promptUserConfirmation' function already edits the reply to indicate timeout.
+              // Handle any additional cleanup here if needed.
             }
           } catch (error: any) {
             console.error('Error in swap process:', error);
@@ -236,13 +240,13 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
               );
 
               // Prompt user confirmation
-              const promptSwap = await promptUserConfirmation(
+              const userResponse = await promptUserConfirmation(
                 interaction,
                 `${swapPreview}\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
               );
 
-              if (promptSwap) {
-                promptSwap.on('collect', async (i) => {
+              if (userResponse === 'swap_now') {
+                userResponse.on('collect', async (i) => {
                   try {
                     if (i.isRepliable()) {
                       await i.deferUpdate();
@@ -252,7 +256,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                     }
 
                     if (i.customId === 'swap_now') {
-                      promptSwap.stop();
+                      userResponse.stop();
 
                       await i.editReply({
                         content: 'Processing swaps...',
@@ -277,14 +281,14 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                       // All messaging is handled within executeSwapForUser
 
                     } else if (i.customId === 'cancel_swap') {
-                      promptSwap.stop();
+                      userResponse.stop();
                       await i.editReply({
                         content: 'Transaction cancelled.',
                         components: [],
                       });
                     }
                   } catch (error) {
-                    console.error('Error in promptSwap:', error);
+                    console.error('Error in userResponse:', error);
                     try {
                       await i.editReply({
                         content: 'An error occurred during the swap execution.',
@@ -294,11 +298,14 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                     }
                   }
                 });
-              } else {
+              } else if (userResponse === 'cancel_swap') {
                 await interaction.editReply({
                   content: 'Swap cancelled.',
                   components: [],
                 });
+              } else if (userResponse === 'timeout') {
+                // The 'promptUserConfirmation' function already edits the reply to indicate timeout.
+                // Handle any additional cleanup here if needed.
               }
 
             } catch (error) {

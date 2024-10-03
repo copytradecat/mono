@@ -10,7 +10,6 @@ import {
   createSwapPreview,
   promptUserConfirmation,
   executeSwapsForUsers,
-  generateSelectionButtons,
   swapTime,
 } from './swap-base';
 import { getTokenInfo, getTokenBalance } from '../../src/services/jupiter.service';
@@ -19,7 +18,7 @@ import { getConnectedWalletsInChannel } from '../../src/lib/utils';
 
 export async function handleSellCommand(interaction: CommandInteraction) {
   try {
-    await interaction.deferReply({ ephemeral: true }); // Make the interaction ephemeral
+    await interaction.deferReply({ ephemeral: true });
 
     const inputTokenAddress = interaction.options.getString('token', true);
     const initiatingUserId = interaction.user.id;
