@@ -18,11 +18,11 @@ import { getConnectedWalletsInChannel } from '../../src/lib/utils';
 
 export async function handleSellCommand(interaction: CommandInteraction) {
   try {
-    // Check if the interaction is still valid
     if (!interaction.isRepliable()) {
       console.log('Interaction is no longer valid');
       return;
     }
+
     try {
       await interaction.deferReply({ ephemeral: true });
     } catch (error) {
@@ -117,6 +117,10 @@ export async function handleSellCommand(interaction: CommandInteraction) {
 
     collector?.on('collect', async (btnInteraction) => {
       try {
+        if (!btnInteraction.isRepliable()) {
+          console.log('Button interaction is no longer valid');
+          return;
+        }
         await btnInteraction.deferUpdate();
 
         if (btnInteraction.customId.startsWith('percentage_')) {
@@ -366,7 +370,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
       } catch (error: any) {
         console.error('Error in collector:', error);
         try {
-          if (interaction.isRepliable()) {
+          if (btnInteraction.isRepliable()) {
             await btnInteraction.followUp({
               content: `An error occurred during the process: ${error.message}`,
               ephemeral: true,
@@ -397,18 +401,18 @@ export async function handleSellCommand(interaction: CommandInteraction) {
       }
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error in handleSellCommand:', error);
-    try {
-      if (interaction.isRepliable()) {
+    if (interaction.isRepliable()) {
+      try {
         await interaction.editReply({
           content: 'An error occurred while processing your request.',
         });
-      } else {
-        console.log('Interaction is no longer valid for editing reply\n(An error occurred while processing your request.)');
+      } catch (editError) {
+        console.error('Error editing reply:', editError);
       }
-    } catch (editError) {
-      console.error('Error editing reply:', editError);
+    } else {
+      console.log('Interaction is no longer valid for error response');
     }
   }
 }
