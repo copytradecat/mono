@@ -14,7 +14,7 @@ const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 const jupiterApiClient = createJupiterApiClient({ basePath: process.env.NEXT_PUBLIC_SOLANA_RPC_URL_INFURA! });
 const metaplex = Metaplex.make(connection);
 
-const requestLimit = pLimit(10); // Limit to 10 concurrent requests
+const requestLimit = pLimit(8); // Limit to 8 concurrent requests
 
 interface TokenMetadata {
   symbol: string;
@@ -186,7 +186,7 @@ export async function getTokenBalances(publicKey: string) {
 
 export async function getAggregateBalance(wallets: string[]) {
   const aggregateBalance: { [key: string]: number } = {};
-  const limit = pLimit(5); // Adjust concurrency limit based on your needs
+  const limit = pLimit(8); // Adjust concurrency limit based on your needs
 
   await Promise.all(
     wallets.map((walletAddress) =>
@@ -332,7 +332,7 @@ export async function getBalancesForWallets(
   tokenAddress: string
 ): Promise<{ [walletAddress: string]: number }> {
   const balances: { [walletAddress: string]: number } = {};
-  const limit = pLimit(5); // Limit to 5 concurrent requests
+  const limit = pLimit(8); // Limit to 8 concurrent requests
 
   await Promise.all(
     walletAddresses.map((walletAddress) =>
@@ -358,7 +358,7 @@ export async function getMultipleTokenBalances(
   tokenAddresses: string[]
 ): Promise<{ [tokenAddress: string]: number }> {
   const balances: { [tokenAddress: string]: number } = {};
-  const limit = pLimit(10); // Limit to 10 concurrent requests
+  const limit = pLimit(5); // Limit to 5 concurrent requests
 
   await Promise.all(
     tokenAddresses.map((tokenAddress) =>
@@ -383,7 +383,7 @@ export async function getMultipleTokenBalancesForWallets(
   walletAddresses: string[],
   tokenAddresses: string[]
 ): Promise<{ [walletAddress: string]: { [tokenAddress: string]: number } }> {
-  const limit = pLimit(10); // Limit to 10 concurrent requests
+  const limit = pLimit(5); // Limit to 5 concurrent requests
   const balances: { [walletAddress: string]: { [tokenAddress: string]: number } } = {};
 
   await Promise.all(

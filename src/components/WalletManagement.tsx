@@ -25,7 +25,7 @@ export default function WalletManagement() {
   const [presets, setPresets] = useState<typeof PresetSchema[]>([]);
 
   const fetchTokenBalances = async (publicKey: string) => {
-    const limit = pLimit(10); // Limit to 10 concurrent requests
+    const limit = pLimit(3); // Limit to 3 concurrent requests
 
     try {
       const tokenAccountsResponse = await getTokenBalances(publicKey);

@@ -25,7 +25,12 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
       return;
     }
 
-    await interaction.deferReply({ ephemeral: true }); // Make the interaction ephemeral
+    try {
+      await interaction.deferReply({ ephemeral: true });
+    } catch (error) {
+      console.error('Error deferring reply:', error);
+      return;
+    }
 
     const outputTokenAddress = interaction.options.getString('token', true);
     const initiatingUserId = interaction.user.id;
@@ -109,7 +114,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
 
     const collector = interaction.channel?.createMessageComponentCollector({
       componentType: ComponentType.Button,
-      time: 30000, // 30 seconds
+      time: 60000, // 60 seconds
     });
 
     collector.on('collect', async (btnInteraction) => {
@@ -146,7 +151,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
               `${swapPreview}\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
             );
 
-            if (userResponse === 'swap_now') {
+            if (userResponse === 'swap_now' || userResponse === 'timeout') {
               await interaction.editReply({
                 content: 'Processing swaps...',
                 components: [],
@@ -174,9 +179,6 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                 content: 'Swap cancelled by user.',
                 components: [],
               });
-            } else if (userResponse === 'timeout') {
-              // The 'promptUserConfirmation' function already edits the reply to indicate timeout.
-              // Handle any additional cleanup here if needed.
             }
           } catch (error: any) {
             console.error('Error in swap process:', error);
@@ -245,7 +247,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                 `${swapPreview}\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
               );
 
-              if (userResponse === 'swap_now') {
+              if (userResponse === 'swap_now' || userResponse === 'timeout') {
                 userResponse.on('collect', async (i) => {
                   try {
                     if (i.isRepliable()) {
@@ -303,9 +305,6 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                   content: 'Swap cancelled.',
                   components: [],
                 });
-              } else if (userResponse === 'timeout') {
-                // The 'promptUserConfirmation' function already edits the reply to indicate timeout.
-                // Handle any additional cleanup here if needed.
               }
 
             } catch (error) {

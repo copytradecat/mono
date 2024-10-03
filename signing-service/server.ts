@@ -16,7 +16,7 @@ const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 
 app.post('/sign-and-send', async (req, res) => {
   console.log('Received request in signing service');
-  console.log('Request body:', JSON.stringify(req.body, null, 2));
+  // console.log('Request body:', JSON.stringify(req.body, null, 2));
 
   const jobId = `sign-and-send-${Date.now()}`;
 

@@ -40,8 +40,9 @@ export function promptUserConfirmation(
   ephemeral: boolean = false
 ): Promise<'swap_now' | 'cancel_swap' | 'timeout'> {
   return new Promise(async (resolve) => {
-    const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
+    try {
+      const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
         .setCustomId('swap_now')
         .setLabel('Swap Now')
         .setStyle(ButtonStyle.Primary),
@@ -50,7 +51,10 @@ export function promptUserConfirmation(
         .setLabel('Cancel')
         .setStyle(ButtonStyle.Danger)
     );
-
+    if (!interaction.isRepliable()) {
+      console.log('Interaction is no longer valid');
+      return;
+    }
     await interaction.editReply({
       content,
       components: [actionRow],
@@ -80,6 +84,11 @@ export function promptUserConfirmation(
         });
       }
     });
+
+    } catch (error) {
+      console.error('Error in promptUserConfirmation:', error);
+      resolve('cancel_swap');
+    }
   });
 }
 
@@ -119,8 +128,16 @@ export async function executeSwapsForUsers(params: {
 
   const tradeResults = [];
 
-  const limit = pLimit(Number(process.env.LIMIT_CONCURRENCY) || 2); // Limit concurrent swaps to prevent rate limits
+  const limit = pLimit(Number(process.env.LIMIT_CONCURRENCY) || 5); // Limit concurrent swaps to prevent rate limits
 
+  const successfulSwaps: any[] = [];
+  const failedSwaps: any[] = [];
+
+  if (!connectedWallets.some((walletInfo) => walletInfo.user.discordId === initiatingUser)) {
+    console.log(`Initiating user not found in connected wallets! ${initiatingUser}`);
+  }
+
+  // Modify your loop to collect results
   await Promise.all(
     connectedWallets.map((walletInfo) =>
       limit(async () => {
@@ -200,6 +217,12 @@ export async function executeSwapsForUsers(params: {
             selectionIndex,
           });
 
+          if (swapResult.success) {
+            successfulSwaps.push({ user, wallet, swapResult });
+          } else {
+            failedSwaps.push({ user, wallet, swapResult });
+          }
+
           tradeResults.push({
             user,
             swapResult,
@@ -214,6 +237,28 @@ export async function executeSwapsForUsers(params: {
       })
     )
   );
+
+  // After all swaps are complete, send public message
+  const selectionLabels = isBuyOperation
+    ? ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌', 'Massive 🦍', 'MEGAMOON 🌝']
+    : ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌'];
+
+  const selectionLabel = selectionIndex !== undefined && selectionLabels[selectionIndex]
+    ? selectionLabels[selectionIndex]
+    : 'Custom';
+
+  const publicMessage = `**${initiatingUser.username || initiatingUser.discordId}** ${
+    isBuyOperation ? 'bought' : 'sold'
+  } a **${selectionLabel}** amount of **[${isBuyOperation ? outputTokenInfo.symbol : inputTokenInfo.symbol}](<https://solscan.io/token/${
+    isBuyOperation ? outputTokenAddress : inputTokenAddress
+  }>)**.`;
+
+  // Optionally, include details about the number of followers who also swapped
+  if (successfulSwaps.length > 1) {
+    publicMessage += `\n${successfulSwaps.length - 1} follower(s) also executed the swap.`;
+  }
+
+  await interaction.channel?.send(publicMessage);
 
   return tradeResults;
 }
@@ -284,7 +329,7 @@ export async function createSwapPreview(
     const estimatedOutput = estimatedOutputRaw / 10 ** outputTokenInfo.decimals;
 
     console.log(`Swapping ${amountHuman} ${inputTokenInfo.symbol} for ${estimatedOutput} ${outputTokenInfo.symbol}`);
-    console.log(`estimatedOutput = estimatedOutputRaw / 10 ** outputTokenInfo.decimals = ${estimatedOutputRaw} / 10 ** ${outputTokenInfo.decimals} = ${estimatedOutput}`);
+    // console.log(`estimatedOutput = estimatedOutputRaw / 10 ** outputTokenInfo.decimals = ${estimatedOutputRaw} / 10 ** ${outputTokenInfo.decimals} = ${estimatedOutput}`);
 
     const swapPreview = `**Swap Preview**
 From: ${amountHuman.toFixed(6)} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputToken}>)
@@ -391,27 +436,6 @@ export async function executeSwapForUser(params: {
           console.error('Failed to send DM to user:', dmError);
         }
       }
-
-      // Prepare public message
-      const selectionLabels = isBuyOperation
-        ? ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌', 'Massive 🦍', 'MEGAMOON 🌝']
-        : ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌'];
-
-      const selectionLabel = selectionIndex !== undefined && selectionLabels[selectionIndex]
-        ? selectionLabels[selectionIndex]
-        : 'Custom';
-
-      // Use initiatingUser for the public message
-      const publicMessage = `**${initiatingUser.username || initiatingUser.discordId}** ${
-        isBuyOperation ? 'bought' : 'sold'
-      } a **${selectionLabel}** amount of **[${isBuyOperation ? outputTokenInfo.symbol : inputTokenInfo.symbol}](<https://solscan.io/token/${
-        isBuyOperation ? outputTokenAddress : inputTokenAddress
-      }>)** at **${isBuyOperation ? (estimatedOutput / selectedAmount).toFixed(8) : (selectedAmount / estimatedOutput).toFixed(8)} ${
-        outputTokenInfo.symbol
-      }/${inputTokenInfo.symbol}**`;
-
-      // Send public message to the channel
-      await interaction.channel?.send(publicMessage);
 
       return swapResult;
     } else {

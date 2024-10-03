@@ -15,7 +15,7 @@ export default function WalletInfo() {
   }, [publicKey]);
 
   const fetchBalances = async (pubKey: string) => {
-    const limit = pLimit(10); // Limit to 10 concurrent requests
+    const limit = pLimit(2); // Limit to 2 concurrent requests
 
     const solBalancePromise = await getBalance(pubKey);
 
