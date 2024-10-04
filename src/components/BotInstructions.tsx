@@ -34,12 +34,11 @@ export default function BotInstructions() {
           <li>Complete any additional verification steps if prompted.</li>
           <li>
             Once added, use the command{' '}
-            <code className="bg-gray-200 px-1 rounded">/ct setup</code> in the channel
-            where you want the bot to operate.
+            <code className="bg-gray-200 px-1 rounded">/ct start</code> in the channel where you want the bot to operate.
           </li>
           <li>
-            After setup, members can use{' '}
-            <code className="bg-gray-200 px-1 rounded">/ct register</code> to start using
+            After starting the bot, members can use{' '}
+            <code className="bg-gray-200 px-1 rounded">/ct connect</code> to start using
             the bot.
           </li>
           <li>

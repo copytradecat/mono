@@ -1,7 +1,7 @@
 import { CommandInteraction, TextChannel, PermissionFlagsBits } from "discord.js";
 import Channel from '../../src/models/Channel';
 
-export async function handleSetup(interaction: CommandInteraction) {
+export async function handleStart(interaction: CommandInteraction) {
   if (!interaction.guild || !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
     return interaction.reply({ content: "This command can only be used by administrators in a server.", ephemeral: true });
   }

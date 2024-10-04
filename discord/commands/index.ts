@@ -1,9 +1,9 @@
 import { Message, CommandInteraction } from "discord.js";
 import Channel from '../../src/models/Channel';
 import { handleHelp } from "./help.js";
-import { handleSetup } from "./setup.js";
+import { handleStart } from "./start.js";
 import { handleWallet } from "./wallet.js";
-import { handleBalance } from "./balance.js";
+import { handleBalances } from "./balances.js";
 import { handleTradeCommand } from "./trade.js";
 import { handleFollow, handleUnfollow, handleList } from "./follow.js";
 import { handleSettings, handleSet } from "./settings.js";
@@ -39,23 +39,23 @@ export async function handleCommand(interaction: Message | CommandInteraction, c
     // ... (rest of the DM handling code)
   } else {
     // For guild messages, check if the channel is set up for the bot
-    const channelSetup = await Channel.findOne({ guildId, channelId });
-    if (!channelSetup && command !== 'setup') {
-      return reply("This channel is not set up for trading. An administrator must use `/ct setup` in this channel first.");
+    const channelStart = await Channel.findOne({ guildId, channelId });
+    if (!channelStart && command !== 'start') {
+      return reply("This channel is not set up for trading. An administrator must use `/ct start` in this channel first.");
     }
 
     switch (command) {
       case 'help':
         await handleHelp(reply);
         break;
-      case 'setup':
-        await handleSetup(interaction as CommandInteraction);
+      case 'start':
+        await handleStart(interaction as CommandInteraction);
         break;
       case 'wallet':
         await handleWallet(userId, reply);
         break;
-      case 'balance':
-        await handleBalance(userId, reply);
+      case 'balances':
+        await handleBalances(userId, reply);
         break;
       case 'trade':
         await handleTradeCommand(interaction, args);
