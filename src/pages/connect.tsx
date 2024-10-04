@@ -8,28 +8,31 @@ export default function Connect() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [channelId, setChannelId] = useState<string | null>(null);
+  const [inputChannelId, setInputChannelId] = useState('');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [channels, setChannels] = useState([]);
 
   useEffect(() => {
     if (router.isReady) {
-      setChannelId(router.query.channelId as string);
+      const urlChannelId = router.query.channelId as string;
+      if (urlChannelId) {
+        setChannelId(urlChannelId);
+        setInputChannelId(urlChannelId);
+      }
     }
   }, [router.isReady, router.query]);
 
-  useEffect(() => {
-    async function fetchChannels() {
-      const response = await fetch('/api/get-channels');
-      if (response.ok) {
-        const data = await response.json();
-        setChannels(data.channels);
-      }
-    }
-    fetchChannels();
-  }, []);
-
   const handleWalletAdded = () => {
     setRefreshTrigger(prev => prev + 1);
+  };
+
+  const handleChannelIdSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setChannelId(inputChannelId);
+  };
+
+  const clearChannelId = () => {
+    setChannelId(null);
+    setInputChannelId('');
   };
 
   if (status === 'loading') {
@@ -43,14 +46,28 @@ export default function Connect() {
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-4">Connect Your Wallet</h1>
+      {!channelId && (
+        <form onSubmit={handleChannelIdSubmit} className="mb-4">
+          <input
+            type="text"
+            value={inputChannelId}
+            onChange={(e) => setInputChannelId(e.target.value)}
+            placeholder="Enter Channel ID"
+            className="border p-2 mr-2"
+          />&nbsp;
+          <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded">
+            Set Channel ID
+          </button>
+        </form>
+      )}
       {channelId ? (
         <>
-          <p className="mb-4">Channel ID: {channelId}</p>
+          <p className="mb-4">Channel ID: {channelId}&nbsp;<button onClick={() => clearChannelId()}>clear</button></p>
           <WalletSelector channelId={channelId} refreshTrigger={refreshTrigger} />
           <WalletImport onWalletAdded={handleWalletAdded} />
         </>
       ) : (
-        <p>No channel ID provided.</p>
+        <p>Please enter a Channel ID to get started.</p>
       )}
     </div>
   );
