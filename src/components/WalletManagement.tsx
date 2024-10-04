@@ -6,8 +6,6 @@ import { useWallets } from '../hooks/useWallets';
 import axios from 'axios';
 import pLimit from 'p-limit';
 import { getTokenBalances } from '../services/jupiter.service';
-import { PresetSchema, SettingsSchema, WalletSchema } from '../models/User';
-import PresetManager from './PresetManager';
 import BotSettings from './BotSettings';
 
 interface TokenBalance {
@@ -18,8 +16,6 @@ interface TokenBalance {
 export default function WalletManagement() {
   const { data: session } = useSession();
   const { wallets, isLoading, error, fetchWallets } = useWallets();
-  const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
-  const [tokenBalances, setTokenBalances] = useState<TokenBalance[]>([]);
   const [showPrivateKey, setShowPrivateKey] = useState(false);
   const [walletCreated, setWalletCreated] = useState(false);
   const [walletSeed, setWalletSeed] = useState('');
@@ -27,44 +23,12 @@ export default function WalletManagement() {
   const [showSettingsManager, setShowSettingsManager] = useState(false);
   const [selectedWalletForSettings, setSelectedWalletForSettings] = useState<string | null>(null);
 
-  const fetchTokenBalances = async (publicKey: string) => {
-    const limit = pLimit(3); // Limit to 3 concurrent requests
-
-    try {
-      const tokenAccountsResponse = await getTokenBalances(publicKey);
-
-      const { balances, metadata } = tokenAccountsResponse;
-
-      const balancesPromises = Object.entries(balances).map(([mintAddress, balance]) =>
-        limit(async () => {
-          const tokenMetadata = metadata[mintAddress];
-          const amount = parseFloat(balance.toString()) / Math.pow(10, tokenMetadata.decimals);
-
-          return { mint: mintAddress, balance: amount };
-        })
-      );
-
-      const fetchedBalances = await Promise.all(balancesPromises);
-
-      setTokenBalances(fetchedBalances);
-    } catch (error) {
-      console.error('Error fetching token balances:', error);
-      setTokenBalances([]);
-    }
-  };
 
   useEffect(() => {
     if (session) {
       fetchWallets();
-      // fetchPresets();
     }
   }, [session, fetchWallets]);
-
-  useEffect(() => {
-    if (selectedWallet) {
-      fetchTokenBalances(selectedWallet);
-    }
-  }, [selectedWallet]);
 
   const handleCreateWallet = () => {
     const newKeypair = Keypair.generate();
@@ -132,41 +96,6 @@ export default function WalletManagement() {
     }
   };
 
-  const saveWallet = async (publicKey: string, secretData: string, type: 'seed' | 'privateKey') => {
-    try {
-      const response = await fetch('/api/save-wallet', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ publicKey, secretData, type }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to save wallet');
-      }
-
-      const data = await response.json();
-      console.log('Wallet saved successfully:', data);
-      // Refresh the wallet list
-      fetchWallets();
-    } catch (error) {
-      console.error('Error saving wallet:', error);
-      // Handle the error (e.g., show an error message to the user)
-    }
-  };
-
-  // const fetchPresets = async () => {
-  //   const response = await axios.get('/api/presets');
-  //   setPresets(response.data);
-  // };
-
-  const applyPresetToWallet = async (walletId: string, presetName: string) => {
-    await axios.post(`/api/wallets/${walletId}/apply-preset`, { presetName });
-    fetchWallets();
-  };
-
   const handleConnectChannel = async (event: React.FormEvent<HTMLFormElement>, publicKey: string) => {
     event.preventDefault();
     const channelId = (event.currentTarget.elements.namedItem('channelId') as HTMLInputElement).value;
@@ -206,16 +135,6 @@ export default function WalletManagement() {
     } catch (error) {
       console.error('Error disconnecting channel:', error);
       alert('An error occurred while disconnecting the channel');
-    }
-  };
-
-  const handleApplyPreset = async (walletPublicKey: string, presetName: string) => {
-    try {
-      await axios.post(`/api/wallets/${walletPublicKey}/apply-preset`, { presetName });
-      fetchWallets();
-    } catch (error) {
-      console.error('Error applying preset:', error);
-      alert('Failed to apply preset. Please try again.');
     }
   };
 
