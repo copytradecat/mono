@@ -1,5 +1,6 @@
 import { CommandInteraction, SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } from "discord.js";
 import User from '../../src/models/User';
+import Subscription from '../../src/models/Subscriptions';
 import dotenv from 'dotenv';
 
 dotenv.config({ path: ['../.env.local', '../.env'] });
@@ -7,8 +8,8 @@ dotenv.config({ path: ['../.env.local', '../.env'] });
 const interactionStates = new Map();
 
 export const data = new SlashCommandBuilder()
-  .setName('connect-wallet')
-  .setDescription('Connect a wallet to this channel or register if you don\'t have any wallets');
+  .setName('connect')
+  .setDescription('Connect or register a wallet for this channel');
 
 export async function handleConnectWallet(interaction: CommandInteraction) {
   const webAppUrl = `${process.env.NEXT_PUBLIC_WEBSITE_URL}/register?channelId=${interaction.channelId}`;
@@ -16,11 +17,32 @@ export async function handleConnectWallet(interaction: CommandInteraction) {
   const channelId = interaction.channelId;
 
   try {
-    const user = await User.findOne({ discordId: userId });
+    let user = await User.findOne({ discordId: userId });
     
-    if (!user || user.wallets.length === 0) {
+    if (!user) {
+      const latestUser = await User.findOne().sort({ accountNumber: -1 });
+      const newAccountNumber = latestUser
+        ? (latestUser.accountNumber || 0) + 1
+        : 1;
+      user = await User.create({
+        name: userId,
+        discordId: userId,
+        username: interaction.user.username,
+        accountNumber: newAccountNumber,
+      });
+
+      await Subscription.findOneAndUpdate(
+        { discordId: userId },
+        {
+          $setOnInsert: { level: 2 },
+        },
+        { upsert: true, new: true }
+      );
+    }
+
+    if (user.wallets.length === 0) {
       await interaction.reply({
-        content: `You don't have any wallets linked to your account. Please visit our web application to register and set up your wallets: ${webAppUrl}`,
+        content: `You don't have any wallets linked to your account. Please visit our web application to connect your wallet: ${webAppUrl}`,
         ephemeral: true
       });
       return;
@@ -38,7 +60,7 @@ export async function handleConnectWallet(interaction: CommandInteraction) {
     }
 
     let content = connectedWallet
-      ? `Wallet connected: ${connectedWallet.publicKey}\n\nTo connect a different wallet or disconnect the current one, please select from the following:`
+      ? `Wallet connected: ${connectedWallet.publicKey}\n\nTo connect a different wallet, disconnect the current one, or connect a new wallet, please select from the following:`
       : "Select a wallet to connect:";
 
     const select = new StringSelectMenuBuilder()
@@ -50,6 +72,11 @@ export async function handleConnectWallet(interaction: CommandInteraction) {
             .setLabel(wallet.publicKey)
             .setValue(wallet.publicKey)
         )
+      )
+      .addOptions(
+        new StringSelectMenuOptionBuilder()
+          .setLabel('Connect new wallet')
+          .setValue('new_wallet')
       );
 
     if (connectedWallet) {
@@ -97,6 +124,8 @@ export async function handleConnectWallet(interaction: CommandInteraction) {
           } else {
             responseContent = "No wallet is currently connected to this channel.";
           }
+        } else if (selectedValue === 'new_wallet') {
+          responseContent = `To connect a new wallet, please visit: ${webAppUrl}`;
         } else {
           const selectedWalletPublicKey = selectedValue;
           
@@ -147,7 +176,7 @@ export async function handleConnectWallet(interaction: CommandInteraction) {
     });
 
   } catch (error) {
-    console.error("Error in connect-wallet command:", error);
+    console.error("Error in connect command:", error);
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({ content: "An error occurred while processing your request.", ephemeral: true });
     }
