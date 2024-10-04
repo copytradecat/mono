@@ -1,5 +1,5 @@
 import { Connection, PublicKey, LAMPORTS_PER_SOL, VersionedTransaction } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, AccountLayout } from '@solana/spl-token';
 import dotenv from 'dotenv';
 import pLimit from 'p-limit';
 import { Metaplex, token } from '@metaplex-foundation/js';

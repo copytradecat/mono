@@ -57,7 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (walletPublicKey) {
         await User.updateOne(
-          { discordId: session.user?.name, 'wallets.publicKey': walletPublicKey },
+          { discordId: session?.user?.name, 'wallets.publicKey': walletPublicKey },
           { 
             $set: { 
               'wallets.$.settings': settings,

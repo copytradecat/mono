@@ -19,14 +19,16 @@ export default function WalletInfo() {
 
     const solBalancePromise = await getBalance(pubKey);
 
-    const tokenAccountsResponse = await getTokenBalances(pubKey);
+    const { balances, metadata } = await getTokenBalances(pubKey);
 
-    const tokenAccounts = tokenAccountsResponse.value;
-
-    const tokenBalancesPromises = tokenAccounts.map((accountInfo) =>
+    const tokenBalancesPromises = Object.entries(balances).map(([mintAddress, balance]) =>
       limit(async () => {
-        const mintAddress = accountInfo.account.data.parsed.info.mint;
-        // Fetch token balance and metadata if needed
+        // Use the balance and metadata directly
+        return {
+          mintAddress,
+          balance,
+          metadata: metadata[mintAddress]
+        };
       })
     );
 

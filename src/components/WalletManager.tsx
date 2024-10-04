@@ -79,8 +79,8 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
               <tbody> 
                 {Object.entries(balances[selectedWallet]?.balances || {}).map(([token, balance]) => (
                   <tr key={token}>
-                    <td><a href={`https://solscan.io/token/${balances[selectedWallet]?.metadata[token]?.address || token}`} target="_blank">{balances[selectedWallet]?.metadata[token]?.name || token}</a></td>
-                    <td align="right">{typeof balance === 'number' ? balance.toFixed(6) : balance}</td>
+                    <td><a href={`https://solscan.io/token/${balances[selectedWallet]?.metadata[token]?.address || token}`} target="_blank" rel="noopener noreferrer">{balances[selectedWallet]?.metadata[token]?.name || token}</a></td>
+                    <td align="right">{typeof balance === 'number' ? balance.toFixed(6) : String(balance)}</td>
                     <td>{balances[selectedWallet]?.metadata[token]?.symbol || token}</td>
                     <td>{balances[selectedWallet]?.metadata[token]?.address || token}</td>
                   </tr>

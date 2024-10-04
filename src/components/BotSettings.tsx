@@ -26,7 +26,7 @@ export const defaultSettings: Settings = {
 };
 
 interface BotSettingsProps {
-  walletPublicKey?: string;
+  walletPublicKey?: string | null;
   initialSettings?: Settings;
   onSave?: (settings: Settings) => void;
   presetName?: string;
@@ -42,10 +42,23 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
   const [currentPresetName, setCurrentPresetName] = useState(presetName || 'Custom');
   const [savedSettings, setSavedSettings] = useState<Settings | null>(null);
 
+  const fetchSettings = useCallback(async () => {
+    if (!session) return;
+    try {
+      const response = await axios.get('/api/bot-settings', {
+        params: { walletPublicKey }
+      });
+      setSettings(response.data.settings);
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+    }
+  }, [walletPublicKey, session]);
+
   useEffect(() => {
-    fetchSettings();
-    fetchPresets();
-  }, []);
+    if (session) {
+      fetchSettings();
+    }
+  }, [session, fetchSettings]);
 
   useEffect(() => {
     if (initialSettings) {
@@ -53,21 +66,6 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
       setUnSaved(false);
     }
   }, [initialSettings]);
-
-  const fetchSettings = async () => {
-    if (!session) return;
-
-    try {
-      const response = await axios.get('/api/bot-settings', {
-        params: { walletPublicKey }
-      });
-      const fetchedSettings = { ...defaultSettings, ...response.data.settings };
-      setSettings(fetchedSettings);
-      setSavedSettings(fetchedSettings);
-    } catch (error) {
-      console.error('Error fetching settings:', error);
-    }
-  };
 
   const fetchPresets = async () => {
     try {
@@ -157,14 +155,14 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
       <h2 className="text-2xl font-bold mb-4">
         Bot Settings {walletPublicKey ? `for ${walletPublicKey.slice(0, 6)}...${walletPublicKey.slice(-4)}` : ''}
       </h2>
-      <p className="mb-4">Choose Preset: {currentPresetName}
+      <p className="mb-4">Use Preset:
         &nbsp;
         <select
             value={selectedPresetId || ''}
             onChange={(e) => handlePresetChange(e.target.value)}
             className="mb-4 p-2 border rounded"
           >
-            <option value="">None</option>
+            <option value="">Custom</option>
             {presets.map((preset) => (
               <option key={preset._id} value={preset._id}>{preset.name}</option>
             ))}
@@ -176,7 +174,11 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
             >
               Manage Presets
             </button>
-          </NextLink>
+          </NextLink>&nbsp;
+          {currentPresetName!=='Custom' && `${currentPresetName} Preset Settings Prefilled Below.`} 
+          {unSaved && <div className="mb-4">
+            <p className="text-red-500">Unsaved changes detected. Please save or discard them.</p>
+          </div>}
       </p>
       <div>
 
@@ -268,7 +270,7 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
               key={index}
               type="number"
               value={value}
-              onWheel={(e) => e.target.blur()}
+              onWheel={(e) => (e.target as HTMLInputElement).blur()}
               onChange={(e) => {
                 const newEntryAmounts = [...(settings.entryAmounts || [])];
                 newEntryAmounts[index] = parseFloat(e.target.value);
@@ -286,7 +288,7 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
               key={index}
               type="number"
               value={value}
-              onWheel={(e) => e.target.blur()}
+              onWheel={(e) => (e.target as HTMLInputElement).blur()}
               onChange={(e) => {
                 const newExitPercentages = [...(settings.exitPercentages || [])];
                 newExitPercentages[index] = parseFloat(e.target.value);
