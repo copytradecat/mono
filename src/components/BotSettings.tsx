@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import axios from 'axios';
-
+import NextLink from 'next/link';
 export interface Settings {
   slippage: number;
   slippageType: 'fixed' | 'dynamic';
@@ -278,6 +278,14 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
             <option key={preset._id} value={preset._id}>{preset.name}</option>
           ))}
         </select>
+
+        <NextLink href="/presets">
+          <button
+            className="bg-green-500 text-white px-4 py-2 rounded mt-4"
+          >
+            Manage Presets
+          </button>
+        </NextLink>
         {unSaved && (
           <>
           <div className="mb-4">

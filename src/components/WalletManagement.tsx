@@ -24,8 +24,6 @@ export default function WalletManagement() {
   const [walletCreated, setWalletCreated] = useState(false);
   const [walletSeed, setWalletSeed] = useState('');
   const [publicAddress, setPublicAddress] = useState<string | null>(null);
-  const [presets, setPresets] = useState<typeof PresetSchema[]>([]);
-  const [showPresetManager, setShowPresetManager] = useState(false);
   const [showSettingsManager, setShowSettingsManager] = useState(false);
   const [selectedWalletForSettings, setSelectedWalletForSettings] = useState<string | null>(null);
 
@@ -251,12 +249,16 @@ export default function WalletManagement() {
       <h3 className="text-xl font-semibold mb-4">Available Wallets:</h3>
       {wallets.map((wallet, index) => (
         <div key={index} className="mb-4 p-4 border rounded">
-          <p>Wallet {index + 1}: {wallet.publicKey || 'No public key'}</p>
-          <p>Connected Channel: {wallet.connectedChannels[0] || 'None'} &nbsp;
+          <h3>Wallet {index + 1}</h3>
+          <p>{wallet.publicKey || 'No public key'}&nbsp;
+          <button onClick={() => handleRemoveWallet(wallet.publicKey)} className="bg-red-500 text-white px-2 py-1 rounded text-sm mt-2">Remove</button></p>
+          <p>{wallet.connectedChannels[0] && `Connected Channel: ${wallet.connectedChannels[0]}`}
           {wallet.connectedChannels[0] ? (
-            <button onClick={() => handleDisconnectChannel(wallet.publicKey)} className="bg-red-500 text-white px-2 py-1 rounded text-sm mr-2">
+            <>
+            &nbsp;<button onClick={() => handleDisconnectChannel(wallet.publicKey)} className="bg-red-500 text-white px-2 py-1 rounded text-sm mr-2">
               Disconnect Channel
             </button>
+            </>
           ) : (
             <form onSubmit={(e) => handleConnectChannel(e, wallet.publicKey)} className="mt-2">
               <input type="text" name="channelId" placeholder="Enter Channel ID" className="mr-2 p-1 border rounded" />
@@ -264,47 +266,15 @@ export default function WalletManagement() {
             </form>
           )}</p>
           <div className="mt-2">
-            <select
-              value={wallet.presetName || ''}
-              onChange={(e) => handleApplyPreset(wallet.publicKey, e.target.value)}
-              className="mr-2 p-1 border rounded"
-            >
-              <option value="">Select Preset</option>
-              {presets.map((preset) => (
-                <option key={preset._id} value={preset.name}>{preset.name}</option>
-              ))}
-            </select>
             <button
               onClick={() => handleOpenSettingsManager(wallet.publicKey)}
               className="bg-blue-500 text-white px-2 py-1 rounded text-sm"
             >
-              Manage Settings
+              Wallet Settings
             </button>
           </div>
-          <button onClick={() => handleRemoveWallet(wallet.publicKey)} className="bg-red-500 text-white px-2 py-1 rounded text-sm mt-2">Remove</button>
         </div>
       ))}
-
-      <button
-        onClick={() => setShowPresetManager(true)}
-        className="bg-green-500 text-white px-4 py-2 rounded mt-4"
-      >
-        Manage Presets
-      </button>
-
-      {showPresetManager && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-6 rounded">
-            <PresetManager />
-            <button
-              onClick={() => setShowPresetManager(false)}
-              className="bg-red-500 text-white px-4 py-2 rounded mt-4"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
 
       {showSettingsManager && selectedWalletForSettings && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
