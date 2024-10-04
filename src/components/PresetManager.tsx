@@ -60,6 +60,19 @@ export default function PresetManager() {
     }
   };
 
+  const handleSetAsPrimary = async (presetId: string) => {
+    try {
+      const response = await axios.post('/api/set-primary-preset', { presetId });
+      if (response.status === 200) {
+        alert('Primary preset set successfully');
+        fetchPresets();
+      }
+    } catch (error) {
+      console.error('Error setting primary preset:', error);
+      alert('Failed to set primary preset');
+    }
+  };
+
   return (
     <div>
       <h2 className="text-2xl font-bold mb-4">Preset Manager</h2>
@@ -76,8 +89,9 @@ export default function PresetManager() {
       <ul className="mb-4">
         {presets.map((preset) => (
           <li key={preset._id} className="mb-2">
-            {preset.name}
+            {preset.name}&nbsp;
             <button onClick={() => setSelectedPreset(preset)} className="ml-2 bg-blue-500 text-white px-2 py-1 rounded text-sm">Edit</button>
+            <button onClick={() => handleSetAsPrimary(preset._id)}>Set as Primary</button>
             <button onClick={() => handleDeletePreset(preset._id)} className="ml-2 bg-red-500 text-white px-2 py-1 rounded text-sm">Delete</button>
           </li>
         ))}

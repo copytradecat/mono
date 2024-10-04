@@ -35,12 +35,15 @@ export async function handleSellCommand(interaction: CommandInteraction) {
     const channelId = interaction.channelId;
 
     const initiatingUser = await getUser(initiatingUserId);
-    const initiatingWallet = initiatingUser.wallets.find((wallet: any) => wallet.connectedChannels[0] === channelId);
+    const initiatingWallet = initiatingUser.wallets.find((wallet: any) => wallet.connectedChannels.includes(channelId));
     const outputTokenAddress = 'So11111111111111111111111111111111111111112'; // SOL mint address
     const inputTokenInfo = await getTokenInfo(inputTokenAddress);
     const outputTokenInfo = await getTokenInfo(outputTokenAddress);
+
+    // Prioritize wallet settings, then primary preset, then user settings, and finally default settings
     const walletSettings = initiatingWallet?.settings;
-    const initiatingSettings = walletSettings || initiatingUser.settings || defaultSettings;
+    const primaryPreset = initiatingUser.primaryPresetId ? initiatingUser.presets.find(p => p._id.toString() === initiatingUser.primaryPresetId.toString()) : null;
+    const initiatingSettings = walletSettings || (primaryPreset ? primaryPreset.settings : null) || initiatingUser.settings || defaultSettings;
     const initiatingExitPercentages = initiatingSettings.exitPercentages || defaultSettings.exitPercentages;
 
     // Fetch all connected wallets in this channel

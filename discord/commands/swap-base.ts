@@ -130,7 +130,7 @@ export async function executeSwapsForUsers(params: {
 
   const tradeResults = [];
 
-  const limit = pLimit(Number(process.env.LIMIT_CONCURRENCY) || 5); // Limit concurrent swaps to prevent rate limits
+  const limit = pLimit(Number(process.env.LIMIT_CONCURRENCY) || 5);
 
   const successfulSwaps: any[] = [];
   const failedSwaps: any[] = [];
@@ -147,7 +147,6 @@ export async function executeSwapsForUsers(params: {
     console.log(`\n\n\nInitiating user found in connected wallets!`)
   }
 
-  // Modify your loop to collect results
   await Promise.all(
     connectedWallets.map((walletInfo) =>
       limit(async () => {
@@ -155,17 +154,16 @@ export async function executeSwapsForUsers(params: {
           const { user, wallet } = walletInfo;
           const walletPublicKey = wallet.publicKey;
 
-          // Fetch the wallet's settings
-          const walletSettings =
-            user.wallets.find((w: any) => w.publicKey === walletPublicKey)?.settings ||
-            user.settings ||
-            defaultSettings;
+          // Fetch the wallet's settings with the correct order of precedence
+          const walletSettings = wallet.settings;
+          const primaryPreset = user.primaryPresetId ? user.presets.find(p => p._id.toString() === user.primaryPresetId.toString()) : null;
+          const userSettings = walletSettings || (primaryPreset ? primaryPreset.settings : null) || user.settings || defaultSettings;
 
           let adjustedAmount: number;
           let mappedAmount: number;
 
           if (isBuyOperation) {
-            const userEntryAmounts = walletSettings.entryAmounts || defaultSettings.entryAmounts;
+            const userEntryAmounts = userSettings.entryAmounts || defaultSettings.entryAmounts;
             mappedAmount =
               customAmount ||
               mapSelectionToUserSettings(initiatingEntryAmounts!, userEntryAmounts, selectionIndex as number);
@@ -182,7 +180,7 @@ export async function executeSwapsForUsers(params: {
               return; // Skip this wallet
             }
           } else {
-            const userExitPercentages = walletSettings.exitPercentages || defaultSettings.exitPercentages;
+            const userExitPercentages = userSettings.exitPercentages || defaultSettings.exitPercentages;
             const mappedPercentage = customPercentage || mapSelectionToUserSettings(
               initiatingExitPercentages!,
               userExitPercentages,
@@ -205,7 +203,7 @@ export async function executeSwapsForUsers(params: {
             adjustedAmount,
             inputTokenAddress,
             outputTokenAddress,
-            walletSettings,
+            userSettings,
             inputTokenInfo,
             outputTokenInfo
           );
@@ -215,7 +213,7 @@ export async function executeSwapsForUsers(params: {
             user,
             wallet,
             selectedAmount: adjustedAmount,
-            settings: walletSettings,
+            settings: userSettings,
             outputTokenAddress,
             inputTokenAddress,
             isBuyOperation,
