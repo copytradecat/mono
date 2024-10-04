@@ -459,7 +459,7 @@ export async function executeSwapForUser(params: {
       return swapResult;
     } else {
       // Handle failure
-      let errorMessage = `Failed to execute ${isBuyOperation ? 'buy' : 'sell'} order for wallet [${truncatedWallet}](<https://solscan.io/account/${wallet.publicKey}>).`;
+      let errorMessage = `Failed to ${isBuyOperation ? 'buy' : 'sell'} ${selectedAmount / 10 ** inputTokenInfo.decimals} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenAddress}>) for ${estimatedOutput / 10 ** outputTokenInfo.decimals} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>) on wallet [${truncatedWallet}](<https://solscan.io/account/${wallet.publicKey}>).`;
       if (swapResult.transactionMessage && swapResult.transactionMessage !== "No additional information") {
         errorMessage += `\nReason: ${swapResult.transactionMessage}`;
       }

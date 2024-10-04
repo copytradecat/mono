@@ -24,7 +24,7 @@ export async function handleInfo(interaction: CommandInteraction) {
         infoMessage += `  ${token}: ${balance}\n`;
       }
 
-      infoMessage += `Connected Channels: ${wallet.connectedChannels.join(', ') || 'None'}\n\n`;
+      infoMessage += `Connected Channel: ${wallet.connectedChannels.join(', ') || 'None'}\n\n`;
     }
 
     infoMessage += `\nFor more details, visit your dashboard: ${process.env.NEXT_PUBLIC_WEBSITE_URL}/dashboard\n`;

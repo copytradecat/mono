@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
+import axios from 'axios';
 
 interface Settings {
   maxTradeAmount: number;
@@ -11,11 +12,13 @@ export default function AccountSettings() {
   const [maxTradeAmount, setMaxTradeAmount] = useState('');
 
   const fetchSettings = useCallback(async () => {
-    const response = await fetch('/api/get-settings');
-    if (response.ok) {
-      const data = await response.json();
+    try {
+      const response = await axios.get('/api/bot-settings');
+      const data = response.data.settings;
       setSettings(data);
-      setMaxTradeAmount(data.maxTradeAmount.toString());
+      setMaxTradeAmount(data.maxTradeAmount?.toString() || '');
+    } catch (error) {
+      console.error('Error fetching settings:', error);
     }
   }, []);
 

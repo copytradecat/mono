@@ -39,8 +39,9 @@ export async function handleSellCommand(interaction: CommandInteraction) {
     const outputTokenAddress = 'So11111111111111111111111111111111111111112'; // SOL mint address
     const inputTokenInfo = await getTokenInfo(inputTokenAddress);
     const outputTokenInfo = await getTokenInfo(outputTokenAddress);
-    const initiatingExitPercentages = initiatingUser.settings.exitPercentages || defaultSettings.exitPercentages;
-    const initiatingSettings = initiatingUser.settings || defaultSettings;
+    const walletSettings = initiatingWallet?.settings;
+    const initiatingSettings = walletSettings || initiatingUser.settings || defaultSettings;
+    const initiatingExitPercentages = initiatingSettings.exitPercentages || defaultSettings.exitPercentages;
 
     // Fetch all connected wallets in this channel
     const connectedWallets = await getConnectedWalletsInChannel(channelId);

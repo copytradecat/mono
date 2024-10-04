@@ -22,7 +22,7 @@ const SettingsSchema = new mongoose.Schema({
 
 const PresetSchema = new mongoose.Schema({
     name: { type: String, required: true },
-    settings: SettingsSchema,
+    settings: { type: SettingsSchema, default: () => ({}) },
 });
 
 const WalletSchema = new mongoose.Schema({
@@ -30,8 +30,8 @@ const WalletSchema = new mongoose.Schema({
     encryptedSecretData: String,
     secretType: { type: String, enum: ['seed', 'privateKey'] },
     connectedChannels: [String],
-    settings: SettingsSchema,
-    presetName: { type: String }, // Name of the applied preset
+    settings: { type: SettingsSchema, default: () => ({}) },
+    presetId: { type: mongoose.Schema.Types.ObjectId, ref: 'Preset', default: null },
 });
 
 const UserSchema = new mongoose.Schema(
