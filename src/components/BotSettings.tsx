@@ -37,9 +37,10 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
   const [settings, setSettings] = useState<Settings>(initialSettings || defaultSettings);
   const [isLoading, setIsLoading] = useState(false);
   const [unSaved, setUnSaved] = useState(false);
-  const [presets, setPresets] = useState<Preset[]>([]);
+  const [presets, setPresets] = useState<{ _id: string; name: string; settings: Settings }[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [currentPresetName, setCurrentPresetName] = useState(presetName || 'Custom');
+  const [savedSettings, setSavedSettings] = useState<Settings | null>(null);
 
   useEffect(() => {
     fetchSettings();
@@ -60,7 +61,9 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
       const response = await axios.get('/api/bot-settings', {
         params: { walletPublicKey }
       });
-      setSettings({ ...defaultSettings, ...response.data.settings });
+      const fetchedSettings = { ...defaultSettings, ...response.data.settings };
+      setSettings(fetchedSettings);
+      setSavedSettings(fetchedSettings);
     } catch (error) {
       console.error('Error fetching settings:', error);
     }
@@ -133,6 +136,7 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
         });
 
         if (response.status === 200) {
+          setSavedSettings(settings);
           alert('Settings saved successfully');
           setUnSaved(false);
           setCurrentPresetName(selectedPresetId ? presets.find(p => p._id === selectedPresetId)?.name || 'Custom' : 'Custom');
@@ -302,7 +306,7 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
               <tr>
                 <td>
                   <pre className="bg-gray-100 p-2 rounded">
-                    {JSON.stringify(initialSettings, null, 2)}
+                    {JSON.stringify(savedSettings, null, 2)}
                   </pre>
                 </td>
                 <td>
