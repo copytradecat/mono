@@ -36,7 +36,7 @@ export default function PresetManager() {
 
   const handleCreatePreset = async () => {
     try {
-      const response = await axios.post('/api/presets', { name: newPresetName, settings: {} });
+      const response = await axios.post('/api/presets', { name: newPresetName, settings: defaultSettings });
       setPresets([...presets, response.data]);
       setNewPresetName('');
     } catch (error) {
