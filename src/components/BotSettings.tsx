@@ -16,11 +16,11 @@ export interface Settings {
 
 export const defaultSettings: Settings = {
   slippage: 300,
-  slippageType: 'fixed',
+  slippageType: 'dynamic',
   smartMevProtection: 'secure',
   transactionSpeed: 'medium',
   priorityFee: 'auto',
-  entryAmounts: [0.05, 0.1, 0.42069, 1, 2.4, 10],
+  entryAmounts: [0.01, 0.05, 0.1, 0.5, 1],
   exitPercentages: [10, 20, 50, 100],
   wrapUnwrapSOL: true,
 };
