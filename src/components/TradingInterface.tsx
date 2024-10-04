@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Connection, PublicKey, Transaction } from '@solana/web3.js';
-import { getQuote, getSwapTransaction, executeSwap, getTokenInfo } from '../services/jupiter.service';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { getQuote, getSwapTransaction, getTokenInfo } from '../services/jupiter.service';
 import { Settings } from './BotSettings';
 
 interface TradingInterfaceProps {
@@ -17,11 +16,7 @@ export default function TradingInterface({ selectedWallet, userId }: TradingInte
   const [swapResult, setSwapResult] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
 
-  useEffect(() => {
-    fetchSettings();
-  }, []);
-
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     try {
       const response = await axios.get('/api/bot-settings', {
         params: { walletPublicKey: selectedWallet }
@@ -30,7 +25,11 @@ export default function TradingInterface({ selectedWallet, userId }: TradingInte
     } catch (error) {
       console.error('Error fetching settings:', error);
     }
-  };
+  }, [selectedWallet]);
+
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
 
   const handleGetQuote = async () => {
     if (!selectedWallet || !inputToken || !outputToken || !amount || !settings) {
@@ -42,8 +41,9 @@ export default function TradingInterface({ selectedWallet, userId }: TradingInte
       const slippageSettings = settings.slippageType === 'fixed' 
         ? { type: 'fixed' as const, value: settings.slippage }
         : { type: 'dynamic' as const };
-        const inputTokenDecimals = await getTokenInfo(inputToken);
-      const quote = await getQuote(inputToken, outputToken, parseFloat(amount) * (10 ** inputTokenDecimals.decimals), slippageSettings);
+      const inputTokenInfo = await getTokenInfo(inputToken);
+      const adjustedAmount = parseFloat(amount) * (10 ** inputTokenInfo.decimals);
+      const quote = await getQuote(inputToken, outputToken, adjustedAmount, slippageSettings);
       setQuoteResult(quote);
     } catch (error) {
       console.error('Error getting quote:', error);

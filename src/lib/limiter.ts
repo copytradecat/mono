@@ -20,7 +20,7 @@ limiter.on('failed', (error, jobInfo) => {
 });
 
 limiter.on('retry', (error, jobInfo) => {
-  console.warn(`Retrying job ${jobInfo.options.id} in ${jobInfo.retryingIn} ms`);
+  console.warn(`Retrying job ${jobInfo.options.id} in ${jobInfo.retryCount} ms`);
 });
 
 limiter.on('queued', (jobInfo) => {
@@ -67,7 +67,7 @@ export function debounce(func: any, timeout = 300){
   return (...args: any[]) => {
     clearTimeout(timer);
     timer = setTimeout(() => {
-      func.apply(null, args);
+      func(...args);
     }, timeout);
   };
 }

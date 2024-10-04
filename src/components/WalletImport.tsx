@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { useWallets } from '../hooks/useWallets';
+import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, AccountLayout } from '@solana/spl-token';
 
 interface WalletImportProps {
   onWalletAdded: () => void;
+  channels: any[];
 }
 
-export default function WalletImport({ onWalletAdded }: WalletImportProps) {
+export default function WalletImport({ onWalletAdded, channels }: WalletImportProps) {
   const { wallets, isLoading, error, fetchWallets } = useWallets();
   const [input, setInput] = useState('');
   const [publicKey, setPublicKey] = useState('');
