@@ -34,8 +34,9 @@ interface BotSettingsProps {
 
 export default function BotSettings({ walletPublicKey, initialSettings, onSave, presetName }: BotSettingsProps) {
   const { data: session } = useSession();
-  const [settings, setSettings] = useState<Settings>(initialSettings || defaultSettings);
-  const [isLoading, setIsLoading] = useState(false);
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [unSaved, setUnSaved] = useState(false);
   const [presets, setPresets] = useState<{ _id: string; name: string; settings: Settings }[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
@@ -44,6 +45,8 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
 
   const fetchSettings = useCallback(async () => {
     if (!session) return;
+    setIsLoading(true);
+    setError(null);
     try {
       const response = await axios.get('/api/bot-settings', {
         params: { walletPublicKey }
@@ -52,30 +55,39 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
       setSavedSettings(response.data.settings);
     } catch (error) {
       console.error('Error fetching settings:', error);
+      setError('Failed to load settings. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
-  }, [walletPublicKey, session]);
+  }, [session, walletPublicKey]);
 
-  const fetchPresets = async () => {
+  const fetchPresets = useCallback(async () => {
+    if (!session) return;
     try {
       const response = await axios.get('/api/presets');
       setPresets(response.data);
     } catch (error) {
       console.error('Error fetching presets:', error);
     }
-  };
+  }, [session]);
 
   useEffect(() => {
     if (session) {
       fetchSettings();
       fetchPresets();
     }
-  }, [session, fetchSettings]);
+  }, [session, fetchSettings, fetchPresets]);
 
   useEffect(() => {
     if (initialSettings) {
       setSettings(initialSettings);
       setSavedSettings(initialSettings);
       setUnSaved(false);
+      setIsLoading(false);
+    } else {
+      setSettings(defaultSettings);
+      setSavedSettings(defaultSettings);
+      setIsLoading(false);
     }
   }, [initialSettings]);
 
@@ -152,6 +164,18 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
       setIsLoading(false);
     }
   };
+
+  if (isLoading) {
+    return <div>Loading settings...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
+  }
+
+  if (!settings) {
+    return <div>No settings available.</div>;
+  }
 
   return (
     <div className="p-4 bg-white shadow rounded-lg">
