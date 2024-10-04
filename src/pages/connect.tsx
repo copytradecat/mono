@@ -47,7 +47,7 @@ export default function Connect() {
         <>
           <p className="mb-4">Channel ID: {channelId}</p>
           <WalletSelector channelId={channelId} refreshTrigger={refreshTrigger} />
-          <WalletImport onWalletAdded={handleWalletAdded} channels={channels} />
+          <WalletImport onWalletAdded={handleWalletAdded} />
         </>
       ) : (
         <p>No channel ID provided.</p>
