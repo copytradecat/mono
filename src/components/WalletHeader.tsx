@@ -29,7 +29,7 @@ export default function WalletHeader({ selectedWallet, setSelectedWallet }: { se
                 {wallet.publicKey.slice(0, 6)}...{wallet.publicKey.slice(-4)}
               </option>
             ))}
-          </select>
+          </select>&nbsp;
           <Link href="/wallet-management" className="bg-blue-500 text-white px-4 py-2 rounded">
             Manage Wallets
           </Link>

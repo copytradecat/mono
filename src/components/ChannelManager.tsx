@@ -51,7 +51,7 @@ export default function ChannelManager({ selectedWallet }: { selectedWallet: str
       <h2 className="text-2xl font-bold mb-4">Channel Manager</h2>
       {selectedWallet ? (
         <div>
-          <h3 className="text-xl font-semibold mb-2">Connected Channels:</h3>
+          <h3 className="text-xl font-semibold mb-2">Connected Channel:</h3>
           <ul className="mb-4">
             {connectedChannels.map((channelId) => (
               <li key={channelId}>{channelId}</li>

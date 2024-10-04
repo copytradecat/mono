@@ -9,12 +9,24 @@ export default function Register() {
   const { data: session, status } = useSession();
   const [channelId, setChannelId] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [channels, setChannels] = useState([]);
 
   useEffect(() => {
     if (router.isReady) {
       setChannelId(router.query.channelId as string);
     }
   }, [router.isReady, router.query]);
+
+  useEffect(() => {
+    async function fetchChannels() {
+      const response = await fetch('/api/get-channels');
+      if (response.ok) {
+        const data = await response.json();
+        setChannels(data.channels);
+      }
+    }
+    fetchChannels();
+  }, []);
 
   const handleWalletAdded = () => {
     setRefreshTrigger(prev => prev + 1);
@@ -33,7 +45,7 @@ export default function Register() {
       <h1>Connect Your Wallet</h1>
       <p>Channel ID: {channelId}</p>
       <WalletSelector channelId={channelId} refreshTrigger={refreshTrigger} />
-      <WalletImport onWalletAdded={handleWalletAdded} />
+      <WalletImport onWalletAdded={handleWalletAdded} channels={channels} />
     </div>
   );
 }

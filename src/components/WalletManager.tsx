@@ -64,17 +64,31 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
       {selectedWallet && (
         <div>
           <h3 className="text-xl font-semibold mb-2">Balances for {selectedWallet}</h3>
-          {balances.error ? (
-            <p className="text-red-500">{balances.error}</p>
+          {balances[selectedWallet]?.error ? (
+            <p className="text-red-500">{balances[selectedWallet].error}</p>
           ) : (
-            Object.entries(balances.balances || {}).map(([token, balance]) => (
-              <p key={token} className="mb-1">
-                {token === 'SOL' ? 'SOL' : balances.metadata[token]?.symbol || token}: {typeof balance === 'number' ? balance.toFixed(6) : balance} 
-                {token === 'SOL' ? ' SOL' : ''}
-              </p>
-            ))
+            <table>
+              <thead>
+                <tr>
+                  <th>Token Name</th>
+                  <th align="right">Balance</th>
+                  <th>Symbol</th>
+                  <th>Address</th>
+                </tr>
+              </thead>
+              <tbody> 
+                {Object.entries(balances[selectedWallet]?.balances || {}).map(([token, balance]) => (
+                  <tr key={token}>
+                    <td><a href={`https://solscan.io/token/${balances[selectedWallet]?.metadata[token]?.address || token}`} target="_blank">{balances[selectedWallet]?.metadata[token]?.name || token}</a></td>
+                    <td align="right">{typeof balance === 'number' ? balance.toFixed(6) : balance}</td>
+                    <td>{balances[selectedWallet]?.metadata[token]?.symbol || token}</td>
+                    <td>{balances[selectedWallet]?.metadata[token]?.address || token}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
-          <div className="mb-6">
+          {/* <div className="mb-6">
             {aggregateBalance.error ? (
               <p className="text-red-500">{aggregateBalance.error}</p>
             ) : (
@@ -82,14 +96,11 @@ export default function WalletManager({ selectedWallet, setSelectedWallet }: { s
                 <p key={token} className="mb-1">{token}: {balance}</p>
               ))
             )}
-          </div>
-          <h3 className="text-xl font-semibold mt-4 mb-2">Connected Channels</h3>
+          </div> */}
+          <h3 className="text-xl font-semibold mt-4 mb-2">Connected Channel</h3>
           {(wallets.find(w => w.publicKey === selectedWallet)?.connectedChannels || []).map((channel, index) => (
             <p key={index} className="mb-1">{channel}</p>
           ))}
-          <Link href={`/wallet-info/${selectedWallet}`} className="text-blue-500 hover:underline mt-4 inline-block">
-            View Detailed Information
-          </Link>
         </div>
       )}
     </div>
