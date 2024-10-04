@@ -38,7 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       res.status(200).json({ settings });
     } else if (req.method === 'POST') {
-      const { settings, presetName, walletPublicKey } = req.body;
+      const { settings, presetId, walletPublicKey } = req.body;
 
       // Validate transactionSpeed
       if (
@@ -61,7 +61,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           { 
             $set: { 
               'wallets.$.settings': settings,
-              'wallets.$.presetName': presetName
+              'wallets.$.presetId': presetId
             } 
           }
         );

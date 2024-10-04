@@ -29,15 +29,31 @@ interface BotSettingsProps {
   walletPublicKey?: string;
   initialSettings?: Settings;
   onSave?: (settings: Settings) => void;
+  presetName?: string;
 }
 
-export default function BotSettings({ walletPublicKey, initialSettings, onSave }: BotSettingsProps) {
+export default function BotSettings({ walletPublicKey, initialSettings, onSave, presetName }: BotSettingsProps) {
   const { data: session } = useSession();
   const [settings, setSettings] = useState<Settings>(initialSettings || defaultSettings);
   const [isLoading, setIsLoading] = useState(false);
   const [unSaved, setUnSaved] = useState(false);
+  const [presets, setPresets] = useState<Preset[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const [currentPresetName, setCurrentPresetName] = useState(presetName || 'Custom');
 
-  const fetchSettings = useCallback(async () => {
+  useEffect(() => {
+    fetchSettings();
+    fetchPresets();
+  }, []);
+
+  useEffect(() => {
+    if (initialSettings) {
+      setSettings(initialSettings);
+      setUnSaved(false);
+    }
+  }, [initialSettings]);
+
+  const fetchSettings = async () => {
     if (!session) return;
 
     try {
@@ -48,11 +64,26 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave }
     } catch (error) {
       console.error('Error fetching settings:', error);
     }
-  }, [session, walletPublicKey]);
+  };
 
-  useEffect(() => {
-    fetchSettings();
-  }, [fetchSettings]);
+  const fetchPresets = async () => {
+    try {
+      const response = await axios.get('/api/presets');
+      setPresets(response.data);
+    } catch (error) {
+      console.error('Error fetching presets:', error);
+    }
+  };
+
+  const handlePresetChange = (presetId: string) => {
+    const selectedPreset = presets.find(preset => preset._id === presetId);
+    if (selectedPreset) {
+      setSettings(selectedPreset.settings);
+      setSelectedPresetId(presetId);
+      setCurrentPresetName(selectedPreset.name);
+      setUnSaved(true);
+    }
+  };
 
   const updateSetting = (key: keyof Settings, value: any) => {
     setSettings(prevSettings => {
@@ -98,12 +129,13 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave }
         const response = await axios.post('/api/bot-settings', {
           settings,
           walletPublicKey,
-          presetName: null
+          presetId: selectedPresetId
         });
 
         if (response.status === 200) {
           alert('Settings saved successfully');
           setUnSaved(false);
+          setCurrentPresetName(selectedPresetId ? presets.find(p => p._id === selectedPresetId)?.name || 'Custom' : 'Custom');
         } else {
           throw new Error('Failed to save settings');
         }
@@ -121,6 +153,7 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave }
       <h2 className="text-2xl font-bold mb-4">
         Bot Settings {walletPublicKey ? `for ${walletPublicKey.slice(0, 6)}...${walletPublicKey.slice(-4)}` : ''}
       </h2>
+      <p className="mb-4">Current Preset: {currentPresetName}</p>
       <div>
 
         {/* Slippage Type */}
@@ -235,7 +268,16 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave }
             />
           ))}
         </div>
-
+        <select
+          value={selectedPresetId || ''}
+          onChange={(e) => handlePresetChange(e.target.value)}
+          className="mb-4 p-2 border rounded"
+        >
+          <option value="">Select a preset</option>
+          {presets.map((preset) => (
+            <option key={preset._id} value={preset._id}>{preset.name}</option>
+          ))}
+        </select>
         {unSaved && (
           <>
           <div className="mb-4">

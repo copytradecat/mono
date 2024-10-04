@@ -45,7 +45,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       {
         $set: {
           email: session.user?.email,
-          name: session.user?.name,
         },
         $push: {
           wallets: {

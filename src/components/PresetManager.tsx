@@ -40,7 +40,10 @@ export default function PresetManager() {
   const handleUpdatePreset = async (updatedSettings: Settings) => {
     if (!selectedPreset) return;
     try {
-      const response = await axios.put(`/api/presets/${selectedPreset._id}`, { settings: updatedSettings });
+      const response = await axios.put(`/api/presets/${selectedPreset._id}`, { 
+        name: selectedPreset.name,
+        settings: updatedSettings 
+      });
       setPresets(presets.map(preset => preset._id === selectedPreset._id ? response.data : preset));
       setSelectedPreset(null);
     } catch (error) {
@@ -82,7 +85,11 @@ export default function PresetManager() {
       {selectedPreset && (
         <div>
           <h3 className="text-xl font-bold mb-2">Edit Preset: {selectedPreset.name}</h3>
-          <BotSettings initialSettings={selectedPreset.settings} onSave={handleUpdatePreset} />
+          <BotSettings 
+            initialSettings={selectedPreset.settings} 
+            onSave={handleUpdatePreset} 
+            presetName={selectedPreset.name}
+          />
         </div>
       )}
     </div>

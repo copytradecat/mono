@@ -16,10 +16,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'PUT') {
     try {
-      const { settings } = req.body;
+      const { name, settings } = req.body;
       const user = await User.findOneAndUpdate(
         { discordId: session.user?.name, 'presets._id': id },
-        { $set: { 'presets.$.settings': settings } },
+        { $set: { 'presets.$.name': name, 'presets.$.settings': settings } },
         { new: true }
       );
       if (!user) {

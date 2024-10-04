@@ -30,11 +30,8 @@ const WalletSchema = new mongoose.Schema({
     encryptedSecretData: String,
     secretType: { type: String, enum: ['seed', 'privateKey'] },
     connectedChannels: [String],
-    settings: {
-        type: mongoose.Schema.Types.Mixed,
-        default: null,
-    },
-    presetName: { type: String, default: null },
+    settings: { type: SettingsSchema, default: () => ({}) },
+    presetId: { type: mongoose.Schema.Types.ObjectId, ref: 'Preset', default: null },
 });
 
 const UserSchema = new mongoose.Schema(
