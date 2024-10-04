@@ -164,7 +164,7 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
             onChange={(e) => handlePresetChange(e.target.value)}
             className="mb-4 p-2 border rounded"
           >
-            <option value="">Custom</option>
+            <option value="">None</option>
             {presets.map((preset) => (
               <option key={preset._id} value={preset._id}>{preset.name}</option>
             ))}
@@ -204,6 +204,7 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
                 value={settings.slippage}
                 onChange={(e) => updateSetting('slippage', parseFloat(e.target.value))}
                 className="w-full p-2 border rounded"
+                style={{ WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none', margin: '0' }}
               />
             </>
           )}
@@ -267,12 +268,14 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
               key={index}
               type="number"
               value={value}
+              onWheel={(e) => e.target.blur()}
               onChange={(e) => {
                 const newEntryAmounts = [...(settings.entryAmounts || [])];
                 newEntryAmounts[index] = parseFloat(e.target.value);
                 updateSetting('entryAmounts', newEntryAmounts);
               }}
               className="w-1/6 p-2 border rounded mr-2 mb-2"
+              style={{ WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none', margin: '0' }}
             />
           ))}
         </div>
@@ -283,12 +286,14 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
               key={index}
               type="number"
               value={value}
+              onWheel={(e) => e.target.blur()}
               onChange={(e) => {
                 const newExitPercentages = [...(settings.exitPercentages || [])];
                 newExitPercentages[index] = parseFloat(e.target.value);
                 updateSetting('exitPercentages', newExitPercentages);
               }}
               className="w-1/6 p-2 border rounded mr-2 mb-2"
+              style={{ WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none', margin: '0' }}
             />
           ))}
         </div>
