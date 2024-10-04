@@ -171,7 +171,7 @@ export default function WalletManagement() {
           <h3>Wallet {index + 1}</h3>
           <p>{wallet.publicKey || 'No public key'}&nbsp;
           <button onClick={() => handleRemoveWallet(wallet.publicKey)} className="bg-red-500 text-white px-2 py-1 rounded text-sm mt-2">Remove</button></p>
-          <p>{wallet.connectedChannels[0] && `Connected Channel: ${wallet.connectedChannels[0]}`}
+          {wallet.connectedChannels[0] && `Connected Channel: ${wallet.connectedChannels[0]}`}
           {wallet.connectedChannels[0] ? (
             <>
             &nbsp;<button onClick={() => handleDisconnectChannel(wallet.publicKey)} className="bg-red-500 text-white px-2 py-1 rounded text-sm mr-2">
@@ -183,7 +183,7 @@ export default function WalletManagement() {
               <input type="text" name="channelId" placeholder="Enter Channel ID" className="mr-2 p-1 border rounded" />
               <button type="submit" className="bg-green-500 text-white px-2 py-1 rounded text-sm">Connect Channel</button>
             </form>
-          )}</p>
+          )}
           <div className="mt-2">
             <button
               onClick={() => handleOpenSettingsManager(wallet.publicKey)}

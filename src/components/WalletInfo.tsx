@@ -55,7 +55,7 @@ export default function WalletInfo() {
               </ul>
             </>
           )}
-          <h4>Connected Channels:</h4>
+          <h4>Connected Channel:</h4>
           <ul>
             {wallet.connectedChannels.map((channel) => (
               <li key={channel}>{channel}</li>

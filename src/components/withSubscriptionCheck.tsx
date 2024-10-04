@@ -15,7 +15,7 @@ export function withSubscriptionCheck<P extends object>(WrappedComponent: React.
           const response = await fetch('/api/check-subscription');
           if (response.ok) {
             const data = await response.json();
-            setHasAccess(data.level > 0);
+            setHasAccess(data.level > 1);
           } else {
             setHasAccess(false);
           }
@@ -37,8 +37,8 @@ export function withSubscriptionCheck<P extends object>(WrappedComponent: React.
     if (!hasAccess) {
       return (
         <div>
-          <h1>Beta Access Only</h1>
-          <p>Please wait while we process your subscription.</p>
+          <h1>Pending Beta Access</h1>
+          <p>Please wait while we process your request.</p>
         </div>
       );
     }

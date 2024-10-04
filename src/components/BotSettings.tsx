@@ -153,7 +153,27 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
       <h2 className="text-2xl font-bold mb-4">
         Bot Settings {walletPublicKey ? `for ${walletPublicKey.slice(0, 6)}...${walletPublicKey.slice(-4)}` : ''}
       </h2>
-      <p className="mb-4">Current Preset: {currentPresetName}</p>
+      <p className="mb-4">Choose Preset: {currentPresetName}
+        &nbsp;
+        <select
+            value={selectedPresetId || ''}
+            onChange={(e) => handlePresetChange(e.target.value)}
+            className="mb-4 p-2 border rounded"
+          >
+            <option value="">Custom</option>
+            {presets.map((preset) => (
+              <option key={preset._id} value={preset._id}>{preset.name}</option>
+            ))}
+          </select>
+          &nbsp;
+          <NextLink href="/presets">
+            <button
+              className="bg-green-500 text-white px-4 py-2 rounded mt-4"
+            >
+              Manage Presets
+            </button>
+          </NextLink>
+      </p>
       <div>
 
         {/* Slippage Type */}
@@ -268,24 +288,6 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
             />
           ))}
         </div>
-        <select
-          value={selectedPresetId || ''}
-          onChange={(e) => handlePresetChange(e.target.value)}
-          className="mb-4 p-2 border rounded"
-        >
-          <option value="">Select a preset</option>
-          {presets.map((preset) => (
-            <option key={preset._id} value={preset._id}>{preset.name}</option>
-          ))}
-        </select>
-
-        <NextLink href="/presets">
-          <button
-            className="bg-green-500 text-white px-4 py-2 rounded mt-4"
-          >
-            Manage Presets
-          </button>
-        </NextLink>
         {unSaved && (
           <>
           <div className="mb-4">
