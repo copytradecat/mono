@@ -31,40 +31,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const normalizedPublicKey = publicKey;
 
-    const existingUser = await User.findOne({ 
-      discordId: session.user?.name, 
-      'wallets.publicKey': normalizedPublicKey 
-    });
+    const user = await User.findOne({ discordId: session.user?.name });
 
-    if (existingUser) {
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.wallets.some((wallet: { publicKey: any; }) => wallet.publicKey === normalizedPublicKey)) {
       return res.status(400).json({ error: 'Wallet already exists' });
     }
 
-    const user = await User.findOneAndUpdate(
-      { discordId: session.user?.name },
-      {
-        $set: {
-          email: session.user?.email,
-        },
-        $push: {
-          wallets: {
-            publicKey: normalizedPublicKey,
-            encryptedSecretData,
-            secretType: type,
-            connectedChannels: [channelId]
-          }
-        },
-        $setOnInsert: {
-          discordId: session.user?.name,
-          name: session.user?.name,
-        }
-      },
-      { new: true, upsert: true }
-    );
-
-    if (!user) {
-      throw new Error('User not found or not updated');
+    let walletSettings = {};
+    if (user.primaryPresetId) {
+      const primaryPreset = user.presets.id(user.primaryPresetId);
+      if (primaryPreset) {
+        walletSettings = primaryPreset.settings;
+      }
     }
+
+    user.wallets.push({
+      publicKey: normalizedPublicKey,
+      encryptedSecretData,
+      secretType: type,
+      connectedChannels: [channelId],
+      settings: walletSettings,
+    });
+
+    await user.save();
 
     res.status(200).json({ message: 'Wallet saved successfully' });
   } catch (error) {

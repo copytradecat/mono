@@ -5,22 +5,22 @@ import User from '../../models/User';
 import { connectDB } from '../../lib/mongodb';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
   const session = await getServerSession(req, res, authOptions);
   if (!session) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  const { maxTradeAmount } = req.body;
+  const { presetId } = req.body;
 
   try {
     await connectDB();
     const user = await User.findOneAndUpdate(
       { discordId: session.user?.name },
-      { $set: { 'settings.maxTradeAmount': maxTradeAmount } },
+      { $set: { primaryPresetId: presetId } },
       { new: true }
     );
 
@@ -28,9 +28,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.status(200).json(user.settings);
+    res.status(200).json({ message: 'Primary preset set successfully' });
   } catch (error) {
-    console.error('Failed to update settings:', error);
-    res.status(500).json({ error: 'Failed to update settings' });
+    console.error('Error setting primary preset:', error);
+    res.status(500).json({ error: 'Failed to set primary preset' });
   }
 }

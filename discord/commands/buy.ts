@@ -37,12 +37,21 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
     const channelId = interaction.channelId;
 
     const initiatingUser = await getUser(initiatingUserId);
-    const initiatingWallet = initiatingUser.wallets.find((wallet: any) => wallet.connectedChannels[0] === channelId);
+    const initiatingWallet = initiatingUser.wallets.find((wallet: any) => wallet.connectedChannels.includes(channelId));
+    if (!initiatingWallet) {
+      return interaction.editReply({
+        content: "You don't have a wallet connected to this channel. Please connect a wallet first.\nUse `/ct connect` to connect a wallet.",
+        components: [],
+      });
+    }
     const inputToken = 'So11111111111111111111111111111111111111112'; // SOL mint address
     const inputTokenInfo = await getTokenInfo(inputToken);
     const outputTokenInfo = await getTokenInfo(outputTokenAddress);
-    const walletSettings = initiatingWallet?.settings;
-    const initiatingSettings = walletSettings || initiatingUser.settings || defaultSettings;
+
+    // Prioritize wallet settings, then primary preset, then user settings, and finally default settings
+    const walletSettings = initiatingWallet.settings;
+    const primaryPreset = initiatingUser.primaryPresetId ? initiatingUser.presets.find(p => p._id.toString() === initiatingUser.primaryPresetId.toString()) : null;
+    const initiatingSettings = walletSettings || (primaryPreset ? primaryPreset.settings : null) || initiatingUser.settings || defaultSettings;
     const initiatingEntryAmounts = initiatingSettings.entryAmounts || defaultSettings.entryAmounts;
 
     // Fetch all connected wallets in this channel

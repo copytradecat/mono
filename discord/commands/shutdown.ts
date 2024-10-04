@@ -14,13 +14,13 @@ export async function handleShutdown(interaction: CommandInteraction) {
 
     if (result.deletedCount === 0) {
       return interaction.editReply({
-        content: "The bot is not currently set up in this server. Use `/ct setup` to set it up."
+        content: "The bot is not currently set up in this server. Use `/ct start` to set it up."
       });
     }
 
     // Edit the deferred reply
     await interaction.editReply({
-      content: "Bot shutdown successful. The bot has been disabled for this server. Use `/ct setup` to set it up again if needed."
+      content: "Bot shutdown successful. The bot has been disabled for this server. Use `/ct start` to set it up again if needed."
     });
   } catch (error) {
     console.error("Error in shutdown:", error);
