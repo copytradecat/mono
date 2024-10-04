@@ -31,22 +31,18 @@ const WalletSchema = new mongoose.Schema({
     secretType: { type: String, enum: ['seed', 'privateKey'] },
     connectedChannels: [String],
     settings: { type: SettingsSchema, default: () => ({}) },
-    presetId: { type: mongoose.Schema.Types.ObjectId, ref: 'Preset', default: null },
 });
 
-const UserSchema = new mongoose.Schema(
-    {
-        email: { type: String, unique: true, sparse: true },
-        username: { type: String, unique: true, sparse: true },
-        discordId: { type: String, unique: true, required: true },
-        name: { type: String },
-        wallets: [WalletSchema],
-        settings: { type: SettingsSchema, default: () => ({}) },
-        accountNumber: { type: Number, unique: true },
-        referrals: [{ type: String }],
-        presets: [PresetSchema],
-    },
-    { timestamps: true }
-);
+const UserSchema = new mongoose.Schema({
+    email: { type: String, unique: true, sparse: true },
+    username: { type: String, unique: true, sparse: true },
+    discordId: { type: String, unique: true, required: true },
+    name: { type: String },
+    referrals: [{ type: String }],
+    accountNumber: { type: Number, unique: true },
+    wallets: [WalletSchema],
+    presets: [PresetSchema],
+    primaryPresetId: { type: mongoose.Schema.Types.ObjectId, ref: 'Preset' },
+},{ timestamps: true });
 
 export default mongoose.models.User || mongoose.model('User', UserSchema);

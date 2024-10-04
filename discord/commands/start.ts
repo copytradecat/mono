@@ -1,7 +1,7 @@
 import { CommandInteraction, TextChannel, PermissionFlagsBits } from "discord.js";
 import Channel from '../../src/models/Channel';
 
-export async function handleSetup(interaction: CommandInteraction) {
+export async function handleStart(interaction: CommandInteraction) {
   if (!interaction.guild || !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
     return interaction.reply({ content: "This command can only be used by administrators in a server.", ephemeral: true });
   }
@@ -11,9 +11,14 @@ export async function handleSetup(interaction: CommandInteraction) {
 
   try {
     const existingChannel = await Channel.findOne({ guildId: interaction.guild.id });
-    if (existingChannel) {
+    // if (existingChannel) {
+    //   return interaction.editReply({
+    //     content: `The bot is already set up in this server. The trading channel is <#${existingChannel.channelId}>. Use \`/ct help\` for more details.`
+    //   });
+    // }
+    if (existingChannel.channelId === interaction.channelId) {
       return interaction.editReply({
-        content: `The bot is already set up in this server. The trading channel is <#${existingChannel.channelId}>. Use \`/ct info\` for more details.`
+        content: `The bot is already set up in this channel and ready to trade. Use \`/ct help\` for more details.`
       });
     }
 
@@ -25,7 +30,7 @@ export async function handleSetup(interaction: CommandInteraction) {
 
     // Edit the deferred reply
     await interaction.editReply({
-      content: `Bot setup successful! This channel (${interaction.channel}) is now set for trading. Regular members can use \`/ct register\` to connect their wallets and start using the bot. Use \`/ct info\` to check the bot's status.`
+      content: `Bot setup successful! This channel (${interaction.channel}) is now set for trading. Regular members can use \`/ct connect\` to connect their wallets and start using the bot. Use \`/ct help\` for more commands.`
     });
   } catch (error) {
     console.error("Error in setup:", error);

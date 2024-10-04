@@ -124,7 +124,7 @@ async function simulateCommandResponse(command: string, options: any): Promise<s
     case 'unfollow':
       return `You have unfollowed user with ID: ${options.user}`;
     case 'help':
-      return "Available commands:\n/ct register\n/ct wallet\n/ct balance\n/ct follow <user>\n/ct trade <amount> <token>\n/ct list\n/ct settings\n/ct set <setting> <value>\n/ct unfollow <user>\n/ct help";
+      return "Available commands:\n/ct connect\n/ct wallet\n/ct balance\n/ct follow <user>\n/ct trade <amount> <token>\n/ct list\n/ct settings\n/ct set <setting> <value>\n/ct unfollow <user>\n/ct help";
     default:
       return "Unknown command";
   }

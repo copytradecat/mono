@@ -38,7 +38,6 @@ export const authOptions: NextAuthOptions = {
             $setOnInsert: {
               name: discordProfile.id,
               discordId: discordProfile.id,
-              settings: { maxTradeAmount: 100 },
               accountNumber: newAccountNumber,
             },
           },

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { Keypair } from '@solana/web3.js';
-import bs58 from 'bs58';
+import WalletImport from './WalletImport';
 import { useWallets } from '../hooks/useWallets';
 import axios from 'axios';
 import pLimit from 'p-limit';
@@ -16,63 +15,16 @@ interface TokenBalance {
 export default function WalletManagement() {
   const { data: session } = useSession();
   const { wallets, isLoading, error, fetchWallets } = useWallets();
-  const [showPrivateKey, setShowPrivateKey] = useState(false);
-  const [walletCreated, setWalletCreated] = useState(false);
-  const [walletSeed, setWalletSeed] = useState('');
-  const [publicAddress, setPublicAddress] = useState<string | null>(null);
   const [showSettingsManager, setShowSettingsManager] = useState(false);
   const [selectedWalletForSettings, setSelectedWalletForSettings] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
 
   useEffect(() => {
     if (session) {
       fetchWallets();
     }
-  }, [session, fetchWallets]);
-
-  const handleCreateWallet = () => {
-    const newKeypair = Keypair.generate();
-    const seed = bs58.encode(newKeypair.secretKey);
-    setWalletSeed(seed);
-    setPublicAddress(newKeypair.publicKey.toBase58());
-    setWalletCreated(true);
-  };
-
-  const handleSaveWallet = async () => {
-    if (!session || !walletSeed) return;
-
-    const response = await fetch('/api/save-wallet', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        publicKey: publicAddress,
-        secretData: walletSeed,
-        type: 'seed',
-      }),
-    });
-
-    if (response.ok) {
-      alert('Wallet saved successfully!');
-      fetchWallets();
-    } else {
-      const errorData = await response.json();
-      alert(`Failed to save wallet: ${errorData.error}`);
-    }
-  };
-
-  const handleImportWallet = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const seed = (event.currentTarget.elements.namedItem('seed') as HTMLInputElement).value;
-    try {
-      const keypair = Keypair.fromSecretKey(bs58.decode(seed));
-      setWalletSeed(seed);
-      setPublicAddress(keypair.publicKey.toBase58());
-      setWalletCreated(true);
-    } catch (error) {
-      console.error('Invalid seed phrase');
-      alert('Invalid seed phrase');
-    }
-  };
+  }, [session, fetchWallets, refreshTrigger]);
 
   const handleRemoveWallet = async (publicKey: string) => {
     if (confirm("Are you sure you want to remove this wallet? This action is irreversible. Please ensure you have backed up your wallet before proceeding.")) {
@@ -143,27 +95,13 @@ export default function WalletManagement() {
     setShowSettingsManager(true);
   };
 
+  const handleWalletAdded = () => {
+    setRefreshTrigger(prev => prev + 1);
+  };
   return (
     <div>
       <h1 className="text-3xl font-bold mb-6">Wallet Management</h1>
-      <h3 className="text-xl font-semibold mb-4">Create or Import Wallet</h3>
-      {!walletCreated && (
-        <form onSubmit={handleImportWallet} className="mb-4">
-          <input type="text" name="seed" placeholder="Enter seed phrase" className="mr-2 p-2 border rounded" />
-          <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded">Import Wallet</button>
-        </form>
-      )}
-      {!walletCreated && <button onClick={handleCreateWallet} className="bg-green-500 text-white px-4 py-2 rounded mb-6">Create New Wallet</button>}
-      {walletCreated && (
-        <div className="mb-6">
-          <p>Public Address: {publicAddress?.toString()}</p>
-          <button onClick={() => setShowPrivateKey(!showPrivateKey)} className="bg-yellow-500 text-white px-4 py-2 rounded mr-2">
-            {showPrivateKey ? 'Hide' : 'Reveal'} Private Key
-          </button>
-          {showPrivateKey && <p>Private Key: {walletSeed}</p>}
-          <button onClick={handleSaveWallet} className="bg-blue-500 text-white px-4 py-2 rounded">Save Wallet</button>
-        </div>
-      )}
+      <WalletImport onWalletAdded={handleWalletAdded} />
 
       <h3 className="text-xl font-semibold mb-4">Available Wallets:</h3>
       {wallets.map((wallet, index) => (

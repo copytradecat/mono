@@ -6,7 +6,7 @@ import { getBalance } from "../../src/services/jupiter.service";
 
 dotenv.config({ path: ['../.env.local', '.env'] });
 
-export async function handleBalance(userId: string, reply: (content: string) => Promise<void>) {
+export async function handleBalances(userId: string, reply: (content: string) => Promise<void>) {
   try {
     const user = await User.findOne({ discordId: userId });
     if (!user || user.wallets.length === 0) {

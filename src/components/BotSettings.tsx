@@ -16,12 +16,12 @@ export interface Settings {
 
 export const defaultSettings: Settings = {
   slippage: 300,
-  slippageType: 'fixed',
+  slippageType: 'dynamic',
   smartMevProtection: 'secure',
   transactionSpeed: 'medium',
   priorityFee: 'auto',
-  entryAmounts: [0.05, 0.1, 0.42069, 1, 2.4, 10],
-  exitPercentages: [10, 20, 50, 100],
+  entryAmounts: [0.01, 0.05, 0.1, 0.5, 1],
+  exitPercentages: [10, 20, 50, 75, 100],
   wrapUnwrapSOL: true,
 };
 
@@ -34,8 +34,9 @@ interface BotSettingsProps {
 
 export default function BotSettings({ walletPublicKey, initialSettings, onSave, presetName }: BotSettingsProps) {
   const { data: session } = useSession();
-  const [settings, setSettings] = useState<Settings>(initialSettings || defaultSettings);
-  const [isLoading, setIsLoading] = useState(false);
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [unSaved, setUnSaved] = useState(false);
   const [presets, setPresets] = useState<{ _id: string; name: string; settings: Settings }[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
@@ -44,37 +45,51 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
 
   const fetchSettings = useCallback(async () => {
     if (!session) return;
+    setIsLoading(true);
+    setError(null);
     try {
       const response = await axios.get('/api/bot-settings', {
         params: { walletPublicKey }
       });
       setSettings(response.data.settings);
+      setSavedSettings(response.data.settings);
     } catch (error) {
       console.error('Error fetching settings:', error);
+      setError('Failed to load settings. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
-  }, [walletPublicKey, session]);
+  }, [session, walletPublicKey]);
 
-  useEffect(() => {
-    if (session) {
-      fetchSettings();
-    }
-  }, [session, fetchSettings]);
-
-  useEffect(() => {
-    if (initialSettings) {
-      setSettings(initialSettings);
-      setUnSaved(false);
-    }
-  }, [initialSettings]);
-
-  const fetchPresets = async () => {
+  const fetchPresets = useCallback(async () => {
+    if (!session) return;
     try {
       const response = await axios.get('/api/presets');
       setPresets(response.data);
     } catch (error) {
       console.error('Error fetching presets:', error);
     }
-  };
+  }, [session]);
+
+  useEffect(() => {
+    if (session) {
+      fetchSettings();
+      fetchPresets();
+    }
+  }, [session, fetchSettings, fetchPresets]);
+
+  useEffect(() => {
+    if (initialSettings) {
+      setSettings(initialSettings);
+      setSavedSettings(initialSettings);
+      setUnSaved(false);
+      setIsLoading(false);
+    } else {
+      setSettings(defaultSettings);
+      setSavedSettings(defaultSettings);
+      setIsLoading(false);
+    }
+  }, [initialSettings]);
 
   const handlePresetChange = (presetId: string) => {
     const selectedPreset = presets.find(preset => preset._id === presetId);
@@ -150,6 +165,18 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
     }
   };
 
+  if (isLoading) {
+    return <div>Loading settings...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
+  }
+
+  if (!settings) {
+    return <div>No settings available.</div>;
+  }
+
   return (
     <div className="p-4 bg-white shadow rounded-lg">
       <h2 className="text-2xl font-bold mb-4">
@@ -158,111 +185,29 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
       <p className="mb-4">Use Preset:
         &nbsp;
         <select
-            value={selectedPresetId || ''}
-            onChange={(e) => handlePresetChange(e.target.value)}
-            className="mb-4 p-2 border rounded"
-          >
-            <option value="">Custom</option>
-            {presets.map((preset) => (
-              <option key={preset._id} value={preset._id}>{preset.name}</option>
-            ))}
-          </select>
-          &nbsp;
-          <NextLink href="/presets">
-            <button
-              className="bg-green-500 text-white px-4 py-2 rounded mt-4"
-            >
-              Manage Presets
-            </button>
-          </NextLink>&nbsp;
-          {currentPresetName!=='Custom' && `${currentPresetName} Preset Settings Prefilled Below.`} 
-          {unSaved && <div className="mb-4">
+          value={selectedPresetId || ''}
+          onChange={(e) => handlePresetChange(e.target.value)}
+          className="mb-4 p-2 border rounded"
+        >
+          <option value="">Custom</option>
+          {presets.map((preset) => (
+            <option key={preset._id} value={preset._id}>{preset.name}</option>
+          ))}
+        </select>
+        &nbsp;
+        <NextLink href="/presets">
+          <button className="bg-green-500 text-white px-4 py-2 rounded mt-4">
+            Manage Presets
+          </button>
+        </NextLink>&nbsp;
+        {currentPresetName !== 'Custom' && `${currentPresetName} Preset Settings Prefilled Below.`}
+        {unSaved && (
+          <div className="mb-4">
             <p className="text-red-500">Unsaved changes detected. Please save or discard them.</p>
-          </div>}
+          </div>
+        )}
       </p>
       <div>
-
-        {/* Slippage Type */}
-        <h3 className="text-xl font-semibold mb-2">Slippage Type</h3>
-          <div>
-            <button
-              onClick={() => updateSetting('slippageType', 'fixed')}
-              className={`mr-2 px-4 py-2 rounded ${settings.slippageType === 'fixed' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
-            >
-              Fixed
-            </button>
-            <button
-              onClick={() => updateSetting('slippageType', 'dynamic')}
-              className={`px-4 py-2 rounded ${settings.slippageType === 'dynamic' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
-            >
-              Dynamic
-            </button>
-          </div>
-          {settings.slippageType === 'fixed' && (
-            <>
-              <h3 className="text-xl font-semibold mt-4 mb-2">Slippage Bips (100 bips = 1% slippage)</h3>
-              <input
-                type="number"
-                value={settings.slippage}
-                onChange={(e) => updateSetting('slippage', parseFloat(e.target.value))}
-                className="w-full p-2 border rounded"
-                style={{ WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none', margin: '0' }}
-              />
-            </>
-          )}
-        <h3 className="text-xl font-semibold mt-4 mb-2">Smart-MEV Protection</h3>
-        <div>
-          <button
-            onClick={() => updateSetting('smartMevProtection', 'fast')}
-            className={`mr-2 px-4 py-2 rounded ${settings.smartMevProtection === 'fast' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
-          >
-            Fast
-          </button>
-          <button
-            onClick={() => updateSetting('smartMevProtection', 'secure')}
-            className={`px-4 py-2 rounded ${settings.smartMevProtection === 'secure' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
-          >
-            Secure
-          </button>
-        </div>
-        <h3 className="text-xl font-semibold mt-4 mb-2">Transaction Speed</h3>
-        <div>
-          {['medium', 'high', 'veryHigh'].map((speed) => (
-            <button
-              key={speed}
-              onClick={() => {
-                updateSetting('transactionSpeed', speed as Settings['transactionSpeed']);
-                if (speed !== 'custom') {
-                  updateSetting('priorityFee', 'auto');
-                }
-              }}
-              className={`mr-2 px-4 py-2 rounded ${
-                settings.transactionSpeed === speed ? 'bg-blue-500 text-white' : 'bg-gray-200'
-              }`}
-            >
-              {speed.charAt(0).toUpperCase() + speed.slice(1)}
-            </button>
-          ))}
-        </div>
-        {settings.transactionSpeed === 'custom' && (
-          <>
-            <h3 className="text-xl font-semibold mt-4 mb-2">Custom Priority Fee (in SOL)</h3>
-            <input
-              type="number"
-              value={settings.priorityFee === 'auto' ? '' : settings.priorityFee}
-              onChange={(e) => updateSetting('priorityFee', parseFloat(e.target.value))}
-              className="w-full p-2 border rounded"
-            />
-          </>
-        )}
-        <h3 className="text-xl font-semibold mt-4 mb-2">Wrap/Unwrap SOL</h3>
-        <input
-          type="checkbox"
-          checked={settings.wrapUnwrapSOL}
-          onChange={(e) => updateSetting('wrapUnwrapSOL', e.target.checked)}
-          className="mr-2"
-        />
-        <label>Automatically wrap/unwrap SOL</label>
         <h3 className="text-xl font-semibold mt-4 mb-2">Entry Amounts</h3>
         <div className="flex flex-wrap">
           {(settings.entryAmounts || []).map((value, index) => (
@@ -299,9 +244,96 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
             />
           ))}
         </div>
-        {unSaved && (
-          <>
-          <div className="mb-4">
+        <br/>
+        <details className="mt-4">
+          <summary className="text-xl font-semibold cursor-pointer">Advanced Settings</summary>
+          <div className="mt-2">
+            <h3 className="text-lg font-semibold mb-2">Slippage Type</h3>
+            <div>
+              <button
+                onClick={() => updateSetting('slippageType', 'fixed')}
+                className={`mr-2 px-4 py-2 rounded ${settings.slippageType === 'fixed' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+              >
+                Fixed
+              </button>
+              <button
+                onClick={() => updateSetting('slippageType', 'dynamic')}
+                className={`px-4 py-2 rounded ${settings.slippageType === 'dynamic' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+              >
+                Dynamic
+              </button>
+            </div>
+            {settings.slippageType === 'fixed' && (
+              <>
+                <h3 className="text-lg font-semibold mt-4 mb-2">Slippage Bips (100 bips = 1% slippage)</h3>
+                <input
+                  type="number"
+                  value={settings.slippage}
+                  onChange={(e) => updateSetting('slippage', parseFloat(e.target.value))}
+                  className="w-full p-2 border rounded"
+                  style={{ WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none', margin: '0' }}
+                />
+              </>
+            )}
+            <h3 className="text-lg font-semibold mt-4 mb-2">Smart-MEV Protection</h3>
+            <div>
+              <button
+                onClick={() => updateSetting('smartMevProtection', 'fast')}
+                className={`mr-2 px-4 py-2 rounded ${settings.smartMevProtection === 'fast' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+              >
+                Fast
+              </button>
+              <button
+                onClick={() => updateSetting('smartMevProtection', 'secure')}
+                className={`px-4 py-2 rounded ${settings.smartMevProtection === 'secure' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+              >
+                Secure
+              </button>
+            </div>
+            <h3 className="text-lg font-semibold mt-4 mb-2">Transaction Speed</h3>
+            <div>
+              {['medium', 'high', 'veryHigh'].map((speed) => (
+                <button
+                  key={speed}
+                  onClick={() => {
+                    updateSetting('transactionSpeed', speed as Settings['transactionSpeed']);
+                    if (speed !== 'custom') {
+                      updateSetting('priorityFee', 'auto');
+                    }
+                  }}
+                  className={`mr-2 px-4 py-2 rounded ${
+                    settings.transactionSpeed === speed ? 'bg-blue-500 text-white' : 'bg-gray-200'
+                  }`}
+                >
+                  {speed.charAt(0).toUpperCase() + speed.slice(1)}
+                </button>
+              ))}
+            </div>
+            {settings.transactionSpeed === 'custom' && (
+              <>
+                <h3 className="text-lg font-semibold mt-4 mb-2">Custom Priority Fee (in SOL)</h3>
+                <input
+                  type="number"
+                  value={settings.priorityFee === 'auto' ? '' : settings.priorityFee}
+                  onChange={(e) => updateSetting('priorityFee', parseFloat(e.target.value))}
+                  className="w-full p-2 border rounded"
+                />
+              </>
+            )}
+            <h3 className="text-lg font-semibold mt-4 mb-2">Wrap/Unwrap SOL</h3>
+            <input
+              type="checkbox"
+              checked={settings.wrapUnwrapSOL}
+              onChange={(e) => updateSetting('wrapUnwrapSOL', e.target.checked)}
+              className="mr-2"
+            />
+            <label>Automatically wrap/unwrap SOL</label>
+          </div>
+        </details>
+      </div>
+      {unSaved && (
+        <>
+          <div className="mb-4 mt-4">
             <p className="text-red-500">Unsaved changes detected. Please save or discard them.</p>
           </div>
           <table className="mb-4">
@@ -324,7 +356,6 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
               </tr>
             </tbody>
           </table>
-
           <button
             onClick={validateAndSaveSettings}
             className="bg-green-500 text-white px-4 py-2 rounded mt-4"
@@ -333,8 +364,7 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
             {isLoading ? 'Saving...' : 'Save Settings'}
           </button>
         </>
-        )}
-      </div>
+      )}<br/><br/><br/><br/><br/>
     </div>
   );
 }
