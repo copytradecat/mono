@@ -21,7 +21,7 @@ export const defaultSettings: Settings = {
   transactionSpeed: 'medium',
   priorityFee: 'auto',
   entryAmounts: [0.01, 0.05, 0.1, 0.5, 1],
-  exitPercentages: [10, 20, 50, 100],
+  exitPercentages: [10, 20, 50, 75, 100],
   wrapUnwrapSOL: true,
 };
 
@@ -244,7 +244,7 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
             />
           ))}
         </div>
-        
+        <br/>
         <details className="mt-4">
           <summary className="text-xl font-semibold cursor-pointer">Advanced Settings</summary>
           <div className="mt-2">
@@ -364,7 +364,7 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
             {isLoading ? 'Saving...' : 'Save Settings'}
           </button>
         </>
-      )}
+      )}<br/><br/><br/><br/><br/>
     </div>
   );
 }

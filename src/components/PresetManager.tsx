@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Settings } from './BotSettings';
+import { defaultSettings, Settings } from './BotSettings';
 import BotSettings from './BotSettings';
 
 interface Preset {
