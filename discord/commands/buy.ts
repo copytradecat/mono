@@ -40,7 +40,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
     const initiatingWallet = initiatingUser.wallets.find((wallet: any) => wallet.connectedChannels.includes(channelId));
     if (!initiatingWallet) {
       return interaction.editReply({
-        content: "You don't have a wallet connected to this channel. Please connect a wallet first.\nUse `/ct connect-wallet` to connect a wallet.",
+        content: "You don't have a wallet connected to this channel. Please connect a wallet first.\nUse `/ct connect` to connect a wallet.",
         components: [],
       });
     }

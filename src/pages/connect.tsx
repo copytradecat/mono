@@ -4,7 +4,7 @@ import { useSession } from 'next-auth/react';
 import WalletSelector from '../components/WalletSelector';
 import WalletImport from '../components/WalletImport';
 
-export default function Register() {
+export default function Connect() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [channelId, setChannelId] = useState<string | null>(null);
@@ -41,11 +41,17 @@ export default function Register() {
   }
 
   return (
-    <div>
-      <h1>Connect Your Wallet</h1>
-      <p>Channel ID: {channelId}</p>
-      <WalletSelector channelId={channelId} refreshTrigger={refreshTrigger} />
-      <WalletImport onWalletAdded={handleWalletAdded} channels={channels} />
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-3xl font-bold mb-4">Connect Your Wallet</h1>
+      {channelId ? (
+        <>
+          <p className="mb-4">Channel ID: {channelId}</p>
+          <WalletSelector channelId={channelId} refreshTrigger={refreshTrigger} />
+          <WalletImport onWalletAdded={handleWalletAdded} channels={channels} />
+        </>
+      ) : (
+        <p>No channel ID provided.</p>
+      )}
     </div>
   );
 }

@@ -117,8 +117,8 @@ export async function handleConnect(interaction: CommandInteraction) {
         if (selectedValue === 'disconnect') {
           if (connectedWallet) {
             await User.updateOne(
-              { discordId: userId, "wallets.publicKey": connectedWallet.publicKey },
-              { $pull: { "wallets.$.connectedChannels": channelId } }
+              { discordId: userId, "wallets.publicKey": connectedWallet.publicKey, "wallets.connectedChannels": channelId },
+              { $set: { "wallets.$.connectedChannels": [] } }
             );
             responseContent = `Successfully disconnected wallet ${connectedWallet.publicKey} from this channel.`;
           } else {
@@ -138,7 +138,7 @@ export async function handleConnect(interaction: CommandInteraction) {
 
           await User.updateOne(
             { discordId: userId, "wallets.publicKey": selectedWalletPublicKey },
-            { $addToSet: { "wallets.$.connectedChannels": channelId } }
+            { $set: { "wallets.$.connectedChannels": [channelId] } }
           );
 
           if (connectedWallet) {
