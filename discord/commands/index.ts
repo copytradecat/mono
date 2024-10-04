@@ -1,14 +1,13 @@
 import { Message, CommandInteraction } from "discord.js";
 import Channel from '../../src/models/Channel';
 import { handleHelp } from "./help.js";
-import { handleRegister } from "./register.js";
 import { handleSetup } from "./setup.js";
 import { handleWallet } from "./wallet.js";
 import { handleBalance } from "./balance.js";
 import { handleTradeCommand } from "./trade.js";
 import { handleFollow, handleUnfollow, handleList } from "./follow.js";
 import { handleSettings, handleSet } from "./settings.js";
-import { handleConnectWallet } from "./connect-wallet.js";
+import { handleConnect } from "./connect.js";
 import { handleInfo } from "./info.js";
 import { handleShutdown } from "./shutdown.js";
 import { handleProfile } from "./profile.js";
@@ -49,9 +48,6 @@ export async function handleCommand(interaction: Message | CommandInteraction, c
       case 'help':
         await handleHelp(reply);
         break;
-      case 'register':
-        await handleRegister(userId, interaction.channelId, reply);
-        break;
       case 'setup':
         await handleSetup(interaction as CommandInteraction);
         break;
@@ -79,8 +75,8 @@ export async function handleCommand(interaction: Message | CommandInteraction, c
       case 'set':
         await handleSet(userId, args, reply);
         break;
-      case 'connect-wallet':
-        await handleConnectWallet(interaction as CommandInteraction);
+      case 'connect':
+        await handleConnect(interaction as CommandInteraction);
         break;
       case 'info':
         await handleInfo(interaction as CommandInteraction);

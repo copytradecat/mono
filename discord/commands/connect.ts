@@ -9,10 +9,10 @@ const interactionStates = new Map();
 
 export const data = new SlashCommandBuilder()
   .setName('connect')
-  .setDescription('Connect or register a wallet for this channel');
+  .setDescription('Connect a wallet to this channel');
 
-export async function handleConnectWallet(interaction: CommandInteraction) {
-  const webAppUrl = `${process.env.NEXT_PUBLIC_WEBSITE_URL}/register?channelId=${interaction.channelId}`;
+export async function handleConnect(interaction: CommandInteraction) {
+  const webAppUrl = `${process.env.NEXT_PUBLIC_WEBSITE_URL}/connect?channelId=${interaction.channelId}`;
   const userId = interaction.user.id;
   const channelId = interaction.channelId;
 
