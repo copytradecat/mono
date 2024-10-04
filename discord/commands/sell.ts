@@ -36,6 +36,12 @@ export async function handleSellCommand(interaction: CommandInteraction) {
 
     const initiatingUser = await getUser(initiatingUserId);
     const initiatingWallet = initiatingUser.wallets.find((wallet: any) => wallet.connectedChannels.includes(channelId));
+    if (!initiatingWallet) {
+      return interaction.editReply({
+        content: "You don't have a wallet connected to this channel. Please connect a wallet first.",
+        components: [],
+      });
+    }
     const outputTokenAddress = 'So11111111111111111111111111111111111111112'; // SOL mint address
     const inputTokenInfo = await getTokenInfo(inputTokenAddress);
     const outputTokenInfo = await getTokenInfo(outputTokenAddress);

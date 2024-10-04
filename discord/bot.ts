@@ -23,7 +23,7 @@ const client = new Client({
 const commands = [
   new SlashCommandBuilder().setName('ct').setDescription('CopyTradeCat commands')
     .addSubcommand(subcommand => subcommand.setName('help').setDescription('Display help message'))
-    .addSubcommand(subcommand => subcommand.setName('register').setDescription('Link your Discord account to the web app'))
+    .addSubcommand(subcommand => subcommand.setName('connect-wallet').setDescription('Connect a wallet to this channel'))
     .addSubcommand(subcommand => subcommand.setName('wallet').setDescription('Display linked wallet information'))
     .addSubcommand(subcommand => subcommand.setName('balance').setDescription('Show current balance of linked wallet'))
     .addSubcommand(subcommand => subcommand.setName('trade').setDescription('Execute a trade')

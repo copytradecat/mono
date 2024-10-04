@@ -1,34 +1,173 @@
-import { CommandInteraction } from "discord.js";
+import { CommandInteraction, SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } from "discord.js";
 import User from '../../src/models/User';
 import dotenv from 'dotenv';
 
 dotenv.config({ path: ['../.env.local', '../.env'] });
 
+const interactionStates = new Map();
+
+export const data = new SlashCommandBuilder()
+  .setName('connect-wallet')
+  .setDescription('Connect a wallet to this channel or register if you don\'t have any wallets');
+
 export async function handleConnectWallet(interaction: CommandInteraction) {
+  const webAppUrl = `${process.env.NEXT_PUBLIC_WEBSITE_URL}/register?channelId=${interaction.channelId}`;
   const userId = interaction.user.id;
+  const channelId = interaction.channelId;
 
   try {
     const user = await User.findOne({ discordId: userId });
+    
     if (!user || user.wallets.length === 0) {
-      return interaction.reply({
-        content: "You don't have any wallets linked to your account. Please visit our web application to set up your wallets: " + process.env.NEXT_PUBLIC_WEBSITE_URL,
+      await interaction.reply({
+        content: `You don't have any wallets linked to your account. Please visit our web application to register and set up your wallets: ${webAppUrl}`,
         ephemeral: true
       });
+      return;
     }
 
-    // Here you would typically implement logic to select a wallet and connect it to the channel
-    // For now, we'll just display the available wallets
+    const connectedWallet = user.wallets.find(wallet => wallet.connectedChannels.includes(channelId));
+    const availableWallets = user.wallets.filter(wallet => !wallet.connectedChannels.includes(channelId));
 
-    const walletList = user.wallets.map((wallet, index) => 
-      `${index + 1}. ${wallet.publicKey}`
-    ).join('\n');
+    if (availableWallets.length === 0 && !connectedWallet) {
+      await interaction.reply({
+        content: `You have already connected all your wallets to other channels. To connect a new wallet, please add it first through our web application: ${webAppUrl}`,
+        ephemeral: true
+      });
+      return;
+    }
 
-    await interaction.reply({
-      content: `Your linked wallets:\n${walletList}\n\nTo connect a wallet, please use our web application: ${process.env.NEXT_PUBLIC_WEBSITE_URL}`,
-      ephemeral: true
+    let content = connectedWallet
+      ? `Wallet connected: ${connectedWallet.publicKey}\n\nTo connect a different wallet or disconnect the current one, please select from the following:`
+      : "Select a wallet to connect:";
+
+    const select = new StringSelectMenuBuilder()
+      .setCustomId('select_wallet')
+      .setPlaceholder('Choose a wallet to connect or disconnect')
+      .addOptions(
+        availableWallets.map(wallet => 
+          new StringSelectMenuOptionBuilder()
+            .setLabel(wallet.publicKey)
+            .setValue(wallet.publicKey)
+        )
+      );
+
+    if (connectedWallet) {
+      select.addOptions(
+        new StringSelectMenuOptionBuilder()
+          .setLabel('Disconnect')
+          .setValue('disconnect')
+      );
+    }
+
+    const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
+
+    const reply = await interaction.reply({
+      content: content,
+      components: [row],
+      ephemeral: true,
+      fetchReply: true
     });
+
+    interactionStates.set(interaction.id, { isAcknowledged: false, messageId: reply.id });
+
+    const collector = interaction.channel?.createMessageComponentCollector({
+      filter: (i: any) => i.customId === 'select_wallet' && i.user.id === interaction.user.id,
+      time: 60000
+    });
+
+    collector?.on('collect', async (i) => {
+      const selectedValue = i.values[0];
+      let responseContent = '';
+      
+      try {
+        const state = interactionStates.get(interaction.id);
+        if (!state.isAcknowledged) {
+          await i.deferUpdate();
+          state.isAcknowledged = true;
+        }
+
+        if (selectedValue === 'disconnect') {
+          if (connectedWallet) {
+            await User.updateOne(
+              { discordId: userId, "wallets.publicKey": connectedWallet.publicKey },
+              { $pull: { "wallets.$.connectedChannels": channelId } }
+            );
+            responseContent = `Successfully disconnected wallet ${connectedWallet.publicKey} from this channel.`;
+          } else {
+            responseContent = "No wallet is currently connected to this channel.";
+          }
+        } else {
+          const selectedWalletPublicKey = selectedValue;
+          
+          if (connectedWallet) {
+            await User.updateOne(
+              { discordId: userId, "wallets.publicKey": connectedWallet.publicKey },
+              { $pull: { "wallets.$.connectedChannels": channelId } }
+            );
+          }
+
+          await User.updateOne(
+            { discordId: userId, "wallets.publicKey": selectedWalletPublicKey },
+            { $addToSet: { "wallets.$.connectedChannels": channelId } }
+          );
+
+          if (connectedWallet) {
+            responseContent = `Successfully connected wallet ${selectedWalletPublicKey} to this channel.\nThe previously connected wallet ${connectedWallet.publicKey} has been disconnected.`;
+          } else {
+            responseContent = `Successfully connected wallet ${selectedWalletPublicKey} to this channel.`;
+          }
+        }
+
+        await retryEditReply(i, {
+          content: responseContent,
+          components: []
+        });
+      } catch (error) {
+        console.error("Error processing wallet selection:", error);
+        await retryEditReply(i, {
+          content: "An error occurred while processing your request. Please try again.",
+          components: []
+        });
+      }
+    });
+
+    collector?.on('end', async (collected) => {
+      if (collected.size === 0) {
+        try {
+          await retryEditReply(interaction, {
+            content: 'Wallet selection timed out. Please try again.',
+            components: []
+          });
+        } catch (error) {
+          console.error("Error updating timed-out interaction:", error);
+        }
+      }
+      interactionStates.delete(interaction.id);
+    });
+
   } catch (error) {
     console.error("Error in connect-wallet command:", error);
-    await interaction.reply({ content: "An error occurred while fetching your wallet information.", ephemeral: true });
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: "An error occurred while processing your request.", ephemeral: true });
+    }
+  }
+}
+
+async function retryEditReply(interaction, options, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      if (!options.content && !options.embeds && !options.components) {
+        console.warn("Attempted to send an empty message. Skipping edit.");
+        return;
+      }
+      await interaction.editReply(options);
+      return;
+    } catch (error) {
+      if (i === maxRetries - 1) {
+        throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
   }
 }
