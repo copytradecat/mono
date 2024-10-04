@@ -49,23 +49,11 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
         params: { walletPublicKey }
       });
       setSettings(response.data.settings);
+      setSavedSettings(response.data.settings);
     } catch (error) {
       console.error('Error fetching settings:', error);
     }
   }, [walletPublicKey, session]);
-
-  useEffect(() => {
-    if (session) {
-      fetchSettings();
-    }
-  }, [session, fetchSettings]);
-
-  useEffect(() => {
-    if (initialSettings) {
-      setSettings(initialSettings);
-      setUnSaved(false);
-    }
-  }, [initialSettings]);
 
   const fetchPresets = async () => {
     try {
@@ -75,6 +63,21 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
       console.error('Error fetching presets:', error);
     }
   };
+
+  useEffect(() => {
+    if (session) {
+      fetchSettings();
+      fetchPresets();
+    }
+  }, [session, fetchSettings]);
+
+  useEffect(() => {
+    if (initialSettings) {
+      setSettings(initialSettings);
+      setSavedSettings(initialSettings);
+      setUnSaved(false);
+    }
+  }, [initialSettings]);
 
   const handlePresetChange = (presetId: string) => {
     const selectedPreset = presets.find(preset => preset._id === presetId);
