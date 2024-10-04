@@ -26,14 +26,14 @@ export default function WalletConnection({ channelId }: WalletConnectionProps) {
 
   async function fetchTokenBalances(publicKey: PublicKey) {
     try {
-      const tokenAccounts = await getTokenBalances(publicKey.toString());
+      const { balances, metadata } = await getTokenBalances(publicKey.toString());
 
-      const balances = tokenAccounts.value.map((accountInfo) => ({
-        mint: accountInfo.account.data.parsed.info.mint,
-        balance: accountInfo.account.data.parsed.info.tokenAmount.uiAmount,
+      const tokenBalances = Object.entries(balances).map(([mint, balance]) => ({
+        mint,
+        balance,
       }));
 
-      setTokenBalances(balances);
+      setTokenBalances(tokenBalances);
     } catch (error) {
       console.error('Error fetching token balances:', error);
     }
