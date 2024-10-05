@@ -1,5 +1,26 @@
 import User from '../models/User';
 
+const solanaRpcUrls = [
+  process.env.NEXT_PUBLIC_SOLANA_RPC_URL_1,
+  process.env.NEXT_PUBLIC_SOLANA_RPC_URL_2,
+  process.env.NEXT_PUBLIC_SOLANA_RPC_URL_3,
+  process.env.NEXT_PUBLIC_SOLANA_RPC_URL_4,
+].filter(Boolean) as string[];
+
+const jupiterApiUrls = [
+  process.env.NEXT_PUBLIC_JUPITER_API_URL_1,
+  process.env.NEXT_PUBLIC_JUPITER_API_URL_2,
+  process.env.NEXT_PUBLIC_JUPITER_API_URL_3,
+].filter(Boolean) as string[];
+
+export function getRandomSolanaRpcUrl(): string {
+  return solanaRpcUrls[Math.floor(Math.random() * solanaRpcUrls.length)];
+}
+
+export function getRandomJupiterApiUrl(): string {
+  return jupiterApiUrls[Math.floor(Math.random() * jupiterApiUrls.length)];
+}
+
 export async function getConnectedWalletsInChannel(channelId: string) {
   const users = await User.find({ 'wallets.connectedChannels': channelId });
 
