@@ -7,12 +7,20 @@ import { Transaction } from '@solana/web3.js';
 import { createJupiterApiClient, QuoteGetRequest, QuoteResponse } from '@jup-ag/api';
 import { Settings } from '../components/BotSettings';
 import limiter from '../lib/limiter';
+import { exponentialBackoff } from '../lib/utils';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 // const jupiterApiClient = createJupiterApiClient({ basePath: process.env.NEXT_PUBLIC_SOLANA_RPC_URL_4JUPITER! });
 const jupiterApiClient = createJupiterApiClient({ basePath: process.env.NEXT_PUBLIC_SOLANA_RPC_URL_2! });
+const jupiterApiUrls = [
+  process.env.NEXT_PUBLIC_JUPITER_API_URL_1,
+  process.env.NEXT_PUBLIC_JUPITER_API_URL_2,
+  process.env.NEXT_PUBLIC_JUPITER_API_URL_3,
+  process.env.NEXT_PUBLIC_JUPITER_API_URL_4,
+  process.env.NEXT_PUBLIC_JUPITER_API_URL_5,
+]
 const metaplex = Metaplex.make(connection);
 
 const requestLimit = pLimit(8); // Limit to 8 concurrent requests
@@ -216,45 +224,58 @@ export async function getQuote(
   amount: number,
   slippageSettings: { type: 'fixed' | 'dynamic'; value?: number }
 ): Promise<QuoteResponse> {
-  try {
-    const baseParams: QuoteGetRequest = {
-      inputMint: inputToken,
-      outputMint: outputToken,
-      amount: amount,
-    };
+  const jupiterApiUrls = [
+    process.env.NEXT_PUBLIC_JUPITER_API_URL_1,
+    process.env.NEXT_PUBLIC_JUPITER_API_URL_2,
+    process.env.NEXT_PUBLIC_JUPITER_API_URL_3,
+    process.env.NEXT_PUBLIC_JUPITER_API_URL_4,
+    process.env.NEXT_PUBLIC_JUPITER_API_URL_5,
+    // Add more API URLs as needed
+  ].filter(Boolean) as string[];
 
-    const response = await limiter.schedule(
-      { id: `get-quote-${inputToken}-${outputToken}-${amount}` },
-      async () => {
-        return await jupiterApiClient.quoteGet({
-          ...baseParams,
-          ...(slippageSettings.type === 'dynamic' && {
-            autoSlippage: true,
-            autoSlippageCollisionUsdValue: 1_000,
-            maxAutoSlippageBps: 1000, // 10%
-            onlyDirectRoutes: false,
-            asLegacyTransaction: false,
-          }),
-          ...(slippageSettings.type === 'fixed' && {
-            slippageBps: slippageSettings.value,
-          }),
-        });
+  for (const apiUrl of jupiterApiUrls) {
+    try {
+      const jupiterApiClient = createJupiterApiClient({ basePath: apiUrl });
+      const baseParams: QuoteGetRequest = {
+        inputMint: inputToken,
+        outputMint: outputToken,
+        amount: amount,
+      };
+
+      const response = await limiter.schedule(
+        { id: `get-quote-${inputToken}-${outputToken}-${amount}` },
+        async () => {
+          return await jupiterApiClient.quoteGet({
+            ...baseParams,
+            ...(slippageSettings.type === 'dynamic' && {
+              autoSlippage: true,
+              autoSlippageCollisionUsdValue: 1_000,
+              maxAutoSlippageBps: 1000, // 10%
+              onlyDirectRoutes: false,
+              asLegacyTransaction: false,
+            }),
+            ...(slippageSettings.type === 'fixed' && {
+              slippageBps: slippageSettings.value,
+            }),
+          });
+        }
+      );
+
+      return response;
+    } catch (error: any) {
+      console.error(`Error getting quote from ${apiUrl}:`, error.message);
+      if (error.response) {
+        console.error('Full error response:', error.response.data);
       }
-    );
-
-    return response;
-  } catch (error: any) {
-    // Log the full error response for debugging
-    if (error.response) {
-      console.error('Full error response:', error.response.data);
-    } else {
-      console.error('Error getting quote:', error.message);
+      // If it's the last API URL, throw the error
+      if (apiUrl === jupiterApiUrls[jupiterApiUrls.length - 1]) {
+        throw new Error(`Failed to get quote: ${error.response?.data?.message || error.message}`);
+      }
+      // Otherwise, continue to the next API URL
     }
-
-    throw new Error(
-      `Failed to get quote: ${error.response?.data?.message || error.message}`
-    );
   }
+
+  throw new Error('Failed to get quote from all available APIs');
 }
 
 export async function getSwapTransaction(
@@ -275,17 +296,45 @@ export async function getSwapTransaction(
     ...(settings.slippageType === 'fixed' && {slippageBps: settings.slippage}),
   };
 
-  const swapTransaction = await limiter.schedule({ id: `get-swap-transaction-${userPublicKey}` }, async () => {
-    return await jupiterApiClient.swapPost({
-      swapRequest,
-    });
-  });
+  jupiterApiUrls.filter(Boolean) as string[];
 
-  if (!swapTransaction) {
-    throw new Error('Failed to get swap transaction');
+  for (const apiUrl of jupiterApiUrls) {
+    try {
+      const jupiterApiClient = createJupiterApiClient({ basePath: apiUrl });
+      const swapTransaction = await exponentialBackoff(
+        async () => {
+          return await limiter.schedule({ id: `get-swap-transaction-${userPublicKey}` }, async () => {
+            return await jupiterApiClient.swapPost({
+              swapRequest,
+            });
+          });
+        },
+        {
+          maxRetries: 3,
+          initialDelay: 1000,
+          factor: 2,
+        }
+      );
+
+      if (!swapTransaction) {
+        throw new Error('Failed to get swap transaction');
+      }
+
+      return swapTransaction;
+    } catch (error: any) {
+      console.error(`Error getting swap transaction from ${apiUrl}:`, error.message);
+      if (error.response) {
+        console.error('Full error response:', JSON.stringify(error.response.data, null, 2));
+      }
+      // If it's the last API URL, throw the error
+      if (apiUrl === jupiterApiUrls[jupiterApiUrls.length - 1]) {
+        throw error;
+      }
+      // Otherwise, continue to the next API URL
+    }
   }
 
-  return swapTransaction;
+  throw new Error('Failed to get swap transaction from all available APIs');
 }
 
 export async function executeSwap(connection: Connection, swapTransaction: string, signer: any): Promise<string> {
