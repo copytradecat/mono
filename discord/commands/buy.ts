@@ -323,6 +323,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
               console.error('Error in messageCollector:', error);
               await interaction.editReply({
                 content: 'An error occurred while processing your input.',
+                components: [],
               });
             }
           });
