@@ -222,6 +222,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
               if (isNaN(customAmount) || customAmount <= 0) {
                 await interaction.editReply({
                   content: 'Invalid amount entered. Transaction cancelled.',
+                  components: [],
                 });
                 return;
               }
@@ -306,6 +307,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                     try {
                       await i.editReply({
                         content: 'An error occurred during the swap execution.',
+                        components: [],
                       });
                     } catch (followUpError) {
                       console.error('Error sending follow-up message:', followUpError);
@@ -368,6 +370,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
       try {
         await interaction.editReply({
           content: 'An error occurred while processing your request.',
+          components: [],
         });
       } catch (editError) {
         console.error('Error editing reply:', editError);

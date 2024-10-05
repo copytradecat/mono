@@ -417,6 +417,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
       try {
         await interaction.editReply({
           content: 'An error occurred while processing your request.',
+          components: [],
         });
       } catch (editError) {
         console.error('Error editing reply:', editError);
