@@ -7,20 +7,11 @@ import { Transaction } from '@solana/web3.js';
 import { createJupiterApiClient, QuoteGetRequest, QuoteResponse } from '@jup-ag/api';
 import { Settings } from '../components/BotSettings';
 import limiter from '../lib/limiter';
-import { exponentialBackoff } from '../lib/utils';
+import { exponentialBackoff, getRandomSolanaRpcUrl, getRandomJupiterApiUrl } from '../lib/utils';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
-const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
-// const jupiterApiClient = createJupiterApiClient({ basePath: process.env.NEXT_PUBLIC_SOLANA_RPC_URL_4JUPITER! });
-const jupiterApiClient = createJupiterApiClient({ basePath: process.env.NEXT_PUBLIC_SOLANA_RPC_URL_2! });
-const jupiterApiUrls = [
-  process.env.NEXT_PUBLIC_JUPITER_API_URL_1,
-  process.env.NEXT_PUBLIC_JUPITER_API_URL_2,
-  process.env.NEXT_PUBLIC_JUPITER_API_URL_3,
-  process.env.NEXT_PUBLIC_JUPITER_API_URL_4,
-  process.env.NEXT_PUBLIC_JUPITER_API_URL_5,
-]
+const connection = new Connection(getRandomSolanaRpcUrl());
 const metaplex = Metaplex.make(connection);
 
 const requestLimit = pLimit(8); // Limit to 8 concurrent requests
@@ -296,45 +287,36 @@ export async function getSwapTransaction(
     ...(settings.slippageType === 'fixed' && {slippageBps: settings.slippage}),
   };
 
-  jupiterApiUrls.filter(Boolean) as string[];
-
-  for (const apiUrl of jupiterApiUrls) {
-    try {
-      const jupiterApiClient = createJupiterApiClient({ basePath: apiUrl });
-      const swapTransaction = await exponentialBackoff(
-        async () => {
-          return await limiter.schedule({ id: `get-swap-transaction-${userPublicKey}` }, async () => {
-            return await jupiterApiClient.swapPost({
-              swapRequest,
-            });
+  const apiUrl = getRandomJupiterApiUrl();
+  try {
+    const jupiterApiClient = createJupiterApiClient({ basePath: apiUrl });
+    const swapTransaction = await exponentialBackoff(
+      async () => {
+        return await limiter.schedule({ id: `get-swap-transaction-${userPublicKey}` }, async () => {
+          return await jupiterApiClient.swapPost({
+            swapRequest,
           });
-        },
-        {
-          maxRetries: 3,
-          initialDelay: 1000,
-          factor: 2,
-        }
-      );
+        });
+      },
+      {
+        maxRetries: 3,
+        initialDelay: 1000,
+        factor: 2,
+      }
+    );
 
-      if (!swapTransaction) {
-        throw new Error('Failed to get swap transaction');
-      }
-
-      return swapTransaction;
-    } catch (error: any) {
-      console.error(`Error getting swap transaction from ${apiUrl}:`, error.message);
-      if (error.response) {
-        console.error('Full error response:', JSON.stringify(error.response.data, null, 2));
-      }
-      // If it's the last API URL, throw the error
-      if (apiUrl === jupiterApiUrls[jupiterApiUrls.length - 1]) {
-        throw error;
-      }
-      // Otherwise, continue to the next API URL
+    if (!swapTransaction) {
+      throw new Error('Failed to get swap transaction');
     }
-  }
 
-  throw new Error('Failed to get swap transaction from all available APIs');
+    return swapTransaction;
+  } catch (error: any) {
+    console.error(`Error getting swap transaction from ${apiUrl}:`, error.message);
+    if (error.response) {
+      console.error('Full error response:', JSON.stringify(error.response.data, null, 2));
+    }
+    throw error;
+  }
 }
 
 export async function executeSwap(connection: Connection, swapTransaction: string, signer: any): Promise<string> {
