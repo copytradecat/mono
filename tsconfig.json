@@ -8,7 +8,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": ".",
     "allowJs": true,
     "resolveJsonModule": true,
     "lib": ["dom", "dom.iterable", "esnext"],
@@ -19,7 +19,7 @@
     "allowImportingTsExtensions": true,
     "typeRoots": ["./node_modules/@types", "./node_modules/@solana"],
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "env.ts"],
   "exclude": ["node_modules"],
   "ts-node": {
     "esm": true

@@ -115,7 +115,7 @@ client.on("interactionCreate", async (interaction) => {
   if (!interaction.isCommand()) return;
 
   try {
-    console.log("command received", interaction);
+    // console.log("command received", interaction);
     const { commandName } = interaction;
 
     if (commandName === 'ct') {
