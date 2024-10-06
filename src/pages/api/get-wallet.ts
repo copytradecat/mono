@@ -21,11 +21,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await connectDB();
     const user = await User.findOne({ discordId: session?.user?.name });
 
-    if (!user || !user.encryptedSeed) {
+    if (!user || !user.wallets) {
       return res.status(404).json({ error: 'Wallet not found' });
     }
 
-    const decryptedSeed = decrypt(user.encryptedSeed);
+    const decryptedSeed = decrypt(user.wallets[0].encryptedSecretData);
     const keypair = Keypair.fromSecretKey(bs58.decode(decryptedSeed));
 
     res.status(200).json({

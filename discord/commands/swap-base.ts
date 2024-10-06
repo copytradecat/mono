@@ -344,7 +344,7 @@ To: ${estimatedOutput.toFixed(6)} [${outputTokenInfo.symbol}](<https://solscan.i
 Price Impact: ${(quoteData.priceImpactPct * 100).toFixed(2)}%
 Slippage: ${
       settings.slippageType === 'fixed'
-        ? `${(settings.slippage / 100).toFixed(2)}%`
+        ? `${(settings.slippage ? (settings.slippage / 100).toFixed(2) : '0.00')}%`
         : 'Dynamic'
     }
 Transaction Speed: ${settings.transactionSpeed}

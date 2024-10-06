@@ -22,7 +22,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.status(200).json(user.settings);
+    const primaryPreset = user.presets.find((preset: any) => preset._id.equals(user.primaryPresetId));
+    if (!primaryPreset) {
+      return res.status(404).json({ error: 'Primary preset not found' });
+    }
+
+    res.status(200).json(primaryPreset.settings);
   } catch (error) {
     console.error('Failed to retrieve settings:', error);
     res.status(500).json({ error: 'Failed to retrieve settings' });

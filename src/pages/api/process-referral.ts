@@ -30,24 +30,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Check if the user has already used a referral code
-    if (newUser.referredBy) {
-      return res.status(400).json({ error: 'You have already used a referral code' });
-    }
-
     // Check if the referral code is valid
-    const referrer = await UserModel.findOne({ accountNumber: parseInt(referrerId, 10) });
-    if (!referrer) {
+    const referrerAccount = await UserModel.findOne({ accountNumber: parseInt(referrerId, 10) });
+    if (!referrerAccount) {
       return res.status(404).json({ error: 'Invalid referral code' });
     }
 
+    // Check if the user has already used a referral code
+    const referrer = await UserModel.findOne({ referrals: { $in: [newUserDiscordId] } });
+    if (referrer) {
+      return res.status(400).json({ error: 'You have already been referred' });
+    }
+
     // Update the new user with the referrer's information
-    newUser.referredBy = referrer.discordId;
+    const updatedReferrer = referrerAccount.discordId;
     await newUser.save();
 
     // Add the new user to the referrer's referrals
     await UserModel.findOneAndUpdate(
-      { discordId: referrer.discordId },
+      { discordId: updatedReferrer },
       { $addToSet: { referrals: newUserDiscordId } }
     );
 

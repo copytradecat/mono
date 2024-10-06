@@ -1,9 +1,10 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../lib/authOptions";
-import User from '../../models/User';
+import User, { IWallet } from '../../models/User';
 import { connectDB } from '../../lib/mongodb';
 import { encrypt } from '../../lib/encryption';
+import { defaultSettings } from '../../components/BotSettings';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -41,22 +42,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Wallet already exists' });
     }
 
-    let walletSettings = {};
+    let walletSettings = defaultSettings;
     if (user.primaryPresetId) {
-      const primaryPreset = user.presets.id(user.primaryPresetId);
-      if (primaryPreset) {
+      const primaryPreset = user.presets.find(preset => preset._id?.toString() === user.primaryPresetId);
+      if (primaryPreset && primaryPreset.settings) {
         walletSettings = primaryPreset.settings;
       }
     }
 
-    user.wallets.push({
+    const newWallet = {
       publicKey: normalizedPublicKey,
       encryptedSecretData,
       secretType: type,
       connectedChannels: [channelId],
       settings: walletSettings,
-    });
-
+    } as IWallet;
+    user.wallets.push(newWallet);
+    
     await user.save();
 
     res.status(200).json({ message: 'Wallet saved successfully' });

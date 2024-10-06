@@ -39,7 +39,7 @@ export default function TradingInterface({ selectedWallet, userId }: TradingInte
   
     try {
       const slippageSettings = settings.slippageType === 'fixed' 
-        ? { type: 'fixed' as const, value: settings.slippage }
+        ? { type: 'fixed' as const, value: settings.slippage || 300 }
         : { type: 'dynamic' as const };
       const inputTokenInfo = await getTokenInfo(inputToken);
       const adjustedAmount = parseFloat(amount) * (10 ** inputTokenInfo.decimals);
