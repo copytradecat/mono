@@ -4,6 +4,7 @@ import {
   ButtonStyle,
   ActionRowBuilder,
   ComponentType,
+  userMention
 } from 'discord.js';
 import { getQuote, getSwapTransaction, getTokenInfo, getTokenBalance } from '../../src/services/jupiter.service';
 import UserAccount from '../../src/models/User';
@@ -254,12 +255,12 @@ export async function executeSwapsForUsers(params: {
     ? selectionLabels[selectionIndex]
     : 'Custom';
 
-  const publicMessage = `**${initiatingUser.username || initiatingUser.discordId}** ${
+  const publicMessage = `${userMention(initiatingUser.discordId)} ${
     isBuyOperation ? 'bought' : 'sold'
   } a **${selectionLabel}** amount of **[${isBuyOperation ? outputTokenInfo.symbol : inputTokenInfo.symbol}](<https://solscan.io/token/${
     isBuyOperation ? outputTokenAddress : inputTokenAddress
   }>)**.${ // include details about the number of followers who also swapped
-    successfulSwaps.length > 1 ? `\n${successfulSwaps.length - 1} follower(s) also executed the swap.` : ''
+    successfulSwaps.length > 1 ? `\n${successfulSwaps.length - 1} follower${successfulSwaps.length > 2 ? 's' : ''} also executed the swap.` : ''
   }`;
 
   // if (successfulSwaps.length > 0) {
