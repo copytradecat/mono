@@ -11,12 +11,11 @@ import Trade from '../../src/models/Trade';
 import { Connection, PublicKey } from '@solana/web3.js';
 import axios from 'axios';
 import { defaultSettings, Settings } from '../../src/components/BotSettings';
-import dotenv from 'dotenv';
 import { truncatedString, mapSelectionToUserSettings } from '../../src/lib/utils';
 import pLimit from 'p-limit';
 import limiter from '../../src/lib/limiter';
+import '../../env.ts';
 
-dotenv.config({ path: ['../../.env.local', '../../.env'] });
 const API_BASE_URL = process.env.SIGNING_SERVICE_URL;
 const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
 

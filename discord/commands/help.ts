@@ -1,7 +1,5 @@
 import { Message } from "discord.js";
-import dotenv from 'dotenv';
-
-dotenv.config({ path: ['../.env.local', '../.env'] });
+import '../../env.ts';
 
 export function handleHelp(reply: (content: string) => Promise<void>) {
   const helpText = `

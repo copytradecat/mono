@@ -8,8 +8,7 @@ import { createJupiterApiClient, QuoteGetRequest, QuoteResponse } from '@jup-ag/
 import { Settings } from '../components/BotSettings';
 import limiter from '../lib/limiter';
 import { exponentialBackoff, getRandomSolanaRpcUrl, getRandomJupiterApiUrl } from '../lib/utils';
-
-dotenv.config({ path: ['.env.local', '.env'] });
+import '../../env.ts';
 
 const connection = new Connection(getRandomSolanaRpcUrl());
 const metaplex = Metaplex.make(connection);

@@ -1,10 +1,8 @@
 import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from 'discord.js';
-import dotenv from 'dotenv';
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, Transaction, SystemProgram, SendTransactionError } from '@solana/web3.js';
 import fs from 'fs';
 import { getQuote, getBalance, getSwapTransaction, executeSwap } from '../src/services/jupiter.service';
-
-dotenv.config({ path: ['../.env.local', '../.env'] });
+import '../env.ts';
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],

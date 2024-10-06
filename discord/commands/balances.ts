@@ -1,10 +1,8 @@
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import User from '../../src/models/User';
-import dotenv from 'dotenv';
 import pLimit from 'p-limit';
 import { getBalance } from "../../src/services/jupiter.service";
-
-dotenv.config({ path: ['../.env.local', '.env'] });
+import '../../env.ts';
 
 export async function handleBalances(userId: string, reply: (content: string) => Promise<void>) {
   try {

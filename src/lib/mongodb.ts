@@ -1,8 +1,7 @@
 /* eslint-disable no-use-before-define */
-
-import dotenv from 'dotenv';
 import { MongoClient } from 'mongodb';
 import mongoose from 'mongoose';
+import '../../env.ts';
 
 // Declare a new interface for the global scope
 declare global {
@@ -16,7 +15,6 @@ if (!(global as any).mongoose) {
   (global as any).mongoose = { conn: null, promise: null };
 }
 
-dotenv.config({ path: ['.env.local', '.env'] });
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {

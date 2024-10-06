@@ -1,7 +1,6 @@
 import Bottleneck from 'bottleneck';
 import dotenv from 'dotenv';
-
-dotenv.config({ path: ['.env.local', '.env'] });
+import '../../env.ts';
 
 const limiter = new Bottleneck({
   minTime: process.env.RATE_LIMIT_MIN_TIME ? parseInt(process.env.RATE_LIMIT_MIN_TIME) : 240,
