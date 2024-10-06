@@ -6,13 +6,20 @@ import { connectDB } from '../src/lib/mongodb';
 import dotenv from 'dotenv';
 import bs58 from 'bs58';
 import limiter from '../src/lib/limiter';
+import { getConnection } from '../src/lib/utils';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
 const app = express();
 app.use(express.json());
 
-const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
+let connection: Connection;
+async function ensureConnection() {
+  if (!connection) {
+    connection = await getConnection();
+  }
+  return connection;
+}
 
 app.post('/sign-and-send', async (req, res) => {
   // console.log('Received request in signing service');
@@ -50,12 +57,12 @@ app.post('/sign-and-send', async (req, res) => {
 
       const transaction = VersionedTransaction.deserialize(Buffer.from(serializedTransaction, 'base64'));
       transaction.sign([keypair]);
-
+      const conn = await ensureConnection();
       // Send and confirm the transaction
-      const signature = await connection.sendTransaction(transaction);
+      const signature = await conn.sendTransaction(transaction);
       console.log('Transaction sent. Signature:', signature);
 
-      await connection.confirmTransaction(signature, 'confirmed');
+      await conn.confirmTransaction(signature, 'confirmed');
       console.log('Transaction confirmed. Signature:', signature);
 
       res.status(200).json({ signature });
