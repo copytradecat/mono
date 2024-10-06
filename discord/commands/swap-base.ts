@@ -78,7 +78,7 @@ export function promptUserConfirmation(
       if (reason === 'time') {
         resolve('timeout');
         await interaction.editReply({
-          content: 'Swap cancelled due to no response.',
+          content: 'Processing swap...',
           components: [],
         });
       }
