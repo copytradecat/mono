@@ -1,5 +1,16 @@
 import mongoose, { Model, Document } from 'mongoose';
-import { defaultSettings } from '../components/BotSettings';
+import { defaultSettings, Settings as ISettings } from '../components/BotSettings';
+
+// interface ISettings extends Document {
+//     slippage: number | null;
+//     slippageType: string;
+//     smartMevProtection: string | null;
+//     transactionSpeed: string | null;
+//     priorityFee: any | null;
+//     entryAmounts: number[];
+//     exitPercentages: number[];
+//     wrapUnwrapSOL: boolean | null;
+// }
 
 const SettingsSchema = new mongoose.Schema({
     slippage: { type: Number, default: defaultSettings.slippage },
@@ -20,10 +31,23 @@ const SettingsSchema = new mongoose.Schema({
     wrapUnwrapSOL: { type: Boolean, default: defaultSettings.wrapUnwrapSOL },
 });
 
+interface IPreset extends Document {
+    name: string;
+    settings: ISettings;
+}
+
 const PresetSchema = new mongoose.Schema({
     name: { type: String, required: true },
     settings: { type: SettingsSchema, default: () => ({}) },
 });
+
+export interface IWallet extends Document {
+    publicKey: string;
+    encryptedSecretData: string;
+    secretType: string;
+    connectedChannels: string[];
+    settings: ISettings;
+}
 
 const WalletSchema = new mongoose.Schema({
     publicKey: String,
@@ -41,12 +65,11 @@ interface IUser extends Document {
     name?: string;
     referrals: string[];
     accountNumber: number;
-    wallets: any[]; // You might want to define a more specific type for wallets
-    presets: any[]; // You might want to define a more specific type for presets
+    wallets: IWallet[];
+    presets: IPreset[];
     primaryPresetId?: mongoose.Types.ObjectId;
 }
 
-// Define the User model
 const UserSchema = new mongoose.Schema({
     email: { type: String, unique: true, sparse: true },
     username: { type: String, unique: true, sparse: true },

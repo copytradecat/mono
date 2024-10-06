@@ -28,15 +28,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const connectedWallet = user.connectedWallets.find(
-      (wallet: any) => wallet.channelId === channelId
-    );
+    const connectedWallet = user.wallets.find((wallet: any) => wallet.connectedChannels.includes(channelId));
 
     if (!connectedWallet) {
       return res.status(404).json({ error: 'No connected wallet found for this channel' });
     }
 
-    res.status(200).json({ walletAddress: connectedWallet.walletAddress });
+    res.status(200).json({ walletAddress: connectedWallet.publicKey });
   } catch (error) {
     console.error('Failed to retrieve connected wallet:', error);
     res.status(500).json({ error: 'Failed to retrieve connected wallet' });

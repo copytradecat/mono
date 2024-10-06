@@ -95,7 +95,11 @@ export default function Home() {
             </>
           )}
           {referralLink && (
-            <p>Your referral link: {referralLink}</p>
+            <p>Your referral link: <Link href={referralLink} target="_blank" rel="noopener noreferrer" onClick={(e) => {
+              e.preventDefault();
+              navigator.clipboard.writeText(referralLink);
+              alert('Referral link copied to clipboard');
+            }}>{referralLink}</Link></p>
           )}
         </>
       )}

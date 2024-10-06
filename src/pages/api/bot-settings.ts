@@ -32,9 +32,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       let settings;
       if (walletPublicKey) {
         const wallet = user.wallets.find((w: any) => w.publicKey === walletPublicKey);
-        settings = wallet?.settings || user.settings;
+        settings = wallet?.settings || user.presets.find((p: any) => p._id.equals(user.primaryPresetId));
       } else {
-        settings = user.settings;
+        settings = user.presets.find((p: any) => p._id.equals(user.primaryPresetId));
       }
       res.status(200).json({ settings });
     } else if (req.method === 'POST') {
@@ -66,8 +66,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }
         );
       } else {
-        user.settings = settings;
-        await user.save();
+        const primaryPreset = user.presets.find((p: any) => p._id.equals(user.primaryPresetId));
+        if (primaryPreset) {
+          primaryPreset.settings = settings;
+          await user.save();
+        } else {
+          return res.status(404).json({ error: 'Primary preset not found' });
+        }
       }
       res.status(200).json({ message: 'Settings updated successfully', settings });
     } else {

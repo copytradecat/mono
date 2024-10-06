@@ -256,16 +256,15 @@ export async function getSwapTransaction(
   userPublicKey: string,
   settings: Settings
 ): Promise<any> {
-  const { transactionSpeed, priorityFee, wrapUnwrapSOL } = settings;
   const swapRequest = {
     quoteResponse,
     userPublicKey,
-    wrapUnwrapSOL,
+    wrapUnwrapSOL: settings.wrapUnwrapSOL,
     asLegacyTransaction: false,
     dynamicComputeUnitLimit: true,
-    // prioritizationFeeLamports: priorityFee === 'auto' ? 'auto' : priorityFee * LAMPORTS_PER_SOL,
-    computeUnitPriceMicroLamports: transactionSpeed === 'medium' ? 0 : "auto",
-    ...(settings.slippageType === 'dynamic' && {dynamicSlippage: {maxBps:300}}),
+    computeUnitPriceMicroLamports: settings.transactionSpeed === 'medium' ? 0 : "auto",
+    // prioritizationFeeLamports: settings.priorityFee === 'auto' ? 'auto' : settings.priorityFee * LAMPORTS_PER_SOL,
+    ...(settings.slippageType === 'dynamic' && {dynamicSlippage: {maxBps: 300}}),
     ...(settings.slippageType === 'fixed' && {slippageBps: settings.slippage}),
   };
 

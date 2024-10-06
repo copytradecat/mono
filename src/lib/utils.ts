@@ -9,7 +9,7 @@ const solanaRpcUrls = [
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL_4,
 ].filter(Boolean) as string[];
 
-const jupiterApiUrls = [
+export const jupiterApiUrls = [
   process.env.NEXT_PUBLIC_JUPITER_API_URL_1,
   process.env.NEXT_PUBLIC_JUPITER_API_URL_2,
   process.env.NEXT_PUBLIC_JUPITER_API_URL_3,

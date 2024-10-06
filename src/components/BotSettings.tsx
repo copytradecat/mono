@@ -2,20 +2,20 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import axios from 'axios';
 import NextLink from 'next/link';
+
 export interface Settings {
   slippage: number;
   slippageType: 'fixed' | 'dynamic';
-  smartMevProtection: 'fast' | 'secure'; // Not implemented
-  priorityFee: number | 'auto'; 
+  smartMevProtection: 'fast' | 'secure' | null;
   transactionSpeed: 'medium' | 'high' | 'veryHigh' | 'custom' | 'auto';
-  // bribery removed, not implemented
-  entryAmounts: number[]; // For bot logic, not used in transaction
-  exitPercentages: number[]; // For bot logic, not used in transaction
+  priorityFee: number | 'auto';
+  entryAmounts: number[];
+  exitPercentages: number[];
   wrapUnwrapSOL: boolean;
 }
 
 export const defaultSettings: Settings = {
-  slippage: 300,
+  slippage: 300, // 3%
   slippageType: 'dynamic',
   smartMevProtection: 'secure',
   transactionSpeed: 'medium',
@@ -274,7 +274,7 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
                 <h3 className="text-lg font-semibold mt-4 mb-2">Slippage Bips (100 bips = 1% slippage)</h3>
                 <input
                   type="number"
-                  value={settings.slippage}
+                  value={settings.slippage || ''}
                   onChange={(e) => updateSetting('slippage', parseFloat(e.target.value))}
                   className="w-full p-2 border rounded"
                   style={{ WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none', margin: '0' }}
@@ -320,8 +320,11 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
                 <h3 className="text-lg font-semibold mt-4 mb-2">Custom Priority Fee (in SOL)</h3>
                 <input
                   type="number"
-                  value={settings.priorityFee === 'auto' ? '' : settings.priorityFee}
-                  onChange={(e) => updateSetting('priorityFee', parseFloat(e.target.value))}
+                  value={settings.priorityFee === 'auto' ? '' : settings.priorityFee?.toString() ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value === '' ? null : parseFloat(e.target.value);
+                    updateSetting('priorityFee', value);
+                  }}
                   className="w-full p-2 border rounded"
                 />
               </>
@@ -329,7 +332,7 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
             <h3 className="text-lg font-semibold mt-4 mb-2">Wrap/Unwrap SOL</h3>
             <input
               type="checkbox"
-              checked={settings.wrapUnwrapSOL}
+              checked={settings.wrapUnwrapSOL || true}
               onChange={(e) => updateSetting('wrapUnwrapSOL', e.target.checked)}
               className="mr-2"
             />
