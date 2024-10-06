@@ -100,9 +100,11 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
       setUnSaved(true);
     }
   };
-
   const updateSetting = (key: keyof Settings, value: any) => {
-    setSettings(prevSettings => {
+    setSettings((prevSettings: Settings | null) => {
+      if (prevSettings === null) {
+        return { [key]: value } as Settings;
+      }
       const newSettings = { ...prevSettings, [key]: value };
       setUnSaved(true);
       return newSettings;
@@ -113,8 +115,12 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
       setUnSaved(false);
     }
   };
-
   const validateAndSaveSettings = () => {
+    if (!settings) {
+      alert('Settings are not available.');
+      return;
+    }
+
     const isValidEntryAmounts = isIncreasingArray(settings.entryAmounts);
     const isValidExitPercentages = isIncreasingArray(settings.exitPercentages);
 
@@ -140,7 +146,7 @@ export default function BotSettings({ walletPublicKey, initialSettings, onSave, 
     setIsLoading(true);
     try {
       if (onSave) {
-        onSave(settings);
+        onSave(settings!);
       } else {
         const response = await axios.post('/api/bot-settings', {
           settings,

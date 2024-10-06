@@ -491,7 +491,11 @@ export async function executeSwapForUser(params: {
     const truncatedWallet = truncatedString(wallet.publicKey, 4);
     let errorMessage = `Failed to execute ${isBuyOperation ? 'buy' : 'sell'} order for wallet [${truncatedWallet}](<https://solscan.io/account/${wallet.publicKey}>).\n`;
     if (error.message) {
-      errorMessage += `Error Details: ${error.message}`;
+      errorMessage += `Error Details: ${error.message}\n`;
+    }
+    if (error.response) {
+      errorMessage += `Response Status: ${error.response.status}\n`;
+      errorMessage += `Response Data: ${JSON.stringify(error.response.data, null, 2)}\n`;
     }
 
     if (user.discordId === initiatingUser.discordId) {
@@ -538,6 +542,10 @@ export async function executeSwap(
         });
       });
 
+      if (response.status !== 200) {
+        throw new Error(`Signer service returned status ${response.status}: ${JSON.stringify(response.data)}`);
+      }
+      
       const { signature } = response.data;
 
       return {

@@ -19,6 +19,8 @@ import { getConnectedWalletsInChannel, truncatedString } from '../../src/lib/uti
 
 export async function handleBuyCommand(interaction: CommandInteraction) {
   try {
+    await interaction.deferReply({ ephemeral: true });
+
     // Check if the interaction is still valid
     if (!interaction.isRepliable()) {
       console.log('Interaction is no longer valid');
@@ -222,6 +224,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
               if (isNaN(customAmount) || customAmount <= 0) {
                 await interaction.editReply({
                   content: 'Invalid amount entered. Transaction cancelled.',
+                  components: [],
                 });
                 return;
               }
@@ -306,6 +309,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                     try {
                       await i.editReply({
                         content: 'An error occurred during the swap execution.',
+                        components: [],
                       });
                     } catch (followUpError) {
                       console.error('Error sending follow-up message:', followUpError);
@@ -323,6 +327,7 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
               console.error('Error in messageCollector:', error);
               await interaction.editReply({
                 content: 'An error occurred while processing your input.',
+                components: [],
               });
             }
           });
@@ -367,12 +372,15 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
       try {
         await interaction.editReply({
           content: 'An error occurred while processing your request.',
+          components: [],
         });
       } catch (editError) {
         console.error('Error editing reply:', editError);
       }
+    } else if (interaction.deferred) {
+      await interaction.editReply({ content: 'An error occurred while processing your request.' });
     } else {
-      console.log('Interaction is no longer valid for error response');
+      await interaction.reply({ content: 'An error occurred while processing your request.', ephemeral: true });
     }
   }
 }
