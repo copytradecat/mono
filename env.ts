@@ -1,11 +1,23 @@
-// config.ts in the root directory
 import path from 'path';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url); // get the resolved path to the file
-const __dirname = path.dirname(__filename); // get the name of the directory
-const rootDir = __dirname;
+let rootDir: string;
+
+if (typeof __dirname !== 'undefined') {
+  // CommonJS
+  rootDir = __dirname;
+} else {
+  // ES modules
+  const __filename = fileURLToPath(import.meta.url);
+  rootDir = path.dirname(__filename);
+}
+
+// Fallback to process.cwd() if both methods fail
+if (!rootDir) {
+  rootDir = process.cwd();
+}
+
 dotenv.config({ path: path.resolve(rootDir, '.env') });
 dotenv.config({ path: path.resolve(rootDir, '.env.local') });
 
