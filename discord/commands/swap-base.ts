@@ -542,6 +542,10 @@ export async function executeSwap(
         });
       });
 
+      if (response.status !== 200) {
+        throw new Error(`Signer service returned status ${response.status}: ${JSON.stringify(response.data)}`);
+      }
+      
       const { signature } = response.data;
 
       return {
