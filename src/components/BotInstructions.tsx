@@ -2,7 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import dotenv from 'dotenv';
 
-dotenv.config();
+dotenv.config({ path: ['.env.local', '.env'] });
 
 export default function BotInstructions() {
   const botInviteLink = `https://discord.com/api/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID!}&permissions=2147560512&scope=bot`;

@@ -7,7 +7,7 @@ import User from '../models/User';
 import Subscription from '../models/Subscriptions';
 import { Session } from 'next-auth';
 
-dotenv.config();
+dotenv.config({ path: ['.env.local', '.env'] });
 
 export const authOptions: NextAuthOptions = {
   providers: [

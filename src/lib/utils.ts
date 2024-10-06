@@ -1,7 +1,7 @@
 import User from '../models/User';
 import dotenv from 'dotenv';
 
-dotenv.config();
+dotenv.config({ path: ['.env.local', '.env'] });
 
 const solanaRpcUrls = [
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL_1,
