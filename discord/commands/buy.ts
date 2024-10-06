@@ -19,6 +19,8 @@ import { getConnectedWalletsInChannel, truncatedString } from '../../src/lib/uti
 
 export async function handleBuyCommand(interaction: CommandInteraction) {
   try {
+    await interaction.deferReply({ ephemeral: true });
+
     // Check if the interaction is still valid
     if (!interaction.isRepliable()) {
       console.log('Interaction is no longer valid');
@@ -375,8 +377,10 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
       } catch (editError) {
         console.error('Error editing reply:', editError);
       }
+    } else if (interaction.deferred) {
+      await interaction.editReply({ content: 'An error occurred while processing your request.' });
     } else {
-      console.log('Interaction is no longer valid for error response');
+      await interaction.reply({ content: 'An error occurred while processing your request.', ephemeral: true });
     }
   }
 }
