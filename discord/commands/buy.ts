@@ -19,18 +19,16 @@ import { getConnectedWalletsInChannel, truncatedString } from '../../src/lib/uti
 
 export async function handleBuyCommand(interaction: CommandInteraction) {
   try {
-    await interaction.deferReply({ ephemeral: true });
-
-    // Check if the interaction is still valid
-    if (!interaction.isRepliable()) {
-      console.log('Interaction is no longer valid');
-      return;
-    }
-
     try {
       await interaction.deferReply({ ephemeral: true });
     } catch (error) {
       console.error('Error deferring reply:', error);
+      return;
+    }
+
+    // Check if the interaction is still valid
+    if (!interaction.isRepliable()) {
+      console.log('Interaction is no longer valid');
       return;
     }
 
@@ -368,19 +366,12 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
 
   } catch (error) {
     console.error('Error in handleBuyCommand:', error);
-    if (interaction.isRepliable()) {
-      try {
-        await interaction.editReply({
-          content: 'An error occurred while processing your request.',
-          components: [],
-        });
-      } catch (editError) {
-        console.error('Error editing reply:', editError);
+    if (!interaction.replied) {
+      if (interaction.deferred) {
+        await interaction.editReply({ content: 'An error occurred while processing your request.' });
+      } else {
+        await interaction.reply({ content: 'An error occurred while processing your request.', ephemeral: true });
       }
-    } else if (interaction.deferred) {
-      await interaction.editReply({ content: 'An error occurred while processing your request.' });
-    } else {
-      await interaction.reply({ content: 'An error occurred while processing your request.', ephemeral: true });
     }
   }
 }

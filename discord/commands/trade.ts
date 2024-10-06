@@ -4,7 +4,8 @@ import User from '../../src/models/User';
 import Trade from '../../src/models/Trade';
 import axios from 'axios';
 import dotenv from 'dotenv';
-dotenv.config();
+import '../../env.ts';
+
 const API_BASE_URL = process.env.SIGNING_SERVICE_URL;
 
 export async function handleTradeCommand(interaction: any, args: string[]) {

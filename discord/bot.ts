@@ -2,12 +2,10 @@ import { Client, GatewayIntentBits, Partials, REST, Routes } from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
 import { handleCommand } from './commands/index.js';
 import { connectDB } from '../src/lib/mongodb.js';
-import dotenv from 'dotenv';
+import '../env.ts';
 import http from 'http';
 import https from 'https';
 import path from 'path';
-
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const client = new Client({
   intents: [
@@ -117,6 +115,7 @@ client.on("interactionCreate", async (interaction) => {
   if (!interaction.isCommand()) return;
 
   try {
+    console.log("command received", interaction);
     const { commandName } = interaction;
 
     if (commandName === 'ct') {

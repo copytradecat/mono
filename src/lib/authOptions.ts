@@ -6,8 +6,7 @@ import { connectDB } from './mongodb';
 import User from '../models/User';
 import Subscription from '../models/Subscriptions';
 import { Session } from 'next-auth';
-
-dotenv.config();
+import '../../env.ts';
 
 export const authOptions: NextAuthOptions = {
   providers: [

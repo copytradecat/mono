@@ -1,9 +1,8 @@
 import { CommandInteraction, SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } from "discord.js";
 import User from '../../src/models/User';
 import Subscription from '../../src/models/Subscriptions';
-import dotenv from 'dotenv';
 
-dotenv.config({ path: ['../.env.local', '../.env'] });
+import '../../env.ts';
 
 const interactionStates = new Map();
 

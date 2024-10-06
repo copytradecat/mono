@@ -3,8 +3,7 @@ import User from '../../src/models/User';
 import { Connection, PublicKey } from '@solana/web3.js';
 import dotenv from 'dotenv';
 import { getTokenBalances } from '../../src/services/jupiter.service';
-
-dotenv.config();
+import '../../env.ts';
 
 export async function handleProfile(interaction: CommandInteraction) {
   try {
