@@ -21,7 +21,7 @@ const client = new Client({
 });
 
 const commands = [
-  new SlashCommandBuilder().setName('tc').setDescription('CopyTradeCat commands')
+  new SlashCommandBuilder().setName('ct').setDescription('CopyTradeCat commands')
     .addSubcommand(subcommand => subcommand.setName('help').setDescription('Display help message'))
     .addSubcommand(subcommand => subcommand.setName('connect').setDescription('Connect a wallet to this channel'))
     // .addSubcommand(subcommand => subcommand.setName('wallet').setDescription('Display linked wallet information'))
