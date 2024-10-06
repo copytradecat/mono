@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose, { Model, Document } from 'mongoose';
 import { defaultSettings } from '../components/BotSettings';
 
 const SettingsSchema = new mongoose.Schema({
@@ -33,6 +33,20 @@ const WalletSchema = new mongoose.Schema({
     settings: { type: SettingsSchema, default: () => ({}) },
 });
 
+// Define the interface for the User document
+interface IUser extends Document {
+    email?: string;
+    username?: string;
+    discordId: string;
+    name?: string;
+    referrals: string[];
+    accountNumber: number;
+    wallets: any[]; // You might want to define a more specific type for wallets
+    presets: any[]; // You might want to define a more specific type for presets
+    primaryPresetId?: mongoose.Types.ObjectId;
+}
+
+// Define the User model
 const UserSchema = new mongoose.Schema({
     email: { type: String, unique: true, sparse: true },
     username: { type: String, unique: true, sparse: true },
@@ -43,6 +57,17 @@ const UserSchema = new mongoose.Schema({
     wallets: [WalletSchema],
     presets: [PresetSchema],
     primaryPresetId: { type: mongoose.Schema.Types.ObjectId, ref: 'Preset' },
-},{ timestamps: true });
+}, { timestamps: true });
 
-export default mongoose.models.User || mongoose.model('User', UserSchema);
+// Create the model
+let UserModel: Model<IUser>;
+
+try {
+    // Try to retrieve the existing model
+    UserModel = mongoose.model<IUser>('User');
+} catch (error) {
+    // If the model doesn't exist, create it
+    UserModel = mongoose.model<IUser>('User', UserSchema);
+}
+
+export default UserModel;
