@@ -1,4 +1,5 @@
 import User from '../models/User';
+import { Connection } from '@solana/web3.js';
 import '../../env.ts';
 
 const solanaRpcUrls = [
@@ -79,4 +80,40 @@ export async function exponentialBackoff<T>(
   }
 
   throw new Error('Max retries reached');
+}
+
+export function getRandomUrl(urls: string[]): string {
+  return urls[Math.floor(Math.random() * urls.length)];
+}
+
+export async function executeWithFallback<T>(
+  operation: (url: string) => Promise<T>,
+  urls: string[],
+  maxRetries: number = 3
+): Promise<T> {
+  let lastError: Error | null = null;
+  const shuffledUrls = [...urls].sort(() => 0.5 - Math.random());
+
+  for (let i = 0; i < maxRetries; i++) {
+    for (const url of shuffledUrls) {
+      try {
+        return await operation(url);
+      } catch (error) {
+        console.error(`Error with URL ${url}:`, error);
+        lastError = error as Error;
+        // Continue to the next URL
+      }
+    }
+    // If we've tried all URLs, wait before the next round of retries
+    await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+  }
+
+  throw new Error(`All attempts failed. Last error: ${lastError?.message}`);
+}
+
+export async function getConnection(): Promise<Connection> {
+  return executeWithFallback(
+    (url) => new Promise((resolve) => resolve(new Connection(url))),
+    solanaRpcUrls
+  );
 }
