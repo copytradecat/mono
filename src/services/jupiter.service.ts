@@ -7,17 +7,12 @@ import { Transaction } from '@solana/web3.js';
 import { createJupiterApiClient, QuoteGetRequest, QuoteResponse } from '@jup-ag/api';
 import { Settings } from '../components/BotSettings';
 import limiter from '../lib/limiter';
-import { exponentialBackoff, getRandomSolanaRpcUrl, getRandomJupiterApiUrl, executeWithFallback, jupiterApiUrls, getConnection } from '../lib/utils';
+import { exponentialBackoff, getRandomSolanaRpcUrl, getRandomJupiterApiUrl, executeWithFallback, jupiterApiUrls, getConnection, solanaRpcUrls } from '../lib/utils';
 import '../../env.ts';
 
 let connection: Connection;
+
 const requestLimit = pLimit(8); // Limit to 8 concurrent requests
-async function ensureConnection() {
-  if (!connection) {
-    connection = await getConnection();
-  }
-  return connection;
-}
 
 interface TokenMetadata {
   symbol: string;
@@ -44,23 +39,27 @@ async function getTokenMetadata(mintAddresses: string[]): Promise<{ [key: string
         return;
       }
       
-      const conn = await ensureConnection();
-      const metaplex = Metaplex.make(conn);
-      const mintPublicKey = new PublicKey(address);
-      const nft = await limiter.schedule({id: `get-token-metadata-${address}`}, async () => await metaplex.nfts().findByMint({ mintAddress: mintPublicKey }));
+      await executeWithFallback(async (url) => {
+        const conn = new Connection(url);
 
-      const tokenMeta: TokenMetadata = {
-        symbol: nft.symbol,
-        name: nft.name,
-        uri: nft.uri,
-        address: address,
-        decimals: nft.mint.decimals,
-      };
+        const metaplex = Metaplex.make(conn);
+        const mintPublicKey = new PublicKey(address);
+        const nft = await limiter.schedule({id: `get-token-metadata-${address}`}, async () => await metaplex.nfts().findByMint({ mintAddress: mintPublicKey }));
+  
+        const tokenMeta: TokenMetadata = {
+          symbol: nft.symbol,
+          name: nft.name,
+          uri: nft.uri,
+          address: address,
+          decimals: nft.mint.decimals,
+        };
+  
+        metadata[address] = tokenMeta;
+  
+        // Cache the metadata
+        tokenMetadataCache[address] = { metadata: tokenMeta, lastUpdated: Date.now() };
 
-      metadata[address] = tokenMeta;
-
-      // Cache the metadata
-      tokenMetadataCache[address] = { metadata: tokenMeta, lastUpdated: Date.now() };
+      }, solanaRpcUrls);
     } catch (error) {
       console.error(`Error fetching metadata for token ${address}:`, error);
       // Fallback to Jupiter API if Metaplex fails
@@ -128,28 +127,31 @@ async function fetchTokenInfo(tokenAddress: string): Promise<any> {
 }
 
 
-export async function getBalance(publicKey: string) {
-  const balanceLamports = await limiter.schedule({ id: `get-balance-${publicKey}` }, async () => {
-    const conn = await ensureConnection();
-    return conn.getBalance(new PublicKey(publicKey));
-  });
-  return balanceLamports;
+export async function getBalance(publicKey: string): Promise<number> {
+  return await executeWithFallback(async (url) => {
+    const conn = new Connection(url);
+    return await limiter.schedule({ id: `get-balance-${publicKey}` }, async () => {
+      return conn.getBalance(new PublicKey(publicKey));
+    });
+  }, solanaRpcUrls);
 }
 
 // Fetches the balances for a single wallet
 export async function getTokenBalances(publicKey: string) {
   try {
-    const conn = await ensureConnection();
     const pubKey = new PublicKey(publicKey);
 
     // Fetch SOL balance
     const solBalancePromise = getBalance(publicKey);
 
     // Fetch token accounts
-    const tokenAccountsResponse = await limiter.schedule(async () => {
-      return conn.getParsedTokenAccountsByOwner(pubKey, {
-        programId: TOKEN_PROGRAM_ID,
-      });
+    const tokenAccountsResponse = await limiter.schedule({id: `get-token-accounts-${publicKey}`}, async () => {
+      return executeWithFallback(async (url) => {
+        const conn = new Connection(url);
+        return await conn.getParsedTokenAccountsByOwner(pubKey, {
+          programId: TOKEN_PROGRAM_ID,
+        });
+      }, solanaRpcUrls);
     });
 
     const tokenAccounts = tokenAccountsResponse.value;
@@ -268,7 +270,7 @@ export async function getSwapTransaction(
     ...(settings.slippageType === 'fixed' && {slippageBps: settings.slippage}),
   };
 
-  return executeWithFallback(async (apiUrl) => {
+  return await executeWithFallback(async (apiUrl) => {
     const jupiterApiClient = createJupiterApiClient({ basePath: apiUrl });
     const swapTransaction = await limiter.schedule({ id: `get-swap-transaction-${userPublicKey}` }, async () => {
       return await jupiterApiClient.swapPost({
@@ -284,17 +286,6 @@ export async function getSwapTransaction(
   }, jupiterApiUrls);
 }
 
-export async function executeSwap(connection: Connection, swapTransaction: string, signer: any): Promise<string> {
-  const { VersionedTransaction } = await import('@solana/web3.js');
-  const transaction = VersionedTransaction.deserialize(Buffer.from(swapTransaction, 'base64'));
-  const conn = await ensureConnection();
-  if (!transaction.sign) {
-    throw new Error('Transaction is not a VersionedTransaction');
-  }
-  transaction.sign([signer]);
-  return await limiter.schedule({id: `execute-swap-${signer}` }, async () => await conn.sendTransaction(transaction));
-}
-
 export async function getTokenBalance(
   walletAddress: string,
   tokenAddress: string
@@ -304,12 +295,14 @@ export async function getTokenBalance(
     const balanceLamports = await getBalance(walletAddress);
     return { balance: balanceLamports, decimals: 9, symbol: 'SOL' }; // Return lamports
   } else {
-    const conn = await ensureConnection();
     // For SPL Tokens
     // balance should be in raw units (smallest units)
-    const tokenAccounts = await conn.getParsedTokenAccountsByOwner(new PublicKey(walletAddress), {
-      mint: new PublicKey(tokenAddress),
-    });
+    const tokenAccounts = await executeWithFallback(async (url) => {
+      const conn = new Connection(url);
+      return conn.getParsedTokenAccountsByOwner(new PublicKey(walletAddress), {
+        mint: new PublicKey(tokenAddress),
+      });
+    }, solanaRpcUrls);
 
     let balance = 0;
     const tokenMetadata = await getTokenMetadata([tokenAddress]);

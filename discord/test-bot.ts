@@ -1,7 +1,8 @@
 import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from 'discord.js';
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, Transaction, SystemProgram, SendTransactionError } from '@solana/web3.js';
 import fs from 'fs';
-import { getQuote, getBalance, getSwapTransaction, executeSwap } from '../src/services/jupiter.service';
+import { getQuote, getBalance, getSwapTransaction } from '../src/services/jupiter.service';
+import { executeSwap } from './commands/swap-base';
 import '../env.ts';
 
 const client = new Client({
