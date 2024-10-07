@@ -12,6 +12,8 @@ export default function Home() {
     level: number;
     accountNumber: number | null;
   } | null>(null);
+  const [betaPassword, setBetaPassword] = useState('');
+  const [betaAccessError, setBetaAccessError] = useState('');
 
   useEffect(() => {
     if (session) {
@@ -67,6 +69,24 @@ export default function Home() {
     }
   };
 
+  const handleBetaAccess = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await axios.post('/api/request-beta-access', { password: betaPassword });
+      if (response.status === 200) {
+        await checkSubscription();
+        setBetaAccessError('');
+        if (response.data.level === 2) {
+          alert('Beta access granted! You now have full access to the beta.');
+        } else {
+          alert('Beta access requested successfully. Your request is pending approval.');
+        }
+      }
+    } catch (error) {
+      setBetaAccessError('Failed to process beta access request');
+    }
+  };
+
   return (
     <div>
       <h1>CopyTradeCat</h1>
@@ -82,6 +102,20 @@ export default function Home() {
             <>
               {subscriptionInfo.level === 0 && (
                 <BetaAccessRequest onRequestSubmitted={checkSubscription} />
+              )}
+              {subscriptionInfo.level < 2 && (
+                <>
+                  <form onSubmit={handleBetaAccess}>
+                    <input
+                      type="password"
+                      value={betaPassword}
+                      onChange={(e) => setBetaPassword(e.target.value)}
+                      placeholder="Enter beta access password"
+                    />
+                    <button type="submit">Submit</button>
+                  </form>
+                  {betaAccessError && <p style={{ color: 'red' }}>{betaAccessError}</p>}
+                </>
               )}
               {subscriptionInfo.level === 1 && (
                 <p>Your beta access request is pending.</p>

@@ -22,12 +22,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ error: 'User not found' });
     }
 
+    const { password } = req.body;
+    const correctPassword = "Follow https://x.com/copytradecat";
+
+    let newLevel = 1;
+    if (password === correctPassword) {
+      newLevel = 2;
+    }
+
     const subscription = await Subscription.findOneAndUpdate(
       { discordId: user.discordId },
       { 
         $push: { 
           subscriptions: {
-            level: 1,
+            level: newLevel,
             startDate: new Date(),
             status: 'active'
           }
@@ -37,12 +45,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
 
     res.status(200).json({ 
-      message: 'Beta access requested successfully',
+      message: newLevel === 2 ? 'Beta access granted' : 'Beta access requested successfully',
       accountNumber: user.accountNumber,
       level: subscription.subscriptions[subscription.subscriptions.length - 1].level
     });
   } catch (error) {
-    console.error('Failed to request beta access:', error);
-    res.status(500).json({ error: 'Failed to request beta access' });
+    console.error('Failed to process beta access:', error);
+    res.status(500).json({ error: 'Failed to process beta access' });
   }
 }
