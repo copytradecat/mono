@@ -18,8 +18,6 @@ import limiter from '../../src/lib/limiter';
 import '../../env.ts';
 
 const API_BASE_URL = process.env.SIGNING_SERVICE_URL;
-const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
-
 
 export const swapTime = 5000; // Time to confirm the swap (in milliseconds)
 

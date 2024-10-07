@@ -2,7 +2,7 @@ import User from '../models/User';
 import { Connection } from '@solana/web3.js';
 import '../../env.ts';
 
-const solanaRpcUrls = [
+export const solanaRpcUrls = [
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL_1,
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL_2,
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL_3,
