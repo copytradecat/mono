@@ -167,7 +167,6 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                 components: [],
               });
 
-              // Execute swaps for users
               const tradeResults = await executeSwapsForUsers({
                 interaction,
                 connectedWallets,
@@ -182,9 +181,6 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
                 initiatingEntryAmounts,
                 channelId
               });
-
-              // All messaging is handled within executeSwapsForUsers
-
             } else if (userResponse === 'cancel_swap') {
               await interaction.editReply({
                 content: 'Swap cancelled by user.',
@@ -260,91 +256,91 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
               );
 
               if (userResponse === 'swap_now' || userResponse === 'timeout') {
-                userResponse.on('collect', async (i) => {
-                  try {
-                    if (i.isRepliable()) {
-                      await i.deferUpdate();
-                    } else {
-                      console.warn('Interaction not repliable.');
-                      return;
-                    }
+                if (interaction.isRepliable()) {
+                  await interaction.editReply({
+                    content: 'Processing swaps...',
+                    components: [],
+                  });
+                } else {
+                  console.log('Interaction is no longer valid for editing reply\n(Processing swaps...)');
+                }
 
-                    if (i.customId === 'swap_now') {
-                      userResponse.stop();
-
-                      await i.editReply({
-                        content: 'Processing swaps...',
-                        components: [],
-                      });
-
-                      // Execute swaps for users
-                      const tradeResults = await executeSwapsForUsers({
-                        interaction,
-                        connectedWallets,
-                        selectionIndex: 'Custom',
-                        isBuyOperation: true,
-                        inputTokenInfo,
-                        outputTokenInfo,
-                        inputTokenAddress: inputToken,
-                        outputTokenAddress,
-                        initiatingUser,
-                        initiatingSettings,
-                        customAmount,
-                        channelId
-                      });
-
-                      // All messaging is handled within executeSwapForUser
-
-                    } else if (i.customId === 'cancel_swap') {
-                      userResponse.stop();
-                      await i.editReply({
-                        content: 'Transaction cancelled.',
-                        components: [],
-                      });
-                    }
-                  } catch (error) {
-                    console.error('Error in userResponse:', error);
-                    try {
-                      await i.editReply({
-                        content: 'An error occurred during the swap execution.',
-                        components: [],
-                      });
-                    } catch (followUpError) {
-                      console.error('Error sending follow-up message:', followUpError);
-                    }
-                  }
+                // Execute swaps for users
+                const tradeResults = await executeSwapsForUsers({
+                  interaction,
+                  connectedWallets,
+                  selectionIndex: 'Custom',
+                  isBuyOperation: true,
+                  inputTokenInfo,
+                  outputTokenInfo,
+                  inputTokenAddress: inputToken,
+                  outputTokenAddress,
+                  initiatingUser,
+                  initiatingSettings,
+                  initiatingEntryAmounts,
+                  customAmount,
+                  channelId
                 });
               } else if (userResponse === 'cancel_swap') {
-                await interaction.editReply({
-                  content: 'Swap cancelled.',
-                  components: [],
-                });
+                if (interaction.isRepliable()) {
+                  await interaction.editReply({
+                    content: 'Swap cancelled by user.',
+                    components: [],
+                  });
+                } else {
+                  console.log('Interaction is no longer valid for editing reply\n(Swap cancelled by user.)');
+                }
               }
 
             } catch (error) {
-              console.error('Error in messageCollector:', error);
-              await interaction.editReply({
-                content: 'An error occurred while processing your input.',
-                components: [],
-              });
+              console.error('Error in swap process:', error);
+              if (interaction.isRepliable()) {
+                await interaction.editReply({
+                  content: `An error occurred during the swap process: ${error.message}`,
+                  components: [],
+                });
+              } else {
+                console.log('Interaction is no longer valid for editing reply\n(An error occurred during the swap process:)');
+              }
+            }
+          });
+
+          messageCollector?.on('end', async (_, reason) => {
+            if (reason === 'time') {
+              if (interaction.isRepliable()) {
+                await interaction.editReply({
+                  content: 'Interaction timed out.',
+                  components: [],
+                });
+              } else {
+                console.log('Interaction is no longer valid for editing reply\n(Interaction timed out.)');
+              }
             }
           });
 
         } else if (btnInteraction.customId === 'cancel') {
           collector.stop();
-          await btnInteraction.editReply({
-            content: 'Transaction cancelled.',
-            components: [],
-          });
+          if (interaction.isRepliable()) {
+            await btnInteraction.editReply({
+              content: 'Transaction cancelled.',
+              components: [],
+            });
+          } else {
+            console.log('Interaction is no longer valid for editing reply\n(Transaction cancelled.)');
+          }
         }
 
       } catch (error: any) {
         console.error('Error in collector:', error);
         try {
-          await btnInteraction.followUp({
-            content: `An error occurred during the process: ${error.message}`,
-            ephemeral: true,
-          });
+          if (btnInteraction.isRepliable()) {
+            await btnInteraction.followUp({
+              content: `An error occurred during the process: ${error.message}`,
+              ephemeral: true,
+            });
+          } else {
+            console.log('Interaction is no longer valid for following up\n(An error occurred during the process:)');
+          }
         } catch (followUpError) {
           console.error('Error sending follow-up message:', followUpError);
         }
@@ -354,10 +350,14 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
     collector?.on('end', async (_, reason) => {
       if (reason === 'time') {
         try {
-          await interaction.editReply({
-            content: 'Interaction timed out.',
-            components: [],
-          });
+          if (interaction.isRepliable()) {
+            await interaction.editReply({
+              content: 'Interaction timed out.',
+              components: [],
+            });
+          } else {
+            console.log('Interaction is no longer valid for editing reply\n(Interaction timed out.)');
+          }
         } catch (error) {
           console.error('Error editing reply on timeout:', error);
         }
@@ -365,13 +365,18 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
     });
 
   } catch (error) {
-    console.error('Error in handleBuyCommand:', error);
-    if (!interaction.replied) {
-      if (interaction.deferred) {
-        await interaction.editReply({ content: 'An error occurred while processing your request.' });
-      } else {
-        await interaction.reply({ content: 'An error occurred while processing your request.', ephemeral: true });
+    console.error('Error in handleSellCommand:', error);
+    if (interaction.isRepliable()) {
+      try {
+        await interaction.editReply({
+          content: 'An error occurred while processing your request.',
+          components: [],
+        });
+      } catch (editError) {
+        console.error('Error editing reply:', editError);
       }
+    } else {
+      console.log('Interaction is no longer valid for error response');
     }
   }
 }
