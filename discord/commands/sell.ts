@@ -314,6 +314,7 @@ export async function handleSellCommand(interaction: CommandInteraction) {
                     outputTokenAddress,
                     initiatingUser,
                     initiatingSettings,
+                    initiatingExitPercentages,
                     customPercentage,
                     channelId
                   });

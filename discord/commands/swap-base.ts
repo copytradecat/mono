@@ -162,8 +162,9 @@ export async function executeSwapsForUsers(params: {
 
           if (isBuyOperation) {
             const userEntryAmounts = userSettings.entryAmounts || defaultSettings.entryAmounts;
+            const scaledAmount = customAmount ? calculateScaledAmount(customAmount, initiatingEntryAmounts!, userEntryAmounts):false;
             mappedAmount =
-              customAmount ||
+              scaledAmount ||
               mapSelectionToUserSettings(initiatingEntryAmounts!, userEntryAmounts, selectionIndex as number);
 
             // Convert mappedAmount to raw units
@@ -179,7 +180,8 @@ export async function executeSwapsForUsers(params: {
             }
           } else {
             const userExitPercentages = userSettings.exitPercentages || defaultSettings.exitPercentages;
-            const mappedPercentage = customPercentage || mapSelectionToUserSettings(
+            const scaledPercentage = customPercentage ? calculateScaledPercentage(customPercentage, initiatingExitPercentages!, userExitPercentages) : false;
+            const mappedPercentage = scaledPercentage || mapSelectionToUserSettings(
               initiatingExitPercentages!,
               userExitPercentages,
               selectionIndex as number,
@@ -246,12 +248,48 @@ export async function executeSwapsForUsers(params: {
 
   // After all swaps are complete, send public message
   const selectionLabels = isBuyOperation
-    ? ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌', 'Massive 🦍', 'MEGAMOON 🌝']
-    : ['Small 🤏', 'Medium ✊', 'Large 🤲', 'Very Large 🙌'];
+    ? ['small 🤏', 'medium ✊', 'Large 🤲', 'Very Large 🙌', 'Massive 🦍', 'MEGAMOON 🌝']
+    : ['small 🤏', 'medium ✊', 'Large 🤲', 'Very Large 🙌'];
 
-  const selectionLabel = selectionIndex !== undefined && selectionLabels[selectionIndex]
-    ? selectionLabels[selectionIndex]
-    : 'Custom';
+  let selectionLabel = 'Custom';
+
+  if (selectionIndex !== 'Custom') {
+    selectionLabel = selectionLabels[selectionIndex] || 'Custom';
+  } else if (isBuyOperation && customAmount !== undefined) {
+    const initiatingMin = Math.min(...initiatingEntryAmounts!);
+    const initiatingMax = Math.max(...initiatingEntryAmounts!);
+
+    for (let i = 0; i < initiatingEntryAmounts!.length - 1; i++) {
+      if (customAmount >= initiatingEntryAmounts![i] && customAmount < initiatingEntryAmounts![i + 1]) {
+        selectionLabel = `Between ${selectionLabels[i]} and ${selectionLabels[i + 1]}`;
+        break;
+      }
+    }
+
+    if (customAmount < initiatingMin) {
+      selectionLabel = `nano ${selectionLabels[0]}`;
+    } else if (customAmount > initiatingMax) {
+      selectionLabel = `SUPER ${selectionLabels[5]}`;
+    }
+  } else if (!isBuyOperation && customPercentage !== undefined) {
+    const initiatingMin = Math.min(...initiatingExitPercentages!);
+    const initiatingMax = Math.max(...initiatingExitPercentages!);
+
+    for (let i = 0; i < initiatingExitPercentages!.length - 1; i++) {
+      if (customPercentage >= initiatingExitPercentages![i] && customPercentage < initiatingExitPercentages![i + 1]) {
+        selectionLabel = `between ${selectionLabels[i]} and ${selectionLabels[i + 1]}`;
+        break;
+      }
+    }
+
+    if (customPercentage < initiatingMin) {
+      selectionLabel = `below ${selectionLabels[0]}`;
+    } else if (customPercentage === 100) {
+      selectionLabel = `full and final`;
+    } else if (customPercentage > initiatingMax) {
+      selectionLabel = `SUPER ${selectionLabels[3]}`;
+    }
+  }
 
   const publicMessage = `${userMention(initiatingUser.discordId)} ${
     isBuyOperation ? 'bought' : 'sold'
@@ -642,4 +680,39 @@ export async function recordTrade(
     amount,
     token,
   });
+}
+
+function calculateScaledAmount(customAmount: number, initiatingEntryAmounts: number[], userEntryAmounts: number[]): number {
+  // Calculate the ratio of the custom amount to the initiating user's entry amounts
+  const initiatingMin = Math.min(...initiatingEntryAmounts);
+  const initiatingMax = Math.max(...initiatingEntryAmounts);
+  const ratio = (customAmount - initiatingMin) / (initiatingMax - initiatingMin);
+
+  // Apply the ratio to the following user's entry amounts
+  const userMin = Math.min(...userEntryAmounts);
+  const userMax = Math.max(...userEntryAmounts);
+  const scaledAmount = userMin + ratio * (userMax - userMin);
+
+  // Ensure the scaled amount is within the user's entry amounts range
+  if (scaledAmount < userMin || scaledAmount > userMax) {
+    throw new Error('Calculated amount is out of the user\'s entry amounts range.');
+  }
+
+  return scaledAmount;
+}
+
+function calculateScaledPercentage(customPercentage: number, initiatingExitPercentages: number[], userExitPercentages: number[]): number {
+  const initiatingMin = Math.min(...initiatingExitPercentages);
+  const initiatingMax = Math.max(...initiatingExitPercentages);
+  const ratio = (customPercentage - initiatingMin) / (initiatingMax - initiatingMin);
+
+  const userMin = Math.min(...userExitPercentages);
+  const userMax = Math.max(...userExitPercentages);
+  const scaledPercentage = userMin + ratio * (userMax - userMin);
+
+  if (scaledPercentage < userMin || scaledPercentage > userMax) {
+    throw new Error('Calculated percentage is out of the user\'s exit percentages range.');
+  }
+
+  return scaledPercentage;
 }
