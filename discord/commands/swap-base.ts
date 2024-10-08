@@ -569,8 +569,9 @@ export async function executeSwap(
   let slippage = originalSlippage;
 
   while (retryCount < maxRetries) {
-    try {
-      const response = await limiter.schedule({ id: `execute-swap-${userId}-${retryCount}` }, async () => {
+    try { 
+      const uniqueJobId = `execute-swap-${userId}-${retryCount}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      const response = await limiter.schedule({ id: uniqueJobId }, async () => {
         return axios.post(`${API_BASE_URL}/sign-and-send`, {
           userId,
           walletPublicKey,
