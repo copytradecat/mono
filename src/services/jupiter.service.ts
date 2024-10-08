@@ -44,7 +44,8 @@ async function getTokenMetadata(mintAddresses: string[]): Promise<{ [key: string
 
         const metaplex = Metaplex.make(conn);
         const mintPublicKey = new PublicKey(address);
-        const nft = await limiter.schedule({id: `get-token-metadata-${address}`}, async () => await metaplex.nfts().findByMint({ mintAddress: mintPublicKey }));
+        const uniqueJobId = `get-token-metadata-${address}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+        const nft = await limiter.schedule({id: uniqueJobId}, async () => await metaplex.nfts().findByMint({ mintAddress: mintPublicKey }));
   
         const tokenMeta: TokenMetadata = {
           symbol: nft.symbol,
@@ -109,7 +110,8 @@ async function fetchTokenInfo(tokenAddress: string): Promise<any> {
     return {"address":"So11111111111111111111111111111111111111112","name":"Wrapped SOL","symbol":"SOL","decimals":9,"logoURI":"https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png","tags":["verified","community","strict"],"daily_volume":119732114.11683102,"created_at":"2024-04-26T10:56:58.893768Z","freeze_authority":null,"mint_authority":null,"permanent_delegate":null,"minted_at":null,"extensions":{"coingeckoId":"wrapped-solana"}};
   }
   try {
-    return await limiter.schedule({id: `fetch-token-info-${tokenAddress}`}, async () => {
+    const uniqueJobId = `fetch-token-info-${tokenAddress}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    return await limiter.schedule({id: uniqueJobId}, async () => {
       const response = await fetch(`https://api.jup.ag/tokens/v1/${tokenAddress}`,
         { method: 'GET', headers: {accept: 'application/json'}});
 
@@ -130,7 +132,8 @@ async function fetchTokenInfo(tokenAddress: string): Promise<any> {
 export async function getBalance(publicKey: string): Promise<number> {
   return await executeWithFallback(async (url) => {
     const conn = new Connection(url);
-    return await limiter.schedule({ id: `get-balance-${publicKey}` }, async () => {
+    const uniqueJobId = `get-balance-${publicKey}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    return await limiter.schedule({ id: uniqueJobId }, async () => {
       return conn.getBalance(new PublicKey(publicKey));
     });
   }, solanaRpcUrls);
@@ -145,7 +148,7 @@ export async function getTokenBalances(publicKey: string) {
     const solBalancePromise = getBalance(publicKey);
 
     // Fetch token accounts
-    const tokenAccountsResponse = await limiter.schedule({id: `get-token-accounts-${publicKey}`}, async () => {
+    const tokenAccountsResponse = await limiter.schedule({id: `get-token-accounts-${publicKey}-${Date.now()}-${Math.random().toString(36).substring(7)}`}, async () => {
       return executeWithFallback(async (url) => {
         const conn = new Connection(url);
         return await conn.getParsedTokenAccountsByOwner(pubKey, {
@@ -232,8 +235,9 @@ export async function getQuote(
       amount: amount,
     };
 
+    const uniqueJobId = `get-quote-${inputToken}-${outputToken}-${amount}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     return await limiter.schedule(
-      { id: `get-quote-${inputToken}-${outputToken}-${amount}` },
+      { id: uniqueJobId },
       async () => {
         return await jupiterApiClient.quoteGet({
           ...baseParams,
@@ -272,7 +276,8 @@ export async function getSwapTransaction(
 
   return await executeWithFallback(async (apiUrl) => {
     const jupiterApiClient = createJupiterApiClient({ basePath: apiUrl });
-    const swapTransaction = await limiter.schedule({ id: `get-swap-transaction-${userPublicKey}` }, async () => {
+    const uniqueJobId = `get-swap-transaction-${userPublicKey}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    const swapTransaction = await limiter.schedule({ id: uniqueJobId }, async () => {
       return await jupiterApiClient.swapPost({
         swapRequest,
       });

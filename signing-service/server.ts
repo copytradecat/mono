@@ -25,10 +25,9 @@ app.post('/sign-and-send', async (req, res) => {
   // console.log('Received request in signing service');
   // console.log('Request body:', JSON.stringify(req.body, null, 2));
 
-  const jobId = `sign-and-send-${Date.now()}`;
-
   try {
-    await limiter.schedule({ id: jobId }, async () => {
+    const uniqueJobId = `sign-and-send-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    await limiter.schedule({ id: uniqueJobId }, async () => {
       // console.log('Processing sign-and-send request');
       const { userId, walletPublicKey, serializedTransaction } = req.body;
 
