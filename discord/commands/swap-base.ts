@@ -391,7 +391,7 @@ Wrap/Unwrap SOL: ${settings.wrapUnwrapSOL ? 'Enabled' : 'Disabled'}
     return {
       quoteData,
       swapPreview,
-      estimatedOutput,
+      estimatedOutputRaw,
     };
   } catch (error: any) {
     console.error('Error creating swap preview:', error.message || error);
