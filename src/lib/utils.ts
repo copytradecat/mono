@@ -117,3 +117,8 @@ export async function getConnection(): Promise<Connection> {
     solanaRpcUrls
   );
 }
+
+export function formatNumber(num: number, maxDecimals: number = 6): string {
+  const fixed = num.toFixed(maxDecimals);
+  return parseFloat(fixed).toString();
+}

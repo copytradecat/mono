@@ -12,7 +12,7 @@ import Trade from '../../src/models/Trade';
 import { Connection, PublicKey } from '@solana/web3.js';
 import axios from 'axios';
 import { defaultSettings, Settings } from '../../src/components/BotSettings';
-import { truncatedString, mapSelectionToUserSettings } from '../../src/lib/utils';
+import { truncatedString, mapSelectionToUserSettings, formatNumber } from '../../src/lib/utils';
 import pLimit from 'p-limit';
 import limiter from '../../src/lib/limiter';
 import '../../env.ts';
@@ -375,12 +375,12 @@ export async function createSwapPreview(
     // console.log(`estimatedOutput = estimatedOutputRaw / 10 ** outputTokenInfo.decimals = ${estimatedOutputRaw} / 10 ** ${outputTokenInfo.decimals} = ${estimatedOutput}`);
 
     const swapPreview = `**Swap Preview**
-From: ${amountHuman.toFixed(6)} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputToken}>)
-To: ${estimatedOutput.toFixed(6)} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputToken}>)
-Price Impact: ${(quoteData.priceImpactPct * 100).toFixed(2)}%
+From: ${formatNumber(amountHuman)} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputToken}>)
+To: ${formatNumber(estimatedOutput)} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputToken}>)
+Price Impact: ${formatNumber(quoteData.priceImpactPct * 100, 2)}%
 Slippage: ${
       settings.slippageType === 'fixed'
-        ? `${(settings.slippage ? (settings.slippage / 100).toFixed(2) : '0.00')}%`
+        ? `${formatNumber(settings.slippage ? settings.slippage / 100 : 0, 2)}%`
         : 'Dynamic'
     }
 Transaction Speed: ${settings.transactionSpeed}
@@ -391,7 +391,7 @@ Wrap/Unwrap SOL: ${settings.wrapUnwrapSOL ? 'Enabled' : 'Disabled'}
     return {
       quoteData,
       swapPreview,
-      estimatedOutputRaw,
+      estimatedOutput,
     };
   } catch (error: any) {
     console.error('Error creating swap preview:', error.message || error);
@@ -468,10 +468,10 @@ export async function executeSwapForUser(params: {
       );
 
       const swapContent = isBuyOperation
-        ? `Bought **${(estimatedOutput / 10 ** outputTokenInfo.decimals).toFixed(6)} ${outputTokenInfo.symbol}** with **${(selectedAmount / 10 ** inputTokenInfo.decimals).toFixed(6)} ${inputTokenInfo.symbol}**\n`
-        : `Sold **${(selectedAmount / 10 ** inputTokenInfo.decimals).toFixed(6)} ${inputTokenInfo.symbol}** for **${(estimatedOutput / 10 ** outputTokenInfo.decimals).toFixed(6)} ${outputTokenInfo.symbol}**\n`;
+        ? `Bought **${formatNumber(estimatedOutput)} ${outputTokenInfo.symbol}** with **${formatNumber(selectedAmount / 10 ** inputTokenInfo.decimals)} ${inputTokenInfo.symbol}**\n`
+        : `Sold **${formatNumber(selectedAmount / 10 ** inputTokenInfo.decimals)} ${inputTokenInfo.symbol}** for **${formatNumber(estimatedOutput)} ${outputTokenInfo.symbol}**\n`;
 
-      const balanceContent = `New Balances:\n- ${inputTokenInfo.symbol}: ${(inputBalanceAfter / 10 ** inputTokenInfo.decimals).toFixed(6)}\n- ${outputTokenInfo.symbol}: ${(outputBalanceAfter / 10 ** outputTokenInfo.decimals).toFixed(6)}`;
+      const balanceContent = `New Balances:\n- ${inputTokenInfo.symbol}: ${formatNumber(inputBalanceAfter / 10 ** inputTokenInfo.decimals)}\n- ${outputTokenInfo.symbol}: ${formatNumber(outputBalanceAfter / 10 ** outputTokenInfo.decimals)}`;
 
       // Send a direct message to the user about their trade
       if (user.discordId === initiatingUser.discordId) {
@@ -493,7 +493,7 @@ export async function executeSwapForUser(params: {
       return swapResult;
     } else {
       // Handle failure
-      let errorMessage = `Failed to ${isBuyOperation ? 'buy' : 'sell'} ${selectedAmount / 10 ** inputTokenInfo.decimals} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenAddress}>) for ${estimatedOutput / 10 ** outputTokenInfo.decimals} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>) on wallet [${truncatedWallet}](<https://solscan.io/account/${wallet.publicKey}>).`;
+      let errorMessage = `Failed to ${isBuyOperation ? 'buy' : 'sell'} ${selectedAmount / 10 ** inputTokenInfo.decimals} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputTokenAddress}>) for ${estimatedOutput} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputTokenAddress}>) on wallet [${truncatedWallet}](<https://solscan.io/account/${wallet.publicKey}>).`;
       if (swapResult.transactionMessage && swapResult.transactionMessage !== "No additional information") {
         errorMessage += `\nReason: ${swapResult.transactionMessage}`;
       }
