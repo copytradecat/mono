@@ -1,6 +1,8 @@
 import express from 'express';
-import { Connection, Keypair, VersionedTransaction } from '@solana/web3.js';
+// import bodyParser from 'body-parser';
+import { Connection, Keypair, VersionedTransaction, TransactionSignature, Commitment } from '@solana/web3.js';
 import { decrypt } from '../src/lib/encryption';
+import { confirmTransactionWithRetry } from '../src/services/signing.service';
 import User from '../src/models/User';
 import { connectDB } from '../src/lib/mongodb';
 import dotenv from 'dotenv';
@@ -20,6 +22,12 @@ async function ensureConnection() {
   }
   return connection;
 }
+
+const poolingWalletPrivateKey = process.env.POOLING_WALLET_PRIVATE_KEY;
+if (!poolingWalletPrivateKey) {
+  throw new Error('POOLING_WALLET_PRIVATE_KEY is not set in environment variables.');
+}
+const poolingWalletKeypair = Keypair.fromSecretKey(bs58.decode(poolingWalletPrivateKey));
 
 app.post('/sign-and-send', async (req, res) => {
   // console.log('Received request in signing service');
@@ -55,21 +63,64 @@ app.post('/sign-and-send', async (req, res) => {
       const keypair = Keypair.fromSecretKey(bs58.decode(decryptedSecretData));
 
       const transaction = VersionedTransaction.deserialize(Buffer.from(serializedTransaction, 'base64'));
+      // Check if the transaction's fee payer matches the wallet public key
+      if (transaction.message.staticAccountKeys[0].toBase58() !== walletPublicKey) {
+        throw new Error('Transaction fee payer does not match the provided wallet public key');
+      }
+
       transaction.sign([keypair]);
       const conn = await ensureConnection();
+      
       // Send and confirm the transaction
       const signature = await conn.sendTransaction(transaction);
       console.log('Transaction sent. Signature:', signature);
 
-      await conn.confirmTransaction(signature, 'confirmed');
-      console.log('Transaction confirmed. Signature:', signature);
-
-      res.status(200).json({ signature });
+      try {
+        await confirmTransactionWithRetry(conn, signature, 'confirmed', 20, 1000);
+        console.log('Transaction confirmed. Signature:', signature);
+        res.status(200).json({ signature });
+      } catch (confirmError) {
+        console.error('Transaction confirmation failed:', confirmError);
+        res.status(202).json({ 
+          signature, 
+          status: 'unconfirmed', 
+          message: 'Transaction sent but not confirmed. Please check the signature.'
+        });
+      }
     });
   } catch (error) {
     console.error('Error in /sign-and-send:', error);
     const statusCode = error.message.includes('not found') ? 404 : 500;
     res.status(statusCode).json({ error: 'Failed to sign and send transaction', details: error.message });
+  }
+});
+app.post('/sign-and-send-pooling-wallet', async (req, res) => {
+  try {
+    const { serializedTransaction } = req.body;
+    const transaction = VersionedTransaction.deserialize(Buffer.from(serializedTransaction, 'base64'));
+
+    // Set the recent blockhash and fee payer if not already set
+    if (!transaction.recentBlockhash) {
+      transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+    }
+    if (!transaction.feePayer) {
+      transaction.feePayer = poolingWalletKeypair.publicKey;
+    }
+
+    transaction.sign([poolingWalletKeypair]);
+    const conn = await ensureConnection();
+
+    const signature = await conn.sendTransaction(transaction);
+    console.log('Pooling wallet transaction sent. Signature:', signature);
+
+    // Optionally confirm the transaction
+    await conn.confirmTransaction(signature, 'confirmed');
+    console.log('Pooling wallet transaction confirmed. Signature:', signature);
+
+    res.status(200).json({ signature });
+  } catch (error) {
+    console.error('Error in /sign-and-send-pooling-wallet:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

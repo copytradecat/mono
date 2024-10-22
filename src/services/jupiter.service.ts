@@ -131,7 +131,7 @@ async function fetchTokenInfo(tokenAddress: string): Promise<any> {
 
 export async function getBalance(publicKey: string): Promise<number> {
   return await executeWithFallback(async (url) => {
-    const conn = new Connection(url);
+    const conn = await getConnection();
     const uniqueJobId = `get-balance-${publicKey}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     return await limiter.schedule({ id: uniqueJobId }, async () => {
       return conn.getBalance(new PublicKey(publicKey));
@@ -295,16 +295,27 @@ export async function getTokenBalance(
   walletAddress: string,
   tokenAddress: string
 ): Promise<{ balance: number; decimals: number; symbol: string }> {
+  if (!walletAddress || !tokenAddress) {
+    throw new Error('Invalid wallet or token address');
+  }
+
+  const publicKey = new PublicKey(walletAddress);
   // For SOL
-  if (tokenAddress === 'So11111111111111111111111111111111111111112' || tokenAddress === 'SOL') {
-    const balanceLamports = await getBalance(walletAddress);
-    return { balance: balanceLamports, decimals: 9, symbol: 'SOL' }; // Return lamports
+  if (tokenAddress === 'So11111111111111111111111111111111111111112') {
+    // Fetch SOL balance
+    const balanceLamports = await executeWithFallback(async (url) => {
+      const conn = new Connection(url);
+      return conn.getBalance(publicKey, 'confirmed');
+    }, solanaRpcUrls);
+
+    return { balance: balanceLamports, decimals: 9, symbol: 'SOL' };
   } else {
+
     // For SPL Tokens
     // balance should be in raw units (smallest units)
     const tokenAccounts = await executeWithFallback(async (url) => {
       const conn = new Connection(url);
-      return conn.getParsedTokenAccountsByOwner(new PublicKey(walletAddress), {
+      return conn.getParsedTokenAccountsByOwner(publicKey, {
         mint: new PublicKey(tokenAddress),
       });
     }, solanaRpcUrls);
@@ -394,3 +405,4 @@ export async function getMultipleTokenBalancesForWallets(
 
   return balances;
 }
+

@@ -112,10 +112,18 @@ export async function executeWithFallback<T>(
 }
 
 export async function getConnection(): Promise<Connection> {
-  return executeWithFallback(
-    (url) => new Promise((resolve) => resolve(new Connection(url))),
-    solanaRpcUrls
-  );
+  const shuffledUrls = solanaRpcUrls.sort(() => Math.random() - 0.5);
+  for (const url of shuffledUrls) {
+    try {
+      const connection = new Connection(url, 'confirmed');
+      // Test the connection if necessary
+      return connection;
+    } catch (error) {
+      console.warn(`Failed to connect to RPC endpoint ${url}: ${error.message}`);
+      // Try the next URL
+    }
+  }
+  throw new Error('All RPC endpoints failed.');
 }
 
 export function formatNumber(num: number, maxDecimals: number = 6): string {
