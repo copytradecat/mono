@@ -12,7 +12,7 @@
     "ui:start": "next start",
     "bot:dev": "nodemon --watch discord --ext ts,json --exec npx tsx discord/bot.ts",
     "bot:start": "npx tsx discord/bot.ts",
-    "bot:test": "npx tsx discord/test-bot.ts",
+    "bot:test": "nodemon --watch discord --ext ts,json --exec npx tsx discord/test-bot.ts",
     "server:dev": "nodemon --watch signing-service --ext ts,json --exec npx tsx signing-service/server.ts",
     "server:start": "npx tsx signing-service/server.ts"
   },

@@ -10,7 +10,7 @@ import { getQuote, getSwapTransaction, getTokenInfo, getTokenBalance } from '../
 import { signAndSendTransaction, confirmTransactionWithRetry } from '../../src/services/signing.service';
 import UserAccount from '../../src/models/User';
 import Trade from '../../src/models/Trade';
-import { Connection, PublicKey, Transaction, SystemProgram, TransactionResponse, ParsedInstruction, Keypair, Commitment } from '@solana/web3.js';
+import { Connection, PublicKey, Transaction, SystemProgram, TransactionResponse, ParsedInstruction, Keypair, Commitment, TransactionExpiredBlockheightExceededError, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import axios from 'axios';
 import { defaultSettings, Settings } from '../../src/components/BotSettings';
 import { truncatedString, mapSelectionToUserSettings, formatNumber, getConnection } from '../../src/lib/utils';
@@ -135,16 +135,15 @@ export async function executeSwapsForUsers(params: {
   } = params;
 
   // Ensure connectedWallets includes the initiating user
-  // if (!connectedWallets.some((wallet) => wallet.user.discordId === interaction.user.id)) {
-  //   const initiatingUser = await getUser(interaction.user.id);
-  //   connectedWallets.push({
-  //     user: initiatingUser,
-  //     wallet: {
-  //       publicKey: initiatingUser.walletAddress,
-  //       settings: initiatingUser.walletSettings,
-  //     },
-  //   });
-  // } // display initiating user not part of the channel
+  if (!connectedWallets.some(wallet => wallet.user.discordId === initiatingUser.discordId)) {
+    connectedWallets.push({
+      user: initiatingUser,
+      wallet: {
+        publicKey: initiatingUser.walletAddress,
+        settings: initiatingUser.walletSettings,
+      },
+    });
+  }
 
   // Proceed with calculating contributions
   const userContributions = await calculateUserContributions(
@@ -159,6 +158,12 @@ export async function executeSwapsForUsers(params: {
     outputTokenInfo,
     interaction
   );
+
+  console.log('User contributions:', userContributions);
+
+  await transferFundsToPool(userContributions, inputTokenAddress, poolingWalletKeypair.publicKey.toBase58(), inputTokenInfo);
+
+  console.log('Funds transferred to pool');
 
   if (userContributions.length === 0) {
     await interaction.editReply({
@@ -262,7 +267,7 @@ async function notifyUserInsufficientBalance(
   interaction: CommandInteraction
 ) {
   const truncatedWallet = truncatedString(walletPublicKey, 4);
-  const message = `Your wallet [${truncatedWallet}](<https://solscan.io/account/${walletPublicKey}>) does not have enough ${tokenSymbol} to execute the swap.`;
+  const message = `Your wallet [${truncatedWallet}](<https://solscan.io/account/${walletPublicKey}>) does not have enough ${tokenSymbol} to execute the swap. Required: ${requiredAmount}, Available: ${availableBalance}`;
 
   try {
     if (user.discordId === interaction.user.id) {
@@ -535,7 +540,18 @@ export async function executeSwap(
 
       // Confirm the transaction
       const connection = await getConnection();
-      await confirmTransactionWithRetry(connection, signature);
+      try {
+        await confirmTransactionWithRetry(connection, signature);
+      } catch (error) {
+        if (error instanceof TransactionExpiredBlockheightExceededError) {
+          console.log('Transaction expired. Resubmitting...');
+          // Recreate and resend the transaction
+          // Be cautious to avoid double-spending or duplicate transactions
+        } else {
+          // Handle other errors
+          throw error;
+        }
+      }
 
       return {
         success: true,
@@ -684,12 +700,13 @@ async function calculateUserContributions(
   initiatingEntryAmounts: number[],
   initiatingExitPercentages: number[],
   selectionIndex: number | 'Custom',
-  customAmount?: number,
-  customPercentage?: number,
-  inputTokenInfo?: any,
-  outputTokenInfo?: any,
-  interaction?: CommandInteraction
+  customAmount: number | undefined,
+  customPercentage: number | undefined,
+  inputTokenInfo: any,
+  outputTokenInfo: any,
+  interaction: CommandInteraction
 ): Promise<UserContribution[]> {
+  console.log('Calculating user contributions:', { connectedWallets, initiatingEntryAmounts, selectionIndex });
   const userContributions: UserContribution[] = [];
 
   for (const walletInfo of connectedWallets) {
@@ -709,70 +726,39 @@ async function calculateUserContributions(
       : null;
     const userSettings = walletSettings || (primaryPreset ? primaryPreset.settings : null) || user.settings || defaultSettings;
 
-    let contributionAmount = 0;
-    let adjustedAmount = 0;
+    // Map selection index to user's settings
+    const userAmount = mapSelectionToUserSettings(
+      userSettings.entryAmounts || defaultSettings.entryAmounts,
+      selectionIndex as number
+    );
 
-    if (isBuyOperation) {
-      const userEntryAmounts = userSettings.entryAmounts || defaultSettings.entryAmounts;
-      const scaledAmount = customAmount ? calculateScaledAmount(customAmount, initiatingEntryAmounts, userEntryAmounts) : false;
-      const mappedAmount =
-        scaledAmount ||
-        mapSelectionToUserSettings(initiatingEntryAmounts, userEntryAmounts, selectionIndex as number);
+    // Get user's token balance
+    const { balance: walletBalance } = await getTokenBalance(walletPublicKey, inputTokenInfo.address);
 
-      adjustedAmount = Math.floor(mappedAmount * 10 ** inputTokenInfo.decimals);
-      
-      console.log('walletPublicKey:', walletPublicKey);
-      console.log('inputTokenInfo.address:', inputTokenInfo.address);
-      // Fetch wallet balance in raw units
-      const { balance: walletBalance } = await getTokenBalance(walletPublicKey, inputTokenInfo.address);
+    const { balance: tokenBalance } = await getTokenBalance(walletPublicKey, inputTokenInfo.
+      address);
+    const contributionAmount = Math.min(userAmount, walletBalance);
 
-      if (walletBalance < adjustedAmount) {
-        console.error(`Insufficient balance for wallet ${walletPublicKey}`);
-        if (interaction) {
-          await notifyUserInsufficientBalance(user, walletPublicKey, inputTokenInfo.symbol, interaction);
-        }
-        continue; // Skip this wallet
-      }
-
-      contributionAmount = adjustedAmount;
-    } else {
-      const userExitPercentages = userSettings.exitPercentages || defaultSettings.exitPercentages;
-      const scaledPercentage = customPercentage
-        ? calculateScaledPercentage(customPercentage, initiatingExitPercentages, userExitPercentages)
-        : false;
-      const mappedPercentage =
-        scaledPercentage ||
-        mapSelectionToUserSettings(initiatingExitPercentages, userExitPercentages, selectionIndex as number);
-
-      const { balance: tokenBalance } = await getTokenBalance(walletPublicKey, inputTokenInfo.address);
-      const mappedAmount = (mappedPercentage / 100) * tokenBalance;
-      adjustedAmount = Math.floor(mappedAmount);
-
-      if (adjustedAmount <= 0 || tokenBalance < adjustedAmount) {
-        console.error(`Insufficient balance for wallet ${walletPublicKey}`);
-        if (interaction) {
-          await notifyUserInsufficientBalance(user, walletPublicKey, inputTokenInfo.symbol, interaction);
-        }
-        continue; // Skip this wallet
-      }
-
-      contributionAmount = adjustedAmount;
+    if (contributionAmount <= 0 || tokenBalance < contributionAmount) {
+      console.log(`User ${user.discordId} has insufficient balance for contribution.`);
+      continue; // Skip users with zero contribution
     }
 
-    // Add estimated transaction fee (Optional, adjust as needed)
-    const estimatedFee = 5000; // Lamports (Adjust based on actual fee estimates)
-    contributionAmount += estimatedFee;
+    // After determining userAmount in SOL
+    const contributionAmountSOL = Math.min(userAmount, walletBalance);
 
-    // Validate contributionAmount
-    if (contributionAmount <= 0) {
-      console.error(`Invalid contribution amount for user ${user.discordId}`);
-      continue; // Skip this user
+    if (contributionAmountSOL <= 0) {
+      console.log(`User ${user.discordId} has insufficient balance for contribution.`);
+      continue; // Skip users with zero contribution
     }
+
+    // Convert to lamports (integer)
+    const contributionAmountLamports = (inputTokenInfo.address === 'So11111111111111111111111111111111111111112') ? Math.floor(contributionAmountSOL * LAMPORTS_PER_SOL) : Math.floor(contributionAmountSOL * (10 ** inputTokenInfo.decimals));
 
     userContributions.push({
       userId: user.discordId,
       walletAddress: walletPublicKey,
-      contributionAmount,
+      contributionAmount: contributionAmountLamports, // Store in lamports
     });
   }
 
@@ -791,17 +777,44 @@ async function transferFundsToPool(
 
     try {
       const isNativeSOL = inputTokenAddress === 'So11111111111111111111111111111111111111112';
+      const tokenDecimals = inputTokenInfo.decimals; // For SOL, this would be 9
+
+      // Convert contributionAmount to smallest units
+      const amountInSmallestUnit = Math.floor(contributionAmount * 10 ** (isNativeSOL ? 9 : tokenDecimals));
+
+      // Check if user has sufficient balance
+      const userBalance = await connection.getBalance(new PublicKey(walletAddress));
+      if (userBalance < amountInSmallestUnit) {
+        console.error(`Insufficient balance for user ${userId}. Has ${userBalance}, needs ${amountInSmallestUnit}`);
+        contribution.error = 'Insufficient balance';
+        continue; // Skip to next user
+      }
+      
+      // max amount
+      // const maxPossibleAmount = Math.max(0, userBalance - LAMPORTS_PER_SOL); // Leave 1 SOL for fees
+      // const adjustedAmount = Math.min(amountInSmallestUnit, maxPossibleAmount);
+      // if (adjustedAmount <= 0) {
+      //   console.error(`User ${userId} doesn't have enough balance for transaction and fees`);
+      //   contribution.error = 'Insufficient balance for transaction and fees';
+      //   continue;
+      // }
+
+      if (!Number.isInteger(amountInSmallestUnit)) {
+        throw new Error(`Amount must be an integer. Received: ${amountInSmallestUnit}`);
+      }
 
       if (isNativeSOL) {
-        // Transfer SOL using SystemProgram.transfer
+        // Transfer SOL
         const transferInstruction = SystemProgram.transfer({
           fromPubkey: new PublicKey(walletAddress),
           toPubkey: new PublicKey(poolingWalletAddress),
-          lamports: contributionAmount,
+          lamports: amountInSmallestUnit,
         });
 
         const transaction = new Transaction().add(transferInstruction);
-        transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.lastValidBlockHeight = lastValidBlockHeight;
         transaction.feePayer = new PublicKey(walletAddress);
 
         // Serialize the transaction
@@ -822,11 +835,28 @@ async function transferFundsToPool(
           }
           contribution.transferSignature = signature;
           console.log(`Transfer successful for user ${userId}. Signature: ${signature}`);
+        } else if (response.status === 500) {
+          if (response.data.details.includes('insufficient lamports')) {
+            console.error(`Insufficient funds for user ${userId}`);
+            contribution.error = 'Insufficient funds';
+          } else {
+            console.error(`Transaction failed for user ${userId}: ${response.data.details}`);
+            contribution.error = 'Transaction failed';
+          }
         } else {
           throw new Error(`Failed to transfer funds: ${response.data.error}`);
         }
       } else {
-        // Handle SPL Token transfer as before
+        // Handle SPL Token transfer
+        // Adjust contributionAmount based on token decimals
+        const tokenDecimals = inputTokenInfo.decimals;
+        const amountInSmallestUnit = Math.floor(contributionAmount * (10 ** tokenDecimals));
+
+        if (!Number.isInteger(amountInSmallestUnit)) {
+          throw new Error(`Contribution amount for SPL Token must be an integer. Received: ${amountInSmallestUnit}`);
+        }
+
+        // Create transfer instruction using amountInSmallestUnit
         await ensureTokenAccountExists(walletAddress, inputTokenAddress, userId);
         await ensureTokenAccountExists(poolingWalletAddress, inputTokenAddress, userId);
 
@@ -844,12 +874,14 @@ async function transferFundsToPool(
           new PublicKey(inputTokenAddress),
           destinationTokenAccount,
           new PublicKey(walletAddress),
-          contributionAmount,
-          inputTokenInfo.decimals
+          amountInSmallestUnit,
+          tokenDecimals
         );
 
         const transaction = new Transaction().add(transferInstruction);
-        transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.lastValidBlockHeight = lastValidBlockHeight;
         transaction.feePayer = new PublicKey(walletAddress);
 
         // Serialize the transaction
@@ -879,6 +911,10 @@ async function transferFundsToPool(
       contribution.error = error.message;
     }
   }
+
+  if (userContributions.every(contribution => contribution.error === 'Insufficient funds')) {
+    throw new Error('All users have insufficient funds for the swap');
+  }
 }
 
 async function confirmAndFilterTransfers(userContributions: UserContribution[]): Promise<UserContribution[]> {
@@ -887,12 +923,15 @@ async function confirmAndFilterTransfers(userContributions: UserContribution[]):
   for (const contribution of userContributions) {
     const { transferSignature } = contribution;
     const connection = await getConnection();
-
     try {
-      await confirmTransactionWithRetry(connection, transferSignature);
+      if (transferSignature) {
+        await confirmTransactionWithRetry(connection, transferSignature);
 
-      // If confirmed, add to confirmed contributions
-      confirmedContributions.push(contribution);
+        // If confirmed, add to confirmed contributions
+        confirmedContributions.push(contribution);
+      } else {
+        console.error(`No transfer signature for wallet ${contribution.walletAddress}`);
+      }
     } catch (error) {
       console.error(`Transfer transaction ${transferSignature} for wallet ${contribution.walletAddress} failed to confirm.`);
       // Optionally notify user about the failed transfer
@@ -953,7 +992,7 @@ async function distributeTokensToUsers(
 
     try {
       const isNativeSOL = outputTokenAddress === 'So11111111111111111111111111111111111111112';
-      const userShare = (contributionAmount / totalInputAmount) * totalOutputAmount;
+      const userShare = (contributionAmount / totalOutputAmount) * totalOutputAmount;
       const adjustedAmount = Math.floor(userShare);
 
       if (isNativeSOL) {
@@ -965,7 +1004,9 @@ async function distributeTokensToUsers(
         });
 
         const transaction = new Transaction().add(transferInstruction);
-        transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.lastValidBlockHeight = lastValidBlockHeight;
         transaction.feePayer = poolingWalletKeypair.publicKey;
 
         transaction.sign(poolingWalletKeypair);
@@ -987,6 +1028,9 @@ async function distributeTokensToUsers(
           new PublicKey(walletAddress)
         );
 
+
+        const outputTokenInfo = await getTokenInfo(outputTokenAddress);
+
         const transferInstruction = createTransferCheckedInstruction(
           sourceTokenAccount,
           new PublicKey(outputTokenAddress),
@@ -997,7 +1041,9 @@ async function distributeTokensToUsers(
         );
 
         const transaction = new Transaction().add(transferInstruction);
-        transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.lastValidBlockHeight = lastValidBlockHeight;
         transaction.feePayer = poolingWalletKeypair.publicKey;
 
         transaction.sign(poolingWalletKeypair);
@@ -1051,7 +1097,9 @@ async function ensureTokenAccountExists(
       )
     );
 
-    transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+    transaction.recentBlockhash = blockhash;
+    transaction.lastValidBlockHeight = lastValidBlockHeight;
     transaction.feePayer = new PublicKey(walletAddress);
 
     const serializedTransaction = transaction
@@ -1143,7 +1191,9 @@ async function refundContributions(
         });
 
         const transaction = new Transaction().add(transferInstruction);
-        transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.lastValidBlockHeight = lastValidBlockHeight;
         transaction.feePayer = poolingWalletKeypair.publicKey;
 
         transaction.sign(poolingWalletKeypair);
@@ -1187,7 +1237,9 @@ async function refundContributions(
         const transaction = new Transaction().add(transferInstruction);
     
         // **Set the recent blockhash and fee payer**
-        transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.lastValidBlockHeight = lastValidBlockHeight;
         transaction.feePayer = poolingWalletKeypair.publicKey;
     
         // Serialize the transaction
@@ -1271,6 +1323,21 @@ function getSelectionLabel(
 
   return selectionLabel;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

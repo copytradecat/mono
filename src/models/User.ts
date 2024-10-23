@@ -58,7 +58,7 @@ const WalletSchema = new mongoose.Schema({
 });
 
 // Define the interface for the User document
-interface IUser extends Document {
+export interface IUser extends Document {
     email?: string;
     username?: string;
     discordId: string;

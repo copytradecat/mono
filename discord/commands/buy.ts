@@ -4,6 +4,8 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
+  InteractionCollector,
+  ButtonInteraction,
 } from 'discord.js';
 import {
   getUser,
@@ -17,7 +19,11 @@ import { getTokenInfo, getTokenBalance } from '../../src/services/jupiter.servic
 import { defaultSettings } from '../../src/components/BotSettings';
 import { getConnectedWalletsInChannel, truncatedString } from '../../src/lib/utils';
 
-export async function handleBuyCommand(interaction: CommandInteraction) {
+export async function handleBuyCommand(
+  interaction: CommandInteraction,
+  // optional parameter for testing
+  testCollectorCallback?: (collector: InteractionCollector<ButtonInteraction>) => Promise<void>
+) {
   try {
     try {
       await interaction.deferReply({ ephemeral: true });
@@ -35,6 +41,11 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
     const outputTokenAddress = interaction.options.getString('token', true);
     const initiatingUserId = interaction.user.id;
     const channelId = interaction.channelId;
+    
+    console.log('Starting handleBuyCommand');
+    console.log('Output Token Address:', outputTokenAddress);
+    console.log('Initiating User ID:', initiatingUserId);
+    console.log('Channel ID:', channelId);
 
     const initiatingUser = await getUser(initiatingUserId);
     const initiatingWallet = initiatingUser.wallets.find((wallet: any) => wallet.connectedChannels.includes(channelId));
@@ -128,6 +139,9 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
     });
 
     collector.on('collect', async (btnInteraction) => {
+      if(testCollectorCallback) {
+        console.log(`Collector received button interaction: ${btnInteraction.customId}`);
+      }
       try {
         if (!btnInteraction.isRepliable()) {
           console.log('Button interaction is no longer valid');
@@ -364,6 +378,12 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
       }
     });
 
+    // If in test mode, invoke the test callback
+    if (testCollectorCallback) {
+      await testCollectorCallback(collector);
+      // Do not return here; let the function continue
+    }
+
   } catch (error) {
     console.error('Error in handleSellCommand:', error);
     if (interaction.isRepliable()) {
@@ -380,3 +400,4 @@ export async function handleBuyCommand(interaction: CommandInteraction) {
     }
   }
 }
+

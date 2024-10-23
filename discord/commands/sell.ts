@@ -4,6 +4,8 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
+  InteractionCollector,
+  ButtonInteraction,
 } from 'discord.js';
 import {
   getUser,
@@ -16,7 +18,11 @@ import { getTokenInfo, getTokenBalance } from '../../src/services/jupiter.servic
 import { defaultSettings } from '../../src/components/BotSettings';
 import { getConnectedWalletsInChannel } from '../../src/lib/utils';
 
-export async function handleSellCommand(interaction: CommandInteraction) {
+export async function handleSellCommand(
+  interaction: CommandInteraction,
+  // optional parameter for testing
+  testCollectorCallback?: (collector: InteractionCollector<ButtonInteraction>) => Promise<void>
+) {
   try {
     if (!interaction.isRepliable()) {
       console.log('Interaction is no longer valid');
@@ -33,6 +39,12 @@ export async function handleSellCommand(interaction: CommandInteraction) {
     const inputTokenAddress = interaction.options.getString('token', true);
     const initiatingUserId = interaction.user.id;
     const channelId = interaction.channelId;
+    if(testCollectorCallback) {
+      console.log('Starting handleSellCommand');
+      console.log('Input Token Address:', inputTokenAddress);
+      console.log('Initiating User ID:', initiatingUserId);
+      console.log('Channel ID:', channelId);
+    }
 
     const initiatingUser = await getUser(initiatingUserId);
     const initiatingWallet = initiatingUser.wallets.find((wallet: any) => wallet.connectedChannels.includes(channelId));
@@ -126,6 +138,9 @@ export async function handleSellCommand(interaction: CommandInteraction) {
     });
 
     collector?.on('collect', async (btnInteraction) => {
+      if(testCollectorCallback) {
+        console.log(`Collector received button interaction: ${btnInteraction.customId}`);
+      }
       try {
         if (!btnInteraction.isRepliable()) {
           console.log('Button interaction is no longer valid');
@@ -412,6 +427,11 @@ export async function handleSellCommand(interaction: CommandInteraction) {
       }
     });
 
+    // If in test mode, invoke the test callback
+    if (testCollectorCallback) {
+      await testCollectorCallback(collector);
+      // Do not return here; let the function continue
+    }
   } catch (error) {
     console.error('Error in handleSellCommand:', error);
     if (interaction.isRepliable()) {

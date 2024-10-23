@@ -40,7 +40,6 @@ export async function getConnectedWalletsInChannel(channelId: string) {
 }
 
 export function mapSelectionToUserSettings(
-  initiatingSelections: number[],
   userSelections: number[],
   selectedIndex: number
 ) {
