@@ -262,6 +262,10 @@ export async function getSwapTransaction(
   userPublicKey: string,
   settings: Settings
 ): Promise<any> {
+  // For small amounts, increase slippage tolerance
+  const isSmallAmount = quoteResponse.inAmount < 5000; // Adjust threshold as needed
+  const slippageMultiplier = isSmallAmount ? 2 : 1;
+  
   const swapRequest = {
     quoteResponse,
     userPublicKey,
@@ -271,11 +275,11 @@ export async function getSwapTransaction(
     computeUnitPriceMicroLamports: settings.transactionSpeed === 'medium' ? 0 : "auto",
     ...(settings.slippageType === 'dynamic' && {
       dynamicSlippage: {
-        maxBps: settings.slippage || 300
+        maxBps: (settings.slippage || 300) * slippageMultiplier
       }
     }),
     ...(settings.slippageType === 'fixed' && {
-      slippageBps: settings.slippage
+      slippageBps: settings.slippage * slippageMultiplier
     }),
   };
 

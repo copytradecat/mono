@@ -22,7 +22,7 @@ import { getAssociatedTokenAddress, createTransferCheckedInstruction, createAsso
 import bs58 from 'bs58';
 
 const API_BASE_URL = process.env.SIGNING_SERVICE_URL;
-
+export const MIN_AMOUNT_LAMPORTS = 2500; // 0.0000025 SOL minimum
 export const swapTime = 500; // Time to confirm the swap (in milliseconds)
 const poolingWalletPrivateKey = process.env.POOLING_WALLET_PRIVATE_KEY;
 if (!poolingWalletPrivateKey) {
@@ -175,13 +175,13 @@ export async function executeSwapsForUsers(params: {
 
     console.log('User contributions:', userContributions);
 
-    await transferFundsToPool(userContributions, inputTokenAddress, poolingWalletKeypair.publicKey.toBase58(), inputTokenInfo);
+    console.log('Calculating user contributions...');
 
     console.log('Funds transferred to pool');
 
     if (userContributions.length === 0) {
       await interaction.editReply({
-        content: 'No users have sufficient balance to participate in the swap.',
+        content: 'No users have sufficient balance to participate in the swap. Minimum amount required is ' + MIN_AMOUNT_LAMPORTS/LAMPORTS_PER_SOL + ' SOL.',
         components: [],
       });
       return;
@@ -289,24 +289,23 @@ export async function executeSwapsForUsers(params: {
 
 // Helper function to notify the user about insufficient balance
 async function notifyUserInsufficientBalance(
-  user: any,
+  userId: string,
   walletPublicKey: string,
   tokenSymbol: string,
-  interaction: CommandInteraction
+  interaction: CommandInteraction,
+  minAmount: number
 ) {
   const truncatedWallet = truncatedString(walletPublicKey, 4);
-  const message = `Your wallet [${truncatedWallet}](<https://solscan.io/account/${walletPublicKey}>) does not have enough ${tokenSymbol} to execute the swap. Required: ${requiredAmount}, Available: ${availableBalance}`;
+  const message = `Your wallet [${truncatedWallet}](<https://solscan.io/account/${walletPublicKey}>) does not meet the minimum amount requirement for ${tokenSymbol}. Minimum required: ${minAmount/LAMPORTS_PER_SOL} ${tokenSymbol}`;
 
   try {
-    if (user.discordId === interaction.user.id) {
-      // Send an ephemeral message to the initiating user
+    if (userId === interaction.user.id) {
       await interaction.followUp({
         content: message,
         ephemeral: true,
       });
     } else {
-      // Send a DM to other users
-      const userDiscord = await interaction.client.users.fetch(user.discordId);
+      const userDiscord = await interaction.client.users.fetch(userId);
       await userDiscord.send({
         content: message,
       });
@@ -668,8 +667,14 @@ async function calculateUserContributions(
   outputTokenInfo: any,
   interaction: CommandInteraction
 ): Promise<UserContribution[]> {
-  console.log('Calculating user contributions:', { connectedWallets, initiatingEntryAmounts, selectionIndex });
+  console.log('Calculating user contributions:', { 
+    connectedWallets, 
+    initiatingEntryAmounts, 
+    selectionIndex 
+  });
+  
   const userContributions: UserContribution[] = [];
+  const insufficientUsers: { userId: string; walletAddress: string }[] = [];
 
   for (const walletInfo of connectedWallets) {
     const { user, wallet } = walletInfo;
@@ -677,49 +682,58 @@ async function calculateUserContributions(
 
     if (!walletPublicKey) {
       console.error(`User ${user.discordId} does not have a valid wallet address.`);
-      // Optionally notify the user
-      continue; // Skip this user
+      continue;
     }
 
-    // Fetch the user's settings with the correct order of precedence
+    // Get user's settings
     const walletSettings = wallet.settings;
     const primaryPreset = user.primaryPresetId
       ? user.presets.find((p: any) => p._id.toString() === user.primaryPresetId.toString())
       : null;
     const userSettings = walletSettings || (primaryPreset ? primaryPreset.settings : null) || user.settings || defaultSettings;
 
-    // Map selection index to user's settings
-    const userAmount = mapSelectionToUserSettings(
+    // Map selection index to user's settings and convert to lamports
+    const userAmountSOL = mapSelectionToUserSettings(
       userSettings.entryAmounts || defaultSettings.entryAmounts,
       selectionIndex as number
     );
+    const userAmountLamports = Math.floor(userAmountSOL * LAMPORTS_PER_SOL);
 
     // Get user's token balance
     const { balance: walletBalance } = await getTokenBalance(walletPublicKey, inputTokenInfo.address);
+    const contributionAmount = Math.min(userAmountLamports, walletBalance);
 
-    const { balance: tokenBalance } = await getTokenBalance(walletPublicKey, inputTokenInfo.
-      address);
-    const contributionAmount = Math.min(userAmount, walletBalance);
-
-    if (contributionAmount <= 0 || tokenBalance < contributionAmount) {
-      console.log(`User ${user.discordId} has insufficient balance for contribution.`);
-      continue; // Skip users with zero contribution
+    // Check minimum amount
+    if (contributionAmount < MIN_AMOUNT_LAMPORTS) {
+      console.log(`User ${user.discordId} contribution (${contributionAmount}) is below minimum (${MIN_AMOUNT_LAMPORTS})`);
+      insufficientUsers.push({
+        userId: user.discordId,
+        walletAddress: walletPublicKey
+      });
+      continue;
     }
 
-    // Convert wallet balance from lamports to SOL
-    const walletBalanceSOL = walletBalance / LAMPORTS_PER_SOL;
-
-    // Determine the contribution amount in SOL
-    const contributionAmountSOL = Math.min(userAmount, walletBalanceSOL);
-
-    // Convert contribution amount to lamports (smallest unit)
-    const contributionAmountLamports = Math.floor(contributionAmountSOL * LAMPORTS_PER_SOL);
+    if (contributionAmount <= 0 || walletBalance < contributionAmount) {
+      console.log(`User ${user.discordId} has insufficient balance for contribution.`);
+      continue;
+    }
 
     userContributions.push({
       userId: user.discordId,
       walletAddress: walletPublicKey,
-      contributionAmount: contributionAmountLamports,
+      contributionAmount,
     });
+  }
+
+  // Notify users with insufficient amounts
+  for (const user of insufficientUsers) {
+    await notifyUserInsufficientBalance(
+      user.userId,
+      user.walletAddress,
+      inputTokenInfo.symbol,
+      interaction,
+      MIN_AMOUNT_LAMPORTS
+    );
   }
 
   return userContributions;
@@ -752,17 +766,20 @@ async function transferFundsToPool(
       const userPubkey = new PublicKey(walletAddress);
       const poolPubkey = new PublicKey(poolingWalletAddress);
       
+      // Ensure contributionAmount is an integer
+      const lamports = Math.floor(contributionAmount);
+      
       // Get current balance
       const userBalance = await connection.getBalance(userPubkey);
       
-      if (userBalance < contributionAmount) {
-        console.error(`Insufficient balance for user ${userId}. Has ${userBalance}, needs ${contributionAmount}`);
+      if (userBalance < lamports) {
+        console.error(`Insufficient balance for user ${userId}. Has ${userBalance}, needs ${lamports}`);
         contribution.error = 'Insufficient balance';
         continue;
       }
 
       // Calculate remaining balance (leave some for fees)
-      const remainingBalance = userBalance - contributionAmount - 5000;
+      const remainingBalance = userBalance - lamports - 5000;
       
       if (remainingBalance < 0) {
         console.error(`Insufficient balance for fees`);
@@ -770,15 +787,14 @@ async function transferFundsToPool(
         continue;
       }
 
-      // Create atomic transaction
+      // Create transaction
       const transaction = new Transaction();
       
-      // Add instruction to send contribution to pool
       transaction.add(
         SystemProgram.transfer({
           fromPubkey: userPubkey,
           toPubkey: poolPubkey,
-          lamports: contributionAmount
+          lamports
         })
       );
 
@@ -854,57 +870,83 @@ export async function executePoolSwap(
   const maxRetries = 3;
   let attempt = 0;
   let lastSignature: string | null = null;
+  const MIN_AMOUNT_LAMPORTS = 2500; // 0.0000025 SOL minimum
+
+  if (totalInputAmount < MIN_AMOUNT_LAMPORTS) {
+    throw new Error(`Amount too small. Minimum amount is ${MIN_AMOUNT_LAMPORTS} lamports`);
+  }
 
   while (attempt < maxRetries) {
     try {
-      // If we have a previous signature, check if it was confirmed
+      // Check previous signature if exists
       if (lastSignature) {
         const connection = await getConnection();
         try {
           const status = await connection.getSignatureStatus(lastSignature);
           if (status?.value?.confirmationStatus === 'confirmed') {
-            return lastSignature; // Transaction was actually successful
+            return lastSignature;
           }
         } catch (error) {
           console.log('Previous transaction definitely failed, proceeding with retry');
         }
       }
 
-      const quoteData = await getQuote(
-        inputTokenAddress,
-        outputTokenAddress,
-        totalInputAmount,
-        settings.slippageType === 'fixed'
-          ? { type: 'fixed', value: settings.slippage }
-          : { type: 'dynamic' }
-      );
+      // Try different route types if one fails
+      const routeTypes = ['JUPITER_V6', 'RAYDIUM_V4', 'ORCA_WHIRLPOOL'];
+      let quoteData;
+      let lastQuoteError;
+
+      for (const routeType of routeTypes) {
+        try {
+          quoteData = await getQuote(
+            inputTokenAddress,
+            outputTokenAddress,
+            totalInputAmount,
+            settings.slippageType === 'fixed'
+              ? { type: 'fixed', value: settings.slippage * 2 } // Double slippage for pool swaps
+              : { type: 'dynamic', maxBps: settings.slippage * 2 }
+          );
+          if (quoteData && quoteData.outAmount) break;
+        } catch (error) {
+          console.log(`Quote attempt with ${routeType} failed:`, error);
+          lastQuoteError = error;
+          continue;
+        }
+      }
 
       if (!quoteData || !quoteData.outAmount) {
-        throw new Error('Failed to get swap quote');
+        throw lastQuoteError || new Error('Failed to get swap quote');
       }
 
       const swapData = await getSwapTransaction(
         quoteData,
         poolingWalletKeypair.publicKey.toBase58(),
-        settings
+        {
+          ...settings,
+          slippageType: 'fixed',  // Force fixed slippage for pool swaps
+          slippage: settings.slippage * 2
+        }
       );
 
-      const response = await axios.post(`${API_BASE_URL}/sign-and-send-pooling-wallet`, {
-        serializedTransaction: swapData.swapTransaction,
-        priority: 'high'
+      const uniqueJobId = `pool-swap-${attempt}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      const response = await limiter.schedule({ id: uniqueJobId }, async () => {
+        return axios.post(`${API_BASE_URL}/sign-and-send-pooling-wallet`, {
+          serializedTransaction: swapData.swapTransaction,
+          priority: 'high'
+        });
       });
 
       if (response.status === 200) {
         lastSignature = response.data.signature;
         
-        // Wait for confirmation with shorter timeout
         const connection = await getConnection();
         try {
-          await confirmTransactionWithRetry(connection, lastSignature, 'confirmed', 5, 500);
+          await confirmTransactionWithRetry(connection, lastSignature, 'confirmed', 10, 1000);
           return lastSignature;
         } catch (confirmError) {
           if (confirmError.message?.includes('block height exceeded')) {
             attempt++;
+            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
             continue;
           }
           throw confirmError;
@@ -915,7 +957,13 @@ export async function executePoolSwap(
       
       if (error.message?.includes('block height exceeded') && attempt < maxRetries - 1) {
         attempt++;
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+        continue;
+      }
+      
+      if (attempt < maxRetries - 1) {
+        attempt++;
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
         continue;
       }
       throw error;
@@ -1286,6 +1334,12 @@ async function getTokenAccount(walletAddress: string, tokenMintAddress: string) 
   );
   return tokenAccount.address;
 }
+
+
+
+
+
+
 
 
 

@@ -101,6 +101,7 @@ app.post('/sign-and-send-pooling-wallet', async (req, res) => {
     const { serializedTransaction } = req.body;
     let attempt = 0;
     const maxRetries = 3;
+    let lastError;
     
     while (attempt < maxRetries) {
       try {
@@ -109,6 +110,7 @@ app.post('/sign-and-send-pooling-wallet', async (req, res) => {
         );
 
         const conn = await ensureConnection();
+        // Get fresh blockhash for each attempt
         const { blockhash } = await conn.getLatestBlockhash('confirmed');
         transaction.message.recentBlockhash = blockhash;
 
@@ -120,27 +122,32 @@ app.post('/sign-and-send-pooling-wallet', async (req, res) => {
           preflightCommitment: 'processed'
         });
 
-        // Use shorter confirmation timeout
+        // Increased confirmation timeout for larger amounts
+        const confirmationTimeout = 10000; // 10 seconds
         try {
-          await confirmTransactionWithRetry(conn, signature, 'confirmed', 5, 500);
+          await confirmTransactionWithRetry(conn, signature, 'confirmed', 10, confirmationTimeout);
           console.log('Pooling wallet transaction confirmed. Signature:', signature);
           return res.status(200).json({ signature });
         } catch (confirmError) {
+          lastError = confirmError;
           if (confirmError.message?.includes('block height exceeded') && attempt < maxRetries - 1) {
             attempt++;
+            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
             continue;
           }
           throw confirmError;
         }
       } catch (error) {
+        lastError = error;
         if (attempt < maxRetries - 1) {
           attempt++;
-          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
           continue;
         }
         throw error;
       }
     }
+    throw lastError;
   } catch (error) {
     console.error('Error in /sign-and-send-pooling-wallet:', error);
     res.status(500).json({ error: error.message });
