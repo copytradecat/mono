@@ -269,9 +269,14 @@ export async function getSwapTransaction(
     asLegacyTransaction: false,
     dynamicComputeUnitLimit: true,
     computeUnitPriceMicroLamports: settings.transactionSpeed === 'medium' ? 0 : "auto",
-    // prioritizationFeeLamports: settings.priorityFee === 'auto' ? 'auto' : settings.priorityFee * LAMPORTS_PER_SOL,
-    ...(settings.slippageType === 'dynamic' && {dynamicSlippage: {maxBps: 300}}),
-    ...(settings.slippageType === 'fixed' && {slippageBps: settings.slippage}),
+    ...(settings.slippageType === 'dynamic' && {
+      dynamicSlippage: {
+        maxBps: settings.slippage || 300
+      }
+    }),
+    ...(settings.slippageType === 'fixed' && {
+      slippageBps: settings.slippage
+    }),
   };
 
   return await executeWithFallback(async (apiUrl) => {
@@ -286,7 +291,10 @@ export async function getSwapTransaction(
     if (!swapTransaction) {
       throw new Error('Failed to get swap transaction');
     }
-
+    console.log('Generated swap transaction:', {
+      swapTransaction: swapTransaction ? 'present' : 'missing',
+      length: swapTransaction ? JSON.stringify(swapTransaction).length : 0
+    });
     return swapTransaction;
   }, jupiterApiUrls);
 }

@@ -21,8 +21,17 @@ async function createMockData() {
         encryptedSecretData: 'mock_encrypted_data',
         secretType: 'seed',
         connectedChannels: ['1285735381328723968'],
-        settings: {}
-      }],
+        settings: {
+          slippage: 300,
+          slippageType: 'dynamic',
+          smartMevProtection: null,
+          transactionSpeed: 'auto',
+          priorityFee: 0,
+          entryAmounts: [0.000101, 0.000202, 0.000303, 0.000404, 0.000505],
+          exitPercentages: [],
+          wrapUnwrapSOL: false
+        }
+      }] as any, // Add type assertion here
       presets: [],
       referrals: []
     },
@@ -35,8 +44,17 @@ async function createMockData() {
         encryptedSecretData: 'mock_encrypted_data',
         secretType: 'seed',
         connectedChannels: ['1285735381328723968'],
-        settings: {}
-      }],
+        settings: {
+          slippage: 300,
+          slippageType: 'dynamic',
+          smartMevProtection: null,
+          transactionSpeed: 'auto',
+          priorityFee: 0,
+          entryAmounts: [0.0000111, 0.0000222, 0.0000333, 0.0000444, 0.0000555],
+          exitPercentages: [],
+          wrapUnwrapSOL: false
+        }
+      }] as any, // Add type assertion here
       presets: [],
       referrals: []
     }

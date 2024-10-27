@@ -81,11 +81,13 @@ app.post('/sign-and-send', async (req, res) => {
         res.status(200).json({ signature });
       } catch (confirmError) {
         console.error('Transaction confirmation failed:', confirmError);
-        res.status(202).json({ 
-          signature, 
-          status: 'unconfirmed', 
-          message: 'Transaction sent but not confirmed. Please check the signature.'
-        });
+        // Check if transaction actually succeeded despite timeout
+        const status = await conn.getSignatureStatus(signature);
+        if (status?.value?.confirmationStatus === 'confirmed') {
+          res.status(200).json({ signature });
+        } else {
+          throw confirmError;
+        }
       }
     });
   } catch (error) {
@@ -97,27 +99,48 @@ app.post('/sign-and-send', async (req, res) => {
 app.post('/sign-and-send-pooling-wallet', async (req, res) => {
   try {
     const { serializedTransaction } = req.body;
-    const transaction = VersionedTransaction.deserialize(Buffer.from(serializedTransaction, 'base64'));
+    let attempt = 0;
+    const maxRetries = 3;
+    
+    while (attempt < maxRetries) {
+      try {
+        const transaction = VersionedTransaction.deserialize(
+          Buffer.from(serializedTransaction, 'base64')
+        );
 
-    // Set the recent blockhash and fee payer if not already set
-    if (!transaction.recentBlockhash) {
-      transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+        const conn = await ensureConnection();
+        const { blockhash } = await conn.getLatestBlockhash('confirmed');
+        transaction.message.recentBlockhash = blockhash;
+
+        transaction.sign([poolingWalletKeypair]);
+
+        const signature = await conn.sendTransaction(transaction, {
+          maxRetries: 3,
+          skipPreflight: false,
+          preflightCommitment: 'processed'
+        });
+
+        // Use shorter confirmation timeout
+        try {
+          await confirmTransactionWithRetry(conn, signature, 'confirmed', 5, 500);
+          console.log('Pooling wallet transaction confirmed. Signature:', signature);
+          return res.status(200).json({ signature });
+        } catch (confirmError) {
+          if (confirmError.message?.includes('block height exceeded') && attempt < maxRetries - 1) {
+            attempt++;
+            continue;
+          }
+          throw confirmError;
+        }
+      } catch (error) {
+        if (attempt < maxRetries - 1) {
+          attempt++;
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+          continue;
+        }
+        throw error;
+      }
     }
-    if (!transaction.feePayer) {
-      transaction.feePayer = poolingWalletKeypair.publicKey;
-    }
-
-    transaction.sign([poolingWalletKeypair]);
-    const conn = await ensureConnection();
-
-    const signature = await conn.sendTransaction(transaction);
-    console.log('Pooling wallet transaction sent. Signature:', signature);
-
-    // Optionally confirm the transaction
-    await conn.confirmTransaction(signature, 'confirmed');
-    console.log('Pooling wallet transaction confirmed. Signature:', signature);
-
-    res.status(200).json({ signature });
   } catch (error) {
     console.error('Error in /sign-and-send-pooling-wallet:', error);
     res.status(500).json({ error: error.message });

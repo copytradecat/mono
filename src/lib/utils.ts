@@ -115,11 +115,10 @@ export async function getConnection(): Promise<Connection> {
   for (const url of shuffledUrls) {
     try {
       const connection = new Connection(url, 'confirmed');
-      // Test the connection if necessary
+      await connection.getLatestBlockhash();
       return connection;
     } catch (error) {
       console.warn(`Failed to connect to RPC endpoint ${url}: ${error.message}`);
-      // Try the next URL
     }
   }
   throw new Error('All RPC endpoints failed.');
@@ -128,4 +127,14 @@ export async function getConnection(): Promise<Connection> {
 export function formatNumber(num: number, maxDecimals: number = 6): string {
   const fixed = num.toFixed(maxDecimals);
   return parseFloat(fixed).toString();
+}
+
+export async function checkRPCHealth(connection: Connection): Promise<boolean> {
+  try {
+    await connection.getLatestBlockhash();
+    return true;
+  } catch (error) {
+    console.error('RPC health check failed:', error);
+    return false;
+  }
 }

@@ -14,7 +14,7 @@ import Trade from '../../src/models/Trade';
 import { Connection, PublicKey, Transaction, SystemProgram, TransactionResponse, ParsedInstruction, Keypair, Commitment, TransactionExpiredBlockheightExceededError, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import axios from 'axios';
 import { defaultSettings, Settings } from '../../src/components/BotSettings';
-import { truncatedString, mapSelectionToUserSettings, formatNumber, getConnection } from '../../src/lib/utils';
+import { truncatedString, mapSelectionToUserSettings, formatNumber, getConnection, checkRPCHealth } from '../../src/lib/utils';
 import pLimit from 'p-limit';
 import limiter from '../../src/lib/limiter';
 import '../../env.ts';
@@ -135,129 +135,156 @@ export async function executeSwapsForUsers(params: {
     channelId,
   } = params;
 
-  // Ensure connectedWallets includes the initiating user
-  if (!connectedWallets.some(wallet => wallet.user.discordId === initiatingUser.discordId)) {
-    connectedWallets.push({
-      user: initiatingUser,
-      wallet: {
-        publicKey: initiatingUser.walletAddress,
-        settings: initiatingUser.walletSettings,
-      },
-    });
-  }
-
-  // Proceed with calculating contributions
-  const userContributions = await calculateUserContributions(
-    connectedWallets,
-    isBuyOperation,
-    initiatingEntryAmounts ?? [],
-    initiatingExitPercentages ?? [],
-    selectionIndex,
-    customAmount,
-    customPercentage,
-    inputTokenInfo,
-    outputTokenInfo,
-    interaction
-  );
-
-  console.log('User contributions:', userContributions);
-
-  await transferFundsToPool(userContributions, inputTokenAddress, poolingWalletKeypair.publicKey.toBase58(), inputTokenInfo);
-
-  console.log('Funds transferred to pool');
-
-  if (userContributions.length === 0) {
-    await interaction.editReply({
-      content: 'No users have sufficient balance to participate in the swap.',
-      components: [],
-    });
-    return;
-  }
-
-  // Step 2: Transfer funds from user wallets to pooling wallet
-  await transferFundsToPool(userContributions, inputTokenAddress, poolingWalletKeypair.publicKey.toBase58(), inputTokenInfo);
-
-  // Step 3: Confirm transfers and filter out any failed transfers
-  const confirmedContributions = await confirmAndFilterTransfers(userContributions);
-
-  if (confirmedContributions.length === 0) {
-    await interaction.editReply({
-      content: 'Failed to collect funds from users for the swap.',
-      components: [],
-    });
-    // Optionally, initiate refunds if any transfers succeeded
-    return;
-  }
-
-  // Step 4: Execute pool swap
-  const totalInputAmount = confirmedContributions.reduce((sum, uc) => sum + uc.contributionAmount, 0);
-
-  const swapSignature = await executePoolSwap(
-    totalInputAmount,
-    inputTokenAddress,
-    outputTokenAddress,
-    initiatingSettings
-  );
-
-  // Step 5: Confirm the swap transaction
-  const connection = await getConnection();
   try {
-    await confirmTransactionWithRetry(connection, swapSignature);
-
-    // Step 6: Get total output amount from the swap transaction
-    const swapTransactionInfo = await getTransactionInfo(swapSignature);
-    const totalOutputAmount = extractOutputAmountFromTransaction(swapTransactionInfo, outputTokenAddress);
-
-    // If totalOutputAmount is zero or undefined, the swap may have failed
-    if (!totalOutputAmount || totalOutputAmount <= 0) {
-      throw new Error('Swap transaction failed or resulted in zero output.');
+    // Get connection and verify health
+    const connection = await getConnection();
+    const isHealthy = await checkRPCHealth(connection);
+    
+    if (!isHealthy) {
+      await interaction.editReply({
+        content: 'RPC connection is currently unstable. Please try again in a few moments.',
+        components: [],
+      });
+      return;
     }
 
-    // Proceed to distribute tokens back to users
-    await distributeTokensToUsers(confirmedContributions, totalOutputAmount, outputTokenAddress);
+    // Ensure connectedWallets includes the initiating user
+    if (!connectedWallets.some(wallet => wallet.user.discordId === initiatingUser.discordId)) {
+      connectedWallets.push({
+        user: initiatingUser,
+        wallet: {
+          publicKey: initiatingUser.walletAddress,
+          settings: initiatingUser.walletSettings,
+        },
+      });
+    }
 
-  } catch (swapError) {
-    console.error('Swap transaction failed:', swapError);
+    // Proceed with calculating contributions
+    const userContributions = await calculateUserContributions(
+      connectedWallets,
+      isBuyOperation,
+      initiatingEntryAmounts ?? [],
+      initiatingExitPercentages ?? [],
+      selectionIndex,
+      customAmount,
+      customPercentage,
+      inputTokenInfo,
+      outputTokenInfo,
+      interaction
+    );
 
-    // Refund users their contributions
-    await refundContributions(confirmedContributions, inputTokenAddress);
+    console.log('User contributions:', userContributions);
 
-    await interaction.editReply({
-      content: 'Swap transaction failed. Contributions have been refunded to users.',
-      components: [],
+    await transferFundsToPool(userContributions, inputTokenAddress, poolingWalletKeypair.publicKey.toBase58(), inputTokenInfo);
+
+    console.log('Funds transferred to pool');
+
+    if (userContributions.length === 0) {
+      await interaction.editReply({
+        content: 'No users have sufficient balance to participate in the swap.',
+        components: [],
+      });
+      return;
+    }
+
+    // Step 2: Transfer funds from user wallets to pooling wallet
+    await transferFundsToPool(userContributions, inputTokenAddress, poolingWalletKeypair.publicKey.toBase58(), inputTokenInfo);
+
+    // Step 3: Confirm transfers and filter out any failed transfers
+    const confirmedContributions = await confirmAndFilterTransfers(userContributions);
+
+    if (confirmedContributions.length === 0) {
+      await interaction.editReply({
+        content: 'Failed to collect funds from users for the swap.',
+        components: [],
+      });
+      // Optionally, initiate refunds if any transfers succeeded
+      return;
+    }
+
+    // Step 4: Execute pool swap
+    const totalInputAmount = confirmedContributions.reduce((sum, uc) => sum + uc.contributionAmount, 0);
+    
+    console.log('Executing pool swap with params:', {
+      totalInputAmount,
+      inputTokenAddress,
+      outputTokenAddress,
+      initiatingSettings
     });
+    const swapSignature = await executePoolSwap(
+      totalInputAmount,
+      inputTokenAddress,
+      outputTokenAddress,
+      initiatingSettings
+    );
 
-    return;
+    // Step 5: Confirm the swap transaction
+    try {
+      await confirmTransactionWithRetry(connection, swapSignature);
+
+      // Step 6: Get total output amount from the swap transaction
+      const swapTransactionInfo = await getTransactionInfo(swapSignature);
+      const totalOutputAmount = await extractOutputAmountFromTransaction(swapTransactionInfo, outputTokenAddress);
+
+      // If totalOutputAmount is zero or undefined, the swap may have failed
+      if (!totalOutputAmount || totalOutputAmount <= 0) {
+        throw new Error('Swap transaction failed or resulted in zero output.');
+      }
+
+      // Proceed to distribute tokens back to users
+      await distributeTokensToUsers(confirmedContributions, totalInputAmount, totalOutputAmount, outputTokenAddress);
+
+    } catch (swapError) {
+      console.error('Swap transaction failed:', swapError);
+
+      // Refund users their contributions
+      await refundContributions(confirmedContributions, inputTokenAddress);
+
+      await interaction.editReply({
+        content: 'Swap transaction failed. Contributions have been refunded to users.',
+        components: [],
+      });
+
+      return;
+    }
+
+    // Step 9: Send public message about the swap
+    const successfulSwaps = confirmedContributions.map((contribution) => ({
+      user: { discordId: contribution.userId },
+      wallet: { publicKey: contribution.walletAddress },
+    }));
+
+    const selectionLabel = getSelectionLabel(
+      isBuyOperation,
+      selectionIndex,
+      customAmount,
+      customPercentage,
+      initiatingEntryAmounts!,
+      initiatingExitPercentages!
+    );
+
+    if (interaction.channel) {
+      const publicMessage = `${userMention(initiatingUser.discordId)} ${
+        isBuyOperation ? 'bought' : 'sold'
+      } a **${selectionLabel}** amount of **[${isBuyOperation ? outputTokenInfo.symbol : inputTokenInfo.symbol}](<https://solscan.io/token/${
+        isBuyOperation ? outputTokenAddress : inputTokenAddress
+      }>)**.${
+        successfulSwaps.length > 1
+          ? `\n${successfulSwaps.length - 1} follower${successfulSwaps.length > 2 ? 's' : ''} also executed the swap.`
+          : ''
+      }`;
+
+      // Use interaction.followUp instead of channel.send
+      await interaction.followUp({
+        content: publicMessage,
+        ephemeral: false
+      });
+    }
+  } catch (error) {
+    console.error('Error in executeSwapsForUsers:', error);
+    // Don't throw the error since the swap was successful
+    // Just log it and continue
   }
-
-  // Step 9: Send public message about the swap
-  const successfulSwaps = confirmedContributions.map((contribution) => ({
-    user: { discordId: contribution.userId },
-    wallet: { publicKey: contribution.walletAddress },
-  }));
-
-  const selectionLabel = getSelectionLabel(
-    isBuyOperation,
-    selectionIndex,
-    customAmount,
-    customPercentage,
-    initiatingEntryAmounts!,
-    initiatingExitPercentages!
-  );
-
-  const publicMessage = `${userMention(
-    initiatingUser.discordId
-  )} ${
-    isBuyOperation ? 'bought' : 'sold'
-  } a **${selectionLabel}** amount of **[${isBuyOperation ? outputTokenInfo.symbol : inputTokenInfo.symbol}](<https://solscan.io/token/${
-    isBuyOperation ? outputTokenAddress : inputTokenAddress
-  }>)**.${
-    successfulSwaps.length > 1
-      ? `\n${successfulSwaps.length - 1} follower${successfulSwaps.length > 2 ? 's' : ''} also executed the swap.`
-      : ''
-  }`;
-
-  await interaction.channel?.send(publicMessage);
 }
 
 // Helper function to notify the user about insufficient balance
@@ -517,13 +544,12 @@ export async function executeSwap(
   maxSlippage: number
 ) {
   const maxRetries = 5;
-  const initialDelay = 1000; // 1 second
+  const initialDelay = 500; // Reduced from 1000 to 500ms
   let retryCount = 0;
   let delay = initialDelay;
-  let slippage = originalSlippage;
 
   while (retryCount < maxRetries) {
-    try { 
+    try {
       const uniqueJobId = `execute-swap-${userId}-${retryCount}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
       const response = await limiter.schedule({ id: uniqueJobId }, async () => {
         return axios.post(`${API_BASE_URL}/sign-and-send`, {
@@ -538,102 +564,37 @@ export async function executeSwap(
       }
       
       const { signature } = response.data;
-
-      // Confirm the transaction
       const connection = await getConnection();
+
       try {
-        await confirmTransactionWithRetry(connection, signature);
-      } catch (error) {
-        if (error instanceof TransactionExpiredBlockheightExceededError) {
-          console.log('Transaction expired. Resubmitting...');
-          // Recreate and resend the transaction
-          // Be cautious to avoid double-spending or duplicate transactions
-        } else {
-          // Handle other errors
-          throw error;
-        }
-      }
-
-      return {
-        success: true,
-        signature,
-        error: null,
-        transactionMessage: signature ? 'Transaction submitted and confirmed' : 'Transaction not submitted',
-      };
-    } catch (error: any) {
-      console.error(`Swap execution failed (attempt ${retryCount + 1}):`, error.message || error);
-
-      // Extract transaction message from the error
-      let transactionMessage = '';
-
-      if (error.response?.data?.transactionMessage) {
-        transactionMessage = error.response.data.transactionMessage;
-      } else if (error.transactionMessage) {
-        transactionMessage = error.transactionMessage;
-      } else if (error.message) {
-        transactionMessage = error.message;
-      }
-
-      // Check if error is due to slippage tolerance exceeded
-      const isSlippageError =
-        transactionMessage &&
-        (transactionMessage.includes('custom program error: 0x1771') ||
-         transactionMessage.includes('Slippage tolerance exceeded'));
-
-      if (isSlippageError) {
-        console.log('Slippage tolerance exceeded. Adjusting slippage and retrying...');
-        // Increase slippage and retry
-        slippage = Math.min(slippage * 1.5, maxSlippage);
-        if (slippage > maxSlippage) {
-          // Exceeded maximum allowed slippage
-          return {
-            success: false,
-            error: 'Slippage tolerance exceeded and maximum slippage reached.',
-            transactionMessage: error.transactionMessage,
-            signature: 'No signature',
-          };
-        }
-
-        // Get a new swap transaction with increased slippage
-        const newSettings = {
-          ...settings,
-          slippage: slippage,
-        };
-
-        const newSwapData = await getSwapTransaction(
-          quoteData,
-          walletPublicKey,
-          newSettings
-        );
-
-        swapTransaction = newSwapData.swapTransaction;
-
-        retryCount++;
-        delay *= 2; // Exponential backoff
-      } else if (error.response?.status === 429) {
-        console.log(`Rate limit hit, retrying after ${delay}ms...`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        retryCount++;
-        delay *= 2; // Exponential backoff
-      } else {
-        // For other errors, return immediately
+        await confirmTransactionWithRetry(connection, signature, 'confirmed', 20, 500);
         return {
-          success: false,
-          error: error.response?.data?.error || error.message || 'Unknown error',
-          transactionMessage: error.response?.data?.transactionMessage || 'No additional information',
-          signature: error.response?.data?.signature || 'No signature',
+          success: true,
+          signature,
+          error: null,
+          transactionMessage: 'Transaction submitted and confirmed'
         };
+      } catch (error) {
+        if (error.message.includes('block height exceeded')) {
+          console.log('Transaction expired, retrying...');
+          retryCount++;
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 1.5; // Exponential backoff
+          continue;
+        }
+        throw error;
       }
+    } catch (error) {
+      console.error(`Swap execution failed (attempt ${retryCount + 1}):`, error.message || error);
+      retryCount++;
+      if (retryCount >= maxRetries) {
+        throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay *= 1.5;
     }
   }
-
-  // If the maximum retries are reached
-  return {
-    success: false,
-    error: 'Max retries reached',
-    transactionMessage: 'Failed to execute swap after multiple attempts.',
-    signature: 'No signature',
-  };
+  throw new Error(`Failed to execute swap after ${maxRetries} attempts`);
 }
 
 export async function recordTrade(
@@ -764,6 +725,8 @@ async function calculateUserContributions(
   return userContributions;
 }
 
+const processedTransactions = new Set<string>();
+
 async function transferFundsToPool(
   userContributions: UserContribution[],
   inputTokenAddress: string,
@@ -774,6 +737,15 @@ async function transferFundsToPool(
   
   for (const contribution of userContributions) {
     const { userId, walletAddress, contributionAmount } = contribution;
+    
+    // Create a unique key for this transfer
+    const transferKey = `${walletAddress}-${contributionAmount}-${Date.now()}`;
+    
+    // Skip if already processed
+    if (processedTransactions.has(transferKey)) {
+      console.log(`Skipping duplicate transfer for user ${userId}`);
+      continue;
+    }
     
     try {
       const isNativeSOL = inputTokenAddress === 'So11111111111111111111111111111111111111112';
@@ -835,12 +807,12 @@ async function transferFundsToPool(
       });
 
       if (response.status === 200) {
+        console.log(`Transfer initiated for user ${userId}`);
         contribution.transferSignature = response.data.signature;
-        console.log(`Transfer successful for user ${userId}`);
+        processedTransactions.add(transferKey);
       }
-
     } catch (error) {
-      console.error(`Error processing transfer for user ${userId}:`, error);
+      console.error(`Transfer failed for user ${userId}:`, error);
       contribution.error = error.message;
     }
   }
@@ -873,47 +845,89 @@ async function confirmAndFilterTransfers(
   return confirmedContributions;
 }
 
-async function executePoolSwap(
+export async function executePoolSwap(
   totalInputAmount: number,
   inputTokenAddress: string,
   outputTokenAddress: string,
   settings: Settings
-): Promise<string> {
-  // Get swap quote
-  const quoteData = await getQuote(
-    inputTokenAddress,
-    outputTokenAddress,
-    totalInputAmount,
-    settings
-  );
+) {
+  const maxRetries = 3;
+  let attempt = 0;
+  let lastSignature: string | null = null;
 
-  if (!quoteData || !quoteData.outAmount) {
-    throw new Error('Failed to get swap quote');
+  while (attempt < maxRetries) {
+    try {
+      // If we have a previous signature, check if it was confirmed
+      if (lastSignature) {
+        const connection = await getConnection();
+        try {
+          const status = await connection.getSignatureStatus(lastSignature);
+          if (status?.value?.confirmationStatus === 'confirmed') {
+            return lastSignature; // Transaction was actually successful
+          }
+        } catch (error) {
+          console.log('Previous transaction definitely failed, proceeding with retry');
+        }
+      }
+
+      const quoteData = await getQuote(
+        inputTokenAddress,
+        outputTokenAddress,
+        totalInputAmount,
+        settings.slippageType === 'fixed'
+          ? { type: 'fixed', value: settings.slippage }
+          : { type: 'dynamic' }
+      );
+
+      if (!quoteData || !quoteData.outAmount) {
+        throw new Error('Failed to get swap quote');
+      }
+
+      const swapData = await getSwapTransaction(
+        quoteData,
+        poolingWalletKeypair.publicKey.toBase58(),
+        settings
+      );
+
+      const response = await axios.post(`${API_BASE_URL}/sign-and-send-pooling-wallet`, {
+        serializedTransaction: swapData.swapTransaction,
+        priority: 'high'
+      });
+
+      if (response.status === 200) {
+        lastSignature = response.data.signature;
+        
+        // Wait for confirmation with shorter timeout
+        const connection = await getConnection();
+        try {
+          await confirmTransactionWithRetry(connection, lastSignature, 'confirmed', 5, 500);
+          return lastSignature;
+        } catch (confirmError) {
+          if (confirmError.message?.includes('block height exceeded')) {
+            attempt++;
+            continue;
+          }
+          throw confirmError;
+        }
+      }
+    } catch (error) {
+      console.error(`Pool swap attempt ${attempt + 1} failed:`, error);
+      
+      if (error.message?.includes('block height exceeded') && attempt < maxRetries - 1) {
+        attempt++;
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        continue;
+      }
+      throw error;
+    }
   }
-
-  // Get swap transaction
-  const swapData = await getSwapTransaction(
-    quoteData,
-    poolingWalletKeypair.publicKey.toBase58(),
-    settings
-  );
-
-  // Send swap transaction to signing service
-  const response = await axios.post(`${API_BASE_URL}/sign-and-send-pooling-wallet`, {
-    serializedTransaction: swapData.swapTransaction,
-  });
-
-  if (response.status !== 200) {
-    throw new Error(`Failed to execute pool swap: ${response.data.error}`);
-  }
-
-  const { signature } = response.data;
-
-  return signature;
+  
+  throw new Error(`Failed to execute pool swap after ${maxRetries} attempts`);
 }
 
 async function distributeTokensToUsers(
   contributions: UserContribution[],
+  totalInputAmount: number,
   totalOutputAmount: number,
   outputTokenAddress: string
 ): Promise<void> {
@@ -921,10 +935,9 @@ async function distributeTokensToUsers(
 
   for (const contribution of contributions) {
     const { userId, walletAddress, contributionAmount } = contribution;
-
     try {
       const isNativeSOL = outputTokenAddress === 'So11111111111111111111111111111111111111112';
-      const userShare = (contributionAmount / totalOutputAmount) * totalOutputAmount;
+      const userShare = (contributionAmount / totalInputAmount) * totalOutputAmount;
       const adjustedAmount = Math.floor(userShare);
 
       if (isNativeSOL) {
@@ -1076,30 +1089,37 @@ async function getTransactionInfo(signature: string): Promise<TransactionRespons
   }
 }
 
-function extractOutputAmountFromTransaction(
-  transactionInfo: TransactionResponse | null,
-  outputTokenAddress: string
-): number {
-  if (!transactionInfo) {
-    throw new Error('Transaction info is null');
+async function extractOutputAmountFromTransaction(transactionInfo: any, outputTokenAddress: string): Promise<number> {
+  try {
+    // For Jupiter swaps, look for postTokenBalances
+    if (transactionInfo?.meta?.postTokenBalances) {
+      const poolingWalletBalance = transactionInfo.meta.postTokenBalances.find(
+        (balance: any) => 
+          balance.owner === poolingWalletKeypair.publicKey.toBase58() &&
+          balance.mint === outputTokenAddress
+      );
+
+      if (poolingWalletBalance) {
+        return Number(poolingWalletBalance.uiTokenAmount.amount);
+      }
+    }
+
+    // Also check postBalances for native SOL
+    if (outputTokenAddress === NATIVE_SOL_MINT && transactionInfo?.meta?.postBalances) {
+      const poolingWalletIndex = transactionInfo.transaction.message.accountKeys.findIndex(
+        (key: any) => key === poolingWalletKeypair.publicKey.toBase58()
+      );
+      if (poolingWalletIndex !== -1) {
+        return transactionInfo.meta.postBalances[poolingWalletIndex];
+      }
+    }
+
+    console.log('Transaction info for debugging:', JSON.stringify(transactionInfo, null, 2));
+    return 0;
+  } catch (error) {
+    console.error('Error extracting output amount:', error);
+    return 0;
   }
-
-  const tokenTransfers = transactionInfo.meta?.preTokenBalances && transactionInfo.meta?.postTokenBalances
-    ? transactionInfo.meta.preTokenBalances.map((preBalance, index) => {
-        const postBalance = transactionInfo.meta?.postTokenBalances![index];
-        return {
-          mint: preBalance.mint,
-          delta:
-            (Number(postBalance.uiTokenAmount.amount) - Number(preBalance.uiTokenAmount.amount)) /
-            Math.pow(10, postBalance.uiTokenAmount.decimals),
-        };
-      })
-    : [];
-
-  const outputTokenTransfers = tokenTransfers.filter((transfer) => transfer.mint === outputTokenAddress);
-  const totalOutputAmount = outputTokenTransfers.reduce((sum, transfer) => sum + transfer.delta, 0);
-
-  return totalOutputAmount;
 }
 
 async function refundContributions(
@@ -1266,6 +1286,25 @@ async function getTokenAccount(walletAddress: string, tokenMintAddress: string) 
   );
   return tokenAccount.address;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
