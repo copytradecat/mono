@@ -1,12 +1,13 @@
-import { Client, ButtonInteraction, InteractionCollector } from 'discord.js';
+import { Client, ButtonInteraction, InteractionCollector,  CommandInteraction, CommandInteractionOptionResolver, CacheType } from 'discord.js';
+import { defaultSettings } from '../../src/config/defaultSettings';
 
-interface MockInteractionOptions {
+export interface MockInteractionOptions {
   mode: 'BUY' | 'SELL';
   tokenAddress: string;
   settings: any;
 }
 
-const mockUsers =[{
+const mockUsers = [{
   discordId: '889620302852661310',
   username: 'crosschainerd',
   email: 'human@bcc.pm',
@@ -15,17 +16,9 @@ const mockUsers =[{
     encryptedSecretData: 'mock_encrypted_data',
     secretType: 'seed',
     connectedChannels: ['1285735381328723968'],
-    settings: {
-      slippage: 300,
-      slippageType: 'dynamic',
-      smartMevProtection: null,
-      transactionSpeed: 'auto',
-      priorityFee: 0,
-      entryAmounts: [0.000101, 0.000202, 0.000303, 0.000404, 0.000505],
-      exitPercentages: [],
-      wrapUnwrapSOL: false
-    }
-  }] as any, // Add type assertion here
+    settings: defaultSettings
+  }],
+  settings: defaultSettings,  // Add user-level settings
   presets: [],
   referrals: []
 },
@@ -49,6 +42,7 @@ const mockUsers =[{
       wrapUnwrapSOL: false
     }
   }] as any, // Add type assertion here
+  settings: defaultSettings,
   presets: [],
   referrals: []
 }];
@@ -60,10 +54,14 @@ export const mockDatabase = {
   }
 };
 
-export function createMockInteraction(client: Client, options: MockInteractionOptions) {
+export function createMockInteraction(client: Client, options: MockInteractionOptions): CommandInteraction {
   const mockUser = mockUsers[0];
 
   // Mock the database functions
+  const mockDatabase = {
+    findOne: jest.fn().mockResolvedValue(mockUser)
+  };
+
   const UserAccount = {
     findOne: mockDatabase.findOne
   };
@@ -82,7 +80,6 @@ export function createMockInteraction(client: Client, options: MockInteractionOp
     }
 
     stop() {
-      // Trigger end event if registered
       const endCallback = this.callbacks.get('end');
       if (endCallback) {
         endCallback([], 'stop');
@@ -99,86 +96,103 @@ export function createMockInteraction(client: Client, options: MockInteractionOp
 
   const mockCollector = new MockCollector();
 
-  return {
+  const interaction = {
     commandName: 'ct',
     options: {
+      get: jest.fn().mockReturnValue({ value: options.tokenAddress }),
       getSubcommand: () => options.mode.toLowerCase(),
-      getString: (name: string) => {
-        if (options.mode === 'SELL') {
-          return options.tokenAddress;
-        }
-        return name === 'token' ? options.tokenAddress : 'So11111111111111111111111111111111111111112';
-      }
+      getString: jest.fn().mockReturnValue(options.tokenAddress),
+      data: [],
     },
     user: {
-      id: mockUser.discordId,  // Changed from mockUser.id
-      tag: mockUser.username   // Changed from mockUser.tag
+      id: mockUser.discordId,
     },
     channel: {
       id: '1285735381328723968',
       type: 'GUILD_TEXT',
-      createMessageComponentCollector: () => mockCollector,
-      createMessageCollector: () => mockCollector
+      createMessageComponentCollector: () => new MockCollector(),
+      createMessageCollector: () => mockCollector,
+      send: jest.fn().mockResolvedValue(undefined),
     },
     channelId: '1285735381328723968',
     guildId: '890801755938500678',
-    deferReply: async () => console.log('Interaction deferred'),
-    editReply: async (content: any) => console.log('Interaction editReply:', content),
-    reply: async (content: any) => console.log('Reply:', content),
-    followUp: async (content: any) => console.log('Interaction followUp:', content),
     isRepliable: () => true,
     isCommand: () => true,
     client,
-    UserAccount
-  };
+    UserAccount,
+    reply: jest.fn().mockResolvedValue(undefined),
+    editReply: jest.fn().mockResolvedValue(undefined),
+    deferReply: jest.fn().mockResolvedValue(undefined),
+    followUp: jest.fn().mockResolvedValue(undefined),
+  } as unknown as CommandInteraction;
+
+  return interaction;
 }
 
 export async function simulateButtonInteraction(
   collector: InteractionCollector<ButtonInteraction>,
-  buttonId: string
+  buttonId: string,
+  skipConfirmation: boolean = false
 ) {
   console.log(`Simulating button interaction: ${buttonId}`);
-  
-  const mockButtonInteraction = {
-    customId: buttonId,
-    isRepliable: () => true,
-    deferUpdate: async () => console.log('ButtonInteraction deferUpdate called'),
-    user: { id: '889620302852661310' },
-    message: {
-      interaction: { user: { id: '889620302852661310' } },
-      edit: async (content: any) => {
-        console.log('ButtonInteraction message.edit:', content);
-        return content;
-      },
-    },
-    editReply: async (content: any) => {
-      console.log('ButtonInteraction editReply:', content);
-      return content;
-    },
-    reply: async (content: any) => {
-      console.log('ButtonInteraction reply:', content);
-      return content;
-    },
-    followUp: async (content: any) => {
-      console.log('ButtonInteraction followUp:', content);
-      return content;
-    },
-  } as unknown as ButtonInteraction;
+  const mockButtonInteraction = createMockButtonInteraction(buttonId);
 
-  // Simulate the button click
+  // Simulate button click
   collector.emit('collect', mockButtonInteraction);
+  await new Promise(resolve => setTimeout(resolve, 250));
   
-  // Wait for initial processing
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  // Simulate swap confirmation only if not explicitly skipped
+  if (!skipConfirmation && (buttonId.startsWith('amount_') || buttonId.startsWith('percentage_'))) {
+    console.log('Simulating swap confirmation...');
+    collector.emit('collect', createMockButtonInteraction('swap_now'));
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+}
+
+function createMockButtonInteraction(customId: string) {
+  return {
+    customId,
+    isRepliable: () => true,
+    deferUpdate: jest.fn().mockResolvedValue(undefined),
+    update: jest.fn().mockResolvedValue(undefined),
+    editReply: jest.fn().mockResolvedValue(undefined),
+    followUp: jest.fn().mockResolvedValue(undefined),
+    user: mockUsers[0].discordId,
+    channelId: '1285735381328723968',
+    message: {
+      interaction: { user: { id: '889620302852661310' } }
+    },
+    channel: {
+      id: '1285735381328723968',
+      send: async (content: any) => console.log('Channel send:', content)
+    }
+  } as unknown as ButtonInteraction;
+}
+
+// Add this class at the top of the file
+class MockCollector {
+  callbacks: Map<string, Function>;
   
-  // Simulate swap confirmation after preview
-  console.log('Simulating swap confirmation...');
-  const swapConfirmCollector = collector as any;
-  swapConfirmCollector.emit('collect', {
-    ...mockButtonInteraction,
-    customId: 'swap_now'
-  });
-  
-  // Wait for swap processing
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  constructor() {
+    this.callbacks = new Map();
+  }
+
+  on(event: string, callback: Function) {
+    this.callbacks.set(event, callback);
+    return this;
+  }
+
+  emit(event: string, ...args: any[]) {
+    const callback = this.callbacks.get(event);
+    if (callback) {
+      callback(...args);
+    }
+  }
+
+  stop() {
+    const endCallback = this.callbacks.get('end');
+    if (endCallback) {
+      endCallback([], 'user');
+    }
+  }
 }

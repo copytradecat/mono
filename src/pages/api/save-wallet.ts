@@ -4,7 +4,7 @@ import { authOptions } from "../../lib/authOptions";
 import User, { IWallet } from '../../models/User';
 import { connectDB } from '../../lib/mongodb';
 import { encrypt } from '../../lib/encryption';
-import { defaultSettings } from '../../components/BotSettings';
+import { defaultSettings } from '../../config/defaultSettings';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {

@@ -5,7 +5,7 @@ import pLimit from 'p-limit';
 import { Metaplex, token } from '@metaplex-foundation/js';
 import { Transaction } from '@solana/web3.js';
 import { createJupiterApiClient, QuoteGetRequest, QuoteResponse } from '@jup-ag/api';
-import { Settings } from '../components/BotSettings';
+import { Settings } from '../config/defaultSettings';
 import limiter from '../lib/limiter';
 import { exponentialBackoff, getRandomSolanaRpcUrl, getRandomJupiterApiUrl, executeWithFallback, jupiterApiUrls, getConnection, solanaRpcUrls } from '../lib/utils';
 import '../../env.ts';
@@ -263,7 +263,7 @@ export async function getSwapTransaction(
   settings: Settings
 ): Promise<any> {
   // For small amounts, increase slippage tolerance
-  const isSmallAmount = quoteResponse.inAmount < 5000; // Adjust threshold as needed
+  const isSmallAmount = Number(quoteResponse.inAmount) < 5000; // Adjust threshold as needed
   const slippageMultiplier = isSmallAmount ? 2 : 1;
   
   const swapRequest = {

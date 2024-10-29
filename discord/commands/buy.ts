@@ -6,6 +6,7 @@ import {
   ComponentType,
   InteractionCollector,
   ButtonInteraction,
+  TextChannel,
 } from 'discord.js';
 import {
   getUser,
@@ -16,8 +17,9 @@ import {
   swapTime,
 } from './swap-base';
 import { getTokenInfo, getTokenBalance } from '../../src/services/jupiter.service';
-import { defaultSettings } from '../../src/components/BotSettings';
+import { defaultSettings } from '../../src/config/defaultSettings';
 import { getConnectedWalletsInChannel, truncatedString } from '../../src/lib/utils';
+import { IUser, IPreset } from '../../src/models/User';
 
 export async function handleBuyCommand(
   interaction: CommandInteraction,
@@ -27,7 +29,7 @@ export async function handleBuyCommand(
   try {
     try {
       await interaction.deferReply({ ephemeral: true });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deferring reply:', error);
       return;
     }
@@ -38,7 +40,7 @@ export async function handleBuyCommand(
       return;
     }
 
-    const outputTokenAddress = interaction.options.getString('token', true);
+    const outputTokenAddress = interaction.options.get('token')?.value as string;
     const initiatingUserId = interaction.user.id;
     const channelId = interaction.channelId;
     
@@ -47,7 +49,7 @@ export async function handleBuyCommand(
     console.log('Initiating User ID:', initiatingUserId);
     console.log('Channel ID:', channelId);
 
-    const initiatingUser = await getUser(initiatingUserId);
+    const initiatingUser = await getUser(initiatingUserId) as IUser;
     const initiatingWallet = initiatingUser.wallets.find((wallet: any) => wallet.connectedChannels.includes(channelId));
     if (!initiatingWallet) {
       return interaction.editReply({
@@ -61,8 +63,10 @@ export async function handleBuyCommand(
 
     // Prioritize wallet settings, then primary preset, then user settings, and finally default settings
     const walletSettings = initiatingWallet.settings;
-    const primaryPreset = initiatingUser.primaryPresetId ? initiatingUser.presets.find(p => p._id.toString() === initiatingUser.primaryPresetId.toString()) : null;
-    const initiatingSettings = walletSettings || (primaryPreset ? primaryPreset.settings : null) || initiatingUser.settings || defaultSettings;
+    const primaryPreset = initiatingUser.primaryPresetId 
+      ? initiatingUser.presets?.find((p) => p._id?.toString() === initiatingUser.primaryPresetId?.toString()) 
+      : null;
+    const initiatingSettings = walletSettings || (primaryPreset?.settings || null) || defaultSettings;
     const initiatingEntryAmounts = initiatingSettings.entryAmounts || defaultSettings.entryAmounts;
 
     // Fetch all connected wallets in this channel
@@ -133,9 +137,11 @@ export async function handleBuyCommand(
       components: buttonRows,
     });
 
-    const collector = interaction.channel?.createMessageComponentCollector({
+    const channel = interaction.channel as TextChannel;
+
+    const collector = channel.createMessageComponentCollector({
       componentType: ComponentType.Button,
-      time: 60000, // 60 seconds
+      time: 60000,
     });
 
     collector.on('collect', async (btnInteraction) => {
@@ -203,10 +209,12 @@ export async function handleBuyCommand(
             }
           } catch (error: any) {
             console.error('Error in swap process:', error);
-            await interaction.editReply({
-              content: `An error occurred during the swap process: ${error.message}`,
-              components: [],
-            });
+            if (interaction.isRepliable()) {
+              await interaction.editReply({
+                content: `An error occurred during the swap process: ${error.message}`,
+                components: [],
+              });
+            }
           }
         } else if (btnInteraction.customId === 'custom') {
           collector.stop();
@@ -219,7 +227,7 @@ export async function handleBuyCommand(
 
           // Create a message collector to collect the user's input
           const messageFilter = (msg: any) => msg.author.id === initiatingUserId;
-          const messageCollector = interaction.channel?.createMessageCollector({
+          const messageCollector = (interaction.channel as TextChannel).createMessageCollector({
             filter: messageFilter,
             max: 1,
             time: 30000, // 30 seconds to enter amount
@@ -306,7 +314,7 @@ export async function handleBuyCommand(
                 }
               }
 
-            } catch (error) {
+            } catch (error: any) {
               console.error('Error in swap process:', error);
               if (interaction.isRepliable()) {
                 await interaction.editReply({
@@ -355,7 +363,7 @@ export async function handleBuyCommand(
           } else {
             console.log('Interaction is no longer valid for following up\n(An error occurred during the process:)');
           }
-        } catch (followUpError) {
+        } catch (followUpError: any) {
           console.error('Error sending follow-up message:', followUpError);
         }
       }
@@ -372,7 +380,7 @@ export async function handleBuyCommand(
           } else {
             console.log('Interaction is no longer valid for editing reply\n(Interaction timed out.)');
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error('Error editing reply on timeout:', error);
         }
       }
@@ -384,7 +392,7 @@ export async function handleBuyCommand(
       // Do not return here; let the function continue
     }
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in handleSellCommand:', error);
     if (interaction.isRepliable()) {
       try {
@@ -392,7 +400,7 @@ export async function handleBuyCommand(
           content: 'An error occurred while processing your request.',
           components: [],
         });
-      } catch (editError) {
+      } catch (editError: any) {
         console.error('Error editing reply:', editError);
       }
     } else {

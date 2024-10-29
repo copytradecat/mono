@@ -5,7 +5,9 @@ import {
   ActionRowBuilder,
   ComponentType,
   userMention,
-  TextChannel
+  TextChannel,
+  InteractionCollector,
+  ButtonInteraction,
 } from 'discord.js';
 import { getQuote, getSwapTransaction, getTokenInfo, getTokenBalance } from '../../src/services/jupiter.service';
 import { signAndSendTransaction, confirmTransactionWithRetry } from '../../src/services/signing.service';
@@ -13,7 +15,7 @@ import UserAccount from '../../src/models/User';
 import Trade from '../../src/models/Trade';
 import { Connection, PublicKey, Transaction, SystemProgram, TransactionResponse, ParsedInstruction, Keypair, Commitment, TransactionExpiredBlockheightExceededError, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import axios from 'axios';
-import { defaultSettings, Settings } from '../../src/components/BotSettings';
+import { defaultSettings, Settings } from '../../src/config/defaultSettings';
 import { truncatedString, mapSelectionToUserSettings, formatNumber, getConnection, checkRPCHealth } from '../../src/lib/utils';
 import pLimit from 'p-limit';
 import limiter from '../../src/lib/limiter';
@@ -30,6 +32,15 @@ if (!poolingWalletPrivateKey) {
 }
 const poolingWalletKeypair = Keypair.fromSecretKey(bs58.decode(poolingWalletPrivateKey));
 
+function isValidPublicKey(address: string): boolean {
+  try {
+    new PublicKey(address);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Function to generate selection buttons
 export function generateSelectionButtons(labels: string[], customIdPrefix: string) {
   return labels.map((label, index) =>
@@ -44,53 +55,63 @@ export function generateSelectionButtons(labels: string[], customIdPrefix: strin
 export function promptUserConfirmation(
   interaction: CommandInteraction,
   content: string,
-  ephemeral: boolean = false
+  ephemeral = false,
+  testResponse: 'swap_now' | 'cancel_swap' | null = null // Add this parameter
 ): Promise<'swap_now' | 'cancel_swap' | 'timeout'> {
   return new Promise(async (resolve) => {
+    if (testResponse) {
+      // Immediately resolve with the test response
+      return resolve(testResponse);
+    }
+
     try {
       const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-        .setCustomId('swap_now')
-        .setLabel('Swap Now')
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId('cancel_swap')
-        .setLabel('Cancel')
-        .setStyle(ButtonStyle.Danger)
-    );
-    if (!interaction.isRepliable()) {
-      console.log('Interaction is no longer valid');
-      return;
-    }
-    await interaction.editReply({
-      content,
-      components: [actionRow],
-    });
+          .setCustomId('swap_now')
+          .setLabel('Swap Now')
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId('cancel_swap')
+          .setLabel('Cancel')
+          .setStyle(ButtonStyle.Danger)
+      );
 
-    const filter = (i: any) =>
-      i.user.id === interaction.user.id && (i.customId === 'swap_now' || i.customId === 'cancel_swap');
-
-    const collector = (interaction.channel as TextChannel)?.createMessageComponentCollector({
-      filter,
-      componentType: ComponentType.Button,
-      time: swapTime + 2400, // add buffer
-    });
-
-    collector?.on('collect', async (i) => {
-      await i.deferUpdate();
-      collector.stop();
-      resolve(i.customId as 'swap_now' | 'cancel_swap');
-    });
-
-    collector?.on('end', async (collected, reason) => {
-      if (reason === 'time') {
-        resolve('timeout');
-        await interaction.editReply({
-          content: 'Processing swap...',
-          components: [],
-        });
+      if (!interaction.isRepliable()) {
+        console.log('Interaction is no longer valid');
+        resolve('cancel_swap');
+        return;
       }
-    });
+
+      await interaction.editReply({
+        content,
+        components: [actionRow],
+      });
+
+      const filter = (i: any) =>
+        i.user.id === interaction.user.id &&
+        (i.customId === 'swap_now' || i.customId === 'cancel_swap');
+
+      const collector = (interaction.channel as TextChannel).createMessageComponentCollector({
+        filter,
+        componentType: ComponentType.Button,
+        time: swapTime + 2400, // add buffer
+      });
+
+      collector?.on('collect', async (i) => {
+        await i.deferUpdate();
+        collector.stop();
+        resolve(i.customId as 'swap_now' | 'cancel_swap');
+      });
+
+      collector?.on('end', async (_collected: any, _reason: string) => {
+        if (_reason === 'time') {
+          resolve('timeout');
+          await interaction.editReply({
+            content: 'Processing swap...',
+            components: [],
+          });
+        }
+      });
 
     } catch (error) {
       console.error('Error in promptUserConfirmation:', error);
@@ -116,7 +137,7 @@ export async function executeSwapsForUsers(params: {
   customAmount?: number;
   customPercentage?: number;
   channelId?: string;
-}) {
+}): Promise<void> {
   const {
     interaction,
     connectedWallets,
@@ -215,11 +236,15 @@ export async function executeSwapsForUsers(params: {
       totalInputAmount,
       inputTokenAddress,
       outputTokenAddress,
-      initiatingSettings
+      initiatingSettings,
+      poolingWalletKeypair.publicKey.toBase58()
     );
 
     // Step 5: Confirm the swap transaction
     try {
+      if (!swapSignature) {
+        throw new Error('Swap signature is null');
+      }
       await confirmTransactionWithRetry(connection, swapSignature);
 
       // Step 6: Get total output amount from the swap transaction
@@ -285,6 +310,8 @@ export async function executeSwapsForUsers(params: {
     // Don't throw the error since the swap was successful
     // Just log it and continue
   }
+
+  return;
 }
 
 // Helper function to notify the user about insufficient balance
@@ -357,7 +384,7 @@ export async function createSwapPreview(
     const swapPreview = `**Swap Preview**
 From: ${formatNumber(amountHuman)} [${inputTokenInfo.symbol}](<https://solscan.io/token/${inputToken}>)
 To: ${formatNumber(estimatedOutput)} [${outputTokenInfo.symbol}](<https://solscan.io/token/${outputToken}>)
-Price Impact: ${formatNumber(quoteData.priceImpactPct * 100, 2)}%
+Price Impact: ${formatNumber(Number(quoteData.priceImpactPct) * 100, 2)}%
 Slippage: ${
       settings.slippageType === 'fixed'
         ? `${formatNumber(settings.slippage ? settings.slippage / 100 : 0, 2)}%`
@@ -573,8 +600,8 @@ export async function executeSwap(
           error: null,
           transactionMessage: 'Transaction submitted and confirmed'
         };
-      } catch (error) {
-        if (error.message.includes('block height exceeded')) {
+      } catch (error: any) {
+        if (error?.message?.includes('block height exceeded')) {
           console.log('Transaction expired, retrying...');
           retryCount++;
           await new Promise(resolve => setTimeout(resolve, delay));
@@ -583,7 +610,7 @@ export async function executeSwap(
         }
         throw error;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Swap execution failed (attempt ${retryCount + 1}):`, error.message || error);
       retryCount++;
       if (retryCount >= maxRetries) {
@@ -653,6 +680,8 @@ interface UserContribution {
   walletAddress: string;
   contributionAmount: number;
   transferSignature?: string;
+  error?: string;
+  tokenAddress: string;  // Add this field
 }
 
 async function calculateUserContributions(
@@ -685,25 +714,33 @@ async function calculateUserContributions(
       continue;
     }
 
-    // Get user's settings
-    const walletSettings = wallet.settings;
-    const primaryPreset = user.primaryPresetId
-      ? user.presets.find((p: any) => p._id.toString() === user.primaryPresetId.toString())
-      : null;
-    const userSettings = walletSettings || (primaryPreset ? primaryPreset.settings : null) || user.settings || defaultSettings;
-
-    // Map selection index to user's settings and convert to lamports
-    const userAmountSOL = mapSelectionToUserSettings(
-      userSettings.entryAmounts || defaultSettings.entryAmounts,
-      selectionIndex as number
-    );
-    const userAmountLamports = Math.floor(userAmountSOL * LAMPORTS_PER_SOL);
-
-    // Get user's token balance
+    // Get token balance
     const { balance: walletBalance } = await getTokenBalance(walletPublicKey, inputTokenInfo.address);
-    const contributionAmount = Math.min(userAmountLamports, walletBalance);
 
-    // Check minimum amount
+    // Calculate contribution amount based on operation type
+    let contributionAmount: number;
+    if (isBuyOperation) {
+      const userSettings = user.settings || defaultSettings;
+      const userAmountSOL = mapSelectionToUserSettings(
+        userSettings.entryAmounts || defaultSettings.entryAmounts,
+        selectionIndex as number
+      );
+      contributionAmount = Math.floor(userAmountSOL * LAMPORTS_PER_SOL);
+    } else {
+      // Sell operation
+      const percentage = selectionIndex === 'Custom' 
+        ? customPercentage 
+        : initiatingExitPercentages[selectionIndex as number];
+      
+      if (typeof percentage !== 'number') {
+        console.error(`Invalid percentage for user ${user.discordId}`);
+        continue;
+      }
+
+      contributionAmount = Math.floor((percentage / 100) * walletBalance);
+    }
+
+    // Validate contribution amount
     if (contributionAmount < MIN_AMOUNT_LAMPORTS) {
       console.log(`User ${user.discordId} contribution (${contributionAmount}) is below minimum (${MIN_AMOUNT_LAMPORTS})`);
       insufficientUsers.push({
@@ -722,10 +759,11 @@ async function calculateUserContributions(
       userId: user.discordId,
       walletAddress: walletPublicKey,
       contributionAmount,
+      tokenAddress: inputTokenInfo.address
     });
   }
 
-  // Notify users with insufficient amounts
+  // Notify insufficient users
   for (const user of insufficientUsers) {
     await notifyUserInsufficientBalance(
       user.userId,
@@ -762,6 +800,14 @@ async function transferFundsToPool(
     }
     
     try {
+      if (!isValidPublicKey(walletAddress) || !isValidPublicKey(poolingWalletAddress)) {
+        throw new Error('Invalid wallet address');
+      }
+
+      if (!isValidPublicKey(inputTokenAddress)) {
+        throw new Error('Invalid token address');
+      }
+
       const isNativeSOL = inputTokenAddress === 'So11111111111111111111111111111111111111112';
       const userPubkey = new PublicKey(walletAddress);
       const poolPubkey = new PublicKey(poolingWalletAddress);
@@ -827,36 +873,45 @@ async function transferFundsToPool(
         contribution.transferSignature = response.data.signature;
         processedTransactions.add(transferKey);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Transfer failed for user ${userId}:`, error);
-      contribution.error = error.message;
+      contribution.error = error.message || 'Unknown error';
     }
   }
 }
 
-async function confirmAndFilterTransfers(
-  userContributions: UserContribution[]
-): Promise<UserContribution[]> {
+async function confirmAndFilterTransfers(userContributions: UserContribution[]): Promise<UserContribution[]> {
   const connection = await getConnection();
   const confirmedContributions: UserContribution[] = [];
   
   for (const contribution of userContributions) {
-    if (!contribution.transferSignature || contribution.error) continue;
-    
     try {
-      const status = await connection.getSignatureStatus(contribution.transferSignature);
+      // Wait for finalized confirmation
+      const status = await connection.confirmTransaction(
+        contribution.transferSignature!, 
+        'finalized'
+      );
       
-      if (status?.value?.confirmationStatus === 'confirmed') {
-        confirmedContributions.push(contribution);
-      } else {
-        console.error(`Transfer failed for user ${contribution.userId}`);
-        contribution.error = 'Transfer failed to confirm';
+      if (status.value.err === null) {
+        // Verify the transfer amount
+        const { balance } = await getTokenBalance(
+          poolingWalletKeypair.publicKey.toBase58(),
+          contribution.tokenAddress
+        );
+        
+        if (balance >= contribution.contributionAmount) {
+          confirmedContributions.push(contribution);
+        } else {
+          console.error(`Transfer amount mismatch for user ${contribution.userId}`);
+        }
       }
     } catch (error) {
       console.error(`Error confirming transfer: ${error}`);
-      contribution.error = 'Confirmation check failed';
     }
   }
+  
+  // Add delay to ensure blockchain state is updated
+  await new Promise(resolve => setTimeout(resolve, 2000));
   
   return confirmedContributions;
 }
@@ -865,8 +920,21 @@ export async function executePoolSwap(
   totalInputAmount: number,
   inputTokenAddress: string,
   outputTokenAddress: string,
-  settings: Settings
+  settings: Settings,
+  poolingWalletAddress: string // Add this parameter
 ) {
+  const connection = await getConnection();
+  
+  // Verify pool wallet has received the funds
+  const { balance: poolBalance } = await getTokenBalance(
+    poolingWalletAddress,
+    inputTokenAddress
+  );
+
+  if (poolBalance < totalInputAmount) {
+    throw new Error(`Pool wallet balance (${poolBalance}) is less than required amount (${totalInputAmount})`);
+  }
+
   const maxRetries = 3;
   let attempt = 0;
   let lastSignature: string | null = null;
@@ -904,7 +972,7 @@ export async function executePoolSwap(
             totalInputAmount,
             settings.slippageType === 'fixed'
               ? { type: 'fixed', value: settings.slippage * 2 } // Double slippage for pool swaps
-              : { type: 'dynamic', maxBps: settings.slippage * 2 }
+              : { type: 'dynamic', value: settings.slippage * 2 }
           );
           if (quoteData && quoteData.outAmount) break;
         } catch (error) {
@@ -941,10 +1009,11 @@ export async function executePoolSwap(
         
         const connection = await getConnection();
         try {
+          if (!lastSignature) throw new Error('No transaction signature found');
           await confirmTransactionWithRetry(connection, lastSignature, 'confirmed', 10, 1000);
           return lastSignature;
-        } catch (confirmError) {
-          if (confirmError.message?.includes('block height exceeded')) {
+        } catch (confirmError: any) {
+          if (confirmError?.message?.includes('block height exceeded')) {
             attempt++;
             await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
             continue;
@@ -952,7 +1021,7 @@ export async function executePoolSwap(
           throw confirmError;
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Pool swap attempt ${attempt + 1} failed:`, error);
       
       if (error.message?.includes('block height exceeded') && attempt < maxRetries - 1) {
@@ -1116,9 +1185,9 @@ async function ensureTokenAccountExists(
 
     await confirmTransactionWithRetry(connection, response.data.signature);
     return tokenAccount;
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Error ensuring token account for wallet ${walletAddress} and token ${tokenMintAddress}:`, error);
-    throw new Error(`Failed to ensure token account: ${error.message}`);
+    throw new Error(`Failed to ensure token account: ${error.message || 'Unknown error'}`);
   }
 }
 
@@ -1130,7 +1199,7 @@ async function getTransactionInfo(signature: string): Promise<TransactionRespons
       commitment: 'confirmed',
       maxSupportedTransactionVersion: 0,
     });
-    return transactionInfo;
+    return transactionInfo as TransactionResponse | null;
   } catch (error) {
     console.error(`Error fetching transaction info for signature ${signature}:`, error);
     return null;
@@ -1151,9 +1220,8 @@ async function extractOutputAmountFromTransaction(transactionInfo: any, outputTo
         return Number(poolingWalletBalance.uiTokenAmount.amount);
       }
     }
-
     // Also check postBalances for native SOL
-    if (outputTokenAddress === NATIVE_SOL_MINT && transactionInfo?.meta?.postBalances) {
+    if (outputTokenAddress === 'So11111111111111111111111111111111111111112' && transactionInfo?.meta?.postBalances) {
       const poolingWalletIndex = transactionInfo.transaction.message.accountKeys.findIndex(
         (key: any) => key === poolingWalletKeypair.publicKey.toBase58()
       );
@@ -1328,12 +1396,16 @@ async function getTokenAccount(walletAddress: string, tokenMintAddress: string) 
   const connection = await getConnection();
   const tokenAccount = await getOrCreateAssociatedTokenAccount(
     connection,
-    walletKeypair, // Needs to be the payer of the account creation (e.g., pooling wallet)
+    Keypair.fromSecretKey(Buffer.from(walletAddress, 'base64')), // Convert base64 string to Keypair
     new PublicKey(tokenMintAddress),
     new PublicKey(walletAddress)
   );
   return tokenAccount.address;
 }
+
+
+
+
 
 
 

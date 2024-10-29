@@ -117,7 +117,7 @@ export async function getConnection(): Promise<Connection> {
       const connection = new Connection(url, 'confirmed');
       await connection.getLatestBlockhash();
       return connection;
-    } catch (error) {
+    } catch (error: any) {
       console.warn(`Failed to connect to RPC endpoint ${url}: ${error.message}`);
     }
   }

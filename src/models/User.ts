@@ -1,5 +1,5 @@
 import mongoose, { Model, Document } from 'mongoose';
-import { defaultSettings, Settings as ISettings } from '../components/BotSettings';
+import { defaultSettings, Settings as ISettings } from '../config/defaultSettings';
 
 // interface ISettings extends Document {
 //     slippage: number | null;
@@ -31,7 +31,7 @@ const SettingsSchema = new mongoose.Schema({
     wrapUnwrapSOL: { type: Boolean, default: defaultSettings.wrapUnwrapSOL },
 });
 
-interface IPreset extends Document {
+export interface IPreset extends Document {
     name: string;
     settings: ISettings;
 }

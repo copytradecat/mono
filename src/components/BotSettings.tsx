@@ -2,28 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import axios from 'axios';
 import NextLink from 'next/link';
-
-export interface Settings {
-  slippage: number;
-  slippageType: 'fixed' | 'dynamic';
-  smartMevProtection: 'fast' | 'secure' | null;
-  transactionSpeed: 'medium' | 'high' | 'veryHigh' | 'custom' | 'auto';
-  priorityFee: number | 'auto';
-  entryAmounts: number[];
-  exitPercentages: number[];
-  wrapUnwrapSOL: boolean;
-}
-
-export const defaultSettings: Settings = {
-  slippage: 300, // 3%
-  slippageType: 'dynamic',
-  smartMevProtection: 'secure',
-  transactionSpeed: 'medium',
-  priorityFee: 'auto',
-  entryAmounts: [0.01, 0.05, 0.1, 0.5, 1],
-  exitPercentages: [10, 20, 50, 75, 100],
-  wrapUnwrapSOL: true,
-};
+import { Settings, defaultSettings } from '../config/defaultSettings';
 
 interface BotSettingsProps {
   walletPublicKey?: string | null;
