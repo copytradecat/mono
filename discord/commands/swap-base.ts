@@ -10,7 +10,7 @@ import {
   ButtonInteraction,
 } from 'discord.js';
 import { getQuote, getSwapTransaction, getTokenInfo, getTokenBalance } from '../../src/services/jupiter.service';
-import { signAndSendTransaction, confirmTransactionWithRetry } from '../../src/services/signing.service';
+import { signAndSendTransaction, confirmTransactionWithRetry, getAmountTransferredFromTransaction } from '../../src/services/signing.service';
 import UserAccount from '../../src/models/User';
 import Trade from '../../src/models/Trade';
 import { Connection, PublicKey, Transaction, SystemProgram, TransactionResponse, ParsedInstruction, Keypair, Commitment, TransactionExpiredBlockheightExceededError, LAMPORTS_PER_SOL } from '@solana/web3.js';
@@ -22,7 +22,9 @@ import limiter from '../../src/lib/limiter';
 import '../../env.ts';
 import { getAssociatedTokenAddress, createTransferCheckedInstruction, createAssociatedTokenAccountInstruction, getOrCreateAssociatedTokenAccount } from '@solana/spl-token';
 import bs58 from 'bs58';
+import { EventEmitter } from 'events';
 
+const SOL_TRANSFER_FEE = 5000; // 0.000005 SOL for transaction fees
 const API_BASE_URL = process.env.SIGNING_SERVICE_URL;
 export const MIN_AMOUNT_LAMPORTS = 2500; // 0.0000025 SOL minimum
 export const swapTime = 500; // Time to confirm the swap (in milliseconds)
@@ -121,23 +123,26 @@ export function promptUserConfirmation(
 }
 
 // Function to execute swaps for multiple users
-export async function executeSwapsForUsers(params: {
-  interaction: CommandInteraction;
-  connectedWallets: any[];
-  selectionIndex: number | 'Custom';
-  isBuyOperation: boolean;
-  inputTokenInfo: any;
-  outputTokenInfo: any;
-  inputTokenAddress: string;
-  outputTokenAddress: string;
-  initiatingUser: any;
-  initiatingSettings: Settings;
-  initiatingEntryAmounts?: number[];
-  initiatingExitPercentages?: number[];
-  customAmount?: number;
-  customPercentage?: number;
-  channelId?: string;
-}): Promise<void> {
+export async function executeSwapsForUsers(
+  params: {
+    interaction: CommandInteraction;
+    connectedWallets: any[];
+    selectionIndex: number | 'Custom';
+    isBuyOperation: boolean;
+    inputTokenInfo: any;
+    outputTokenInfo: any;
+    inputTokenAddress: string;
+    outputTokenAddress: string;
+    initiatingUser: any;
+    initiatingSettings: Settings;
+    initiatingEntryAmounts?: number[];
+    initiatingExitPercentages?: number[];
+    customAmount?: number;
+    customPercentage?: number;
+    channelId?: string;
+  },
+  eventEmitter?: EventEmitter
+): Promise<void> {
   const {
     interaction,
     connectedWallets,
@@ -210,9 +215,11 @@ export async function executeSwapsForUsers(params: {
 
     // Step 2: Transfer funds from user wallets to pooling wallet
     await transferFundsToPool(userContributions, inputTokenAddress, poolingWalletKeypair.publicKey.toBase58(), inputTokenInfo);
+    eventEmitter?.emit('transfersInitiated');
 
     // Step 3: Confirm transfers and filter out any failed transfers
-    const confirmedContributions = await confirmAndFilterTransfers(userContributions);
+    const confirmedContributions = await confirmAndFilterTransfers(connection as any, userContributions, poolingWalletKeypair.publicKey.toBase58());
+    eventEmitter?.emit('transfersConfirmed');
 
     if (confirmedContributions.length === 0) {
       await interaction.editReply({
@@ -232,16 +239,18 @@ export async function executeSwapsForUsers(params: {
       outputTokenAddress,
       initiatingSettings
     });
-    const swapSignature = await executePoolSwap(
-      totalInputAmount,
-      inputTokenAddress,
-      outputTokenAddress,
-      initiatingSettings,
-      poolingWalletKeypair.publicKey.toBase58()
-    );
 
-    // Step 5: Confirm the swap transaction
     try {
+      const swapSignature = await executePoolSwap(
+        totalInputAmount,
+        inputTokenAddress,
+        outputTokenAddress,
+        initiatingSettings,
+        poolingWalletKeypair.publicKey.toBase58()
+      );
+      eventEmitter?.emit('swapComplete');
+
+      // Step 5: Confirm the swap transaction
       if (!swapSignature) {
         throw new Error('Swap signature is null');
       }
@@ -256,8 +265,21 @@ export async function executeSwapsForUsers(params: {
         throw new Error('Swap transaction failed or resulted in zero output.');
       }
 
-      // Proceed to distribute tokens back to users
-      await distributeTokensToUsers(confirmedContributions, totalInputAmount, totalOutputAmount, outputTokenAddress);
+      try {
+        // Proceed to distribute tokens back to users
+        await distributeTokensToUsers(confirmedContributions, totalInputAmount, totalOutputAmount, outputTokenAddress);
+      } catch (error) {
+        console.error('Error in token distribution:', error);
+        if (eventEmitter) {
+          eventEmitter.emit('executeSwapsForUsersCompleted');
+        }
+        throw error;
+      }
+
+      // Emit completion after successful distribution
+      if (eventEmitter) {
+        eventEmitter.emit('executeSwapsForUsersCompleted');
+      }
 
     } catch (swapError) {
       console.error('Swap transaction failed:', swapError);
@@ -270,6 +292,9 @@ export async function executeSwapsForUsers(params: {
         components: [],
       });
 
+      if (eventEmitter) {
+        eventEmitter.emit('executeSwapsForUsersCompleted');
+      }
       return;
     }
 
@@ -307,11 +332,11 @@ export async function executeSwapsForUsers(params: {
     }
   } catch (error) {
     console.error('Error in executeSwapsForUsers:', error);
-    // Don't throw the error since the swap was successful
-    // Just log it and continue
+    if (eventEmitter) {
+      eventEmitter.emit('executeSwapsForUsersCompleted');
+    }
+    throw error;
   }
-
-  return;
 }
 
 // Helper function to notify the user about insufficient balance
@@ -786,133 +811,218 @@ async function transferFundsToPool(
   inputTokenInfo: any
 ): Promise<void> {
   const connection = await getConnection();
-  
-  for (const contribution of userContributions) {
-    const { userId, walletAddress, contributionAmount } = contribution;
-    
-    // Create a unique key for this transfer
-    const transferKey = `${walletAddress}-${contributionAmount}-${Date.now()}`;
-    
-    // Skip if already processed
-    if (processedTransactions.has(transferKey)) {
-      console.log(`Skipping duplicate transfer for user ${userId}`);
-      continue;
-    }
-    
-    try {
-      if (!isValidPublicKey(walletAddress) || !isValidPublicKey(poolingWalletAddress)) {
-        throw new Error('Invalid wallet address');
+
+  const processedTransactions = new Set<string>();
+
+  await Promise.all(
+    userContributions.map(async (contribution) => {
+      const { userId, walletAddress, contributionAmount } = contribution;
+
+      // Create a unique key for this transfer
+      const transferKey = `${walletAddress}-${contributionAmount}-${Date.now()}`;
+
+      // Skip if already processed
+      if (processedTransactions.has(transferKey)) {
+        console.log(`Skipping duplicate transfer for user ${userId}`);
+        return;
       }
 
-      if (!isValidPublicKey(inputTokenAddress)) {
-        throw new Error('Invalid token address');
+      try {
+        if (!isValidPublicKey(walletAddress) || !isValidPublicKey(poolingWalletAddress)) {
+          throw new Error('Invalid wallet address');
+        }
+
+        if (!isValidPublicKey(inputTokenAddress)) {
+          throw new Error('Invalid token address');
+        }
+
+        const isNativeSOL = inputTokenAddress === 'So11111111111111111111111111111111111111112';
+        const userPubkey = new PublicKey(walletAddress);
+        const poolPubkey = new PublicKey(poolingWalletAddress);
+
+        // Ensure contributionAmount is an integer
+        const lamports = Math.floor(contributionAmount);
+
+        // Check balances and create transfer instructions based on token type
+        let transaction: Transaction;
+
+        if (isNativeSOL) {
+          // For SOL transfers
+          const userBalance = await connection.getBalance(userPubkey);
+
+          // Estimate transaction fee
+          const estimatedFee = 5000; // Adjust as needed
+
+          if (userBalance < lamports + estimatedFee) {
+            console.error(
+              `Insufficient SOL balance for user ${userId}. Has ${userBalance}, needs at least ${
+                lamports + estimatedFee
+              }`
+            );
+            contribution.error = 'Insufficient SOL balance';
+            return;
+          }
+
+          // Create transaction
+          transaction = new Transaction().add(
+            SystemProgram.transfer({
+              fromPubkey: userPubkey,
+              toPubkey: poolPubkey,
+              lamports,
+            })
+          );
+        } else {
+          // For SPL Token transfers
+          // Get user's token balance
+          const { balance: tokenBalance } = await getTokenBalance(walletAddress, inputTokenAddress);
+
+          if (tokenBalance < lamports) {
+            console.error(
+              `Insufficient token balance for user ${userId}. Has ${tokenBalance}, needs at least ${lamports}`
+            );
+            contribution.error = 'Insufficient token balance';
+            return;
+          }
+
+          // Ensure the user has enough SOL to cover fees (assuming ~0.001 SOL per transaction)
+          const userSOLBalance = await connection.getBalance(userPubkey);
+          const estimatedFee = 10000; // Adjust as needed
+
+          if (userSOLBalance < estimatedFee) {
+            console.error(
+              `Insufficient SOL for transaction fees for user ${userId}. Has ${userSOLBalance}, needs at least ${estimatedFee}`
+            );
+            contribution.error = 'Insufficient SOL for fees';
+            return;
+          }
+
+          // Ensure token account exists for the pooling wallet
+          const sourceTokenAccount = await getAssociatedTokenAddress(
+            new PublicKey(inputTokenAddress),
+            userPubkey
+          );
+          const destinationTokenAccount = await getAssociatedTokenAddress(
+            new PublicKey(inputTokenAddress),
+            poolPubkey
+          );
+
+          // Add SOL transfer instruction for fees
+          const solForFeesInstruction = SystemProgram.transfer({
+            fromPubkey: userPubkey,
+            toPubkey: poolPubkey,
+            lamports: SOL_TRANSFER_FEE
+          });
+
+          // Add both instructions to the transaction
+          transaction = new Transaction()
+            .add(solForFeesInstruction)
+            .add(createTransferCheckedInstruction(
+              sourceTokenAccount,
+              new PublicKey(inputTokenAddress),
+              destinationTokenAccount,
+              userPubkey,
+              lamports,
+              inputTokenInfo.decimals
+            ));
+        }
+
+        // Set recent blockhash and fee payer
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.lastValidBlockHeight = lastValidBlockHeight;
+        transaction.feePayer = userPubkey;
+
+        const serializedTransaction = transaction
+          .serialize({
+            requireAllSignatures: false,
+            verifySignatures: false,
+          })
+          .toString('base64');
+
+        // Send to signing service
+        const response = await axios.post(`${API_BASE_URL}/sign-and-send`, {
+          userId,
+          walletPublicKey: walletAddress,
+          serializedTransaction,
+        });
+
+        if (response.status === 200) {
+          console.log(`Transfer initiated for user ${userId}`);
+          contribution.transferSignature = response.data.signature;
+          processedTransactions.add(transferKey);
+        }
+      } catch (error: any) {
+        console.error(`Transfer failed for user ${userId}:`, error);
+        contribution.error = error.message || 'Unknown error';
       }
-
-      const isNativeSOL = inputTokenAddress === 'So11111111111111111111111111111111111111112';
-      const userPubkey = new PublicKey(walletAddress);
-      const poolPubkey = new PublicKey(poolingWalletAddress);
-      
-      // Ensure contributionAmount is an integer
-      const lamports = Math.floor(contributionAmount);
-      
-      // Get current balance
-      const userBalance = await connection.getBalance(userPubkey);
-      
-      if (userBalance < lamports) {
-        console.error(`Insufficient balance for user ${userId}. Has ${userBalance}, needs ${lamports}`);
-        contribution.error = 'Insufficient balance';
-        continue;
-      }
-
-      // Calculate remaining balance (leave some for fees)
-      const remainingBalance = userBalance - lamports - 5000;
-      
-      if (remainingBalance < 0) {
-        console.error(`Insufficient balance for fees`);
-        contribution.error = 'Insufficient balance for fees';
-        continue;
-      }
-
-      // Create transaction
-      const transaction = new Transaction();
-      
-      transaction.add(
-        SystemProgram.transfer({
-          fromPubkey: userPubkey,
-          toPubkey: poolPubkey,
-          lamports
-        })
-      );
-
-      // Add instruction to send remaining balance back to user
-      transaction.add(
-        SystemProgram.transfer({
-          fromPubkey: userPubkey,
-          toPubkey: userPubkey,
-          lamports: remainingBalance
-        })
-      );
-
-      const { blockhash } = await connection.getLatestBlockhash();
-      transaction.recentBlockhash = blockhash;
-      transaction.feePayer = userPubkey;
-
-      const serializedTransaction = transaction.serialize({ 
-        verifySignatures: false 
-      }).toString('base64');
-
-      // Send to signing service
-      const response = await axios.post(`${API_BASE_URL}/sign-and-send`, {
-        userId,
-        walletPublicKey: walletAddress,
-        serializedTransaction,
-      });
-
-      if (response.status === 200) {
-        console.log(`Transfer initiated for user ${userId}`);
-        contribution.transferSignature = response.data.signature;
-        processedTransactions.add(transferKey);
-      }
-    } catch (error: any) {
-      console.error(`Transfer failed for user ${userId}:`, error);
-      contribution.error = error.message || 'Unknown error';
-    }
-  }
+    })
+  );
 }
 
-async function confirmAndFilterTransfers(userContributions: UserContribution[]): Promise<UserContribution[]> {
-  const connection = await getConnection();
+
+async function confirmAndFilterTransfers(
+  connection: Connection,
+  userContributions: UserContribution[],
+  poolingWalletAddress: string
+): Promise<UserContribution[]> {
   const confirmedContributions: UserContribution[] = [];
-  
+  const maxRetries = 3;
+  const retryDelay = 2000; // 2 seconds
+
   for (const contribution of userContributions) {
-    try {
-      // Wait for finalized confirmation
-      const status = await connection.confirmTransaction(
-        contribution.transferSignature!, 
-        'finalized'
-      );
-      
-      if (status.value.err === null) {
-        // Verify the transfer amount
-        const { balance } = await getTokenBalance(
-          poolingWalletKeypair.publicKey.toBase58(),
-          contribution.tokenAddress
-        );
+    let retryCount = 0;
+    let confirmed = false;
+
+    while (retryCount < maxRetries && !confirmed) {
+      try {
+        if (!contribution.transferSignature) {
+          console.error(`No transfer signature for user ${contribution.userId}`);
+          break;
+        }
+
+        const txid = contribution.transferSignature;
+        console.log(`Attempting to confirm transaction ${txid} for user ${contribution.userId} (attempt ${retryCount + 1})`);
         
-        if (balance >= contribution.contributionAmount) {
+        const txInfo = await connection.getTransaction(txid, {
+          commitment: "confirmed",
+          maxSupportedTransactionVersion: 0
+        });
+
+        if (!txInfo) {
+          console.log(`Transaction not found, retrying in ${retryDelay}ms...`);
+          retryCount++;
+          if (retryCount < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            continue;
+          }
+          break;
+        }
+
+        const amountTransferred = getAmountTransferredFromTransaction(
+          txInfo as any,
+          contribution.walletAddress,
+          poolingWalletAddress,
+          contribution.tokenAddress,
+          contribution.contributionAmount
+        );
+
+        if (amountTransferred >= contribution.contributionAmount) {
           confirmedContributions.push(contribution);
+          confirmed = true;
         } else {
           console.error(`Transfer amount mismatch for user ${contribution.userId}`);
+          break;
+        }
+      } catch (error) {
+        console.error(`Error confirming transfer for user ${contribution.userId}:`, error);
+        retryCount++;
+        if (retryCount < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
       }
-    } catch (error) {
-      console.error(`Error confirming transfer: ${error}`);
     }
   }
-  
-  // Add delay to ensure blockchain state is updated
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  
+
   return confirmedContributions;
 }
 
@@ -991,8 +1101,8 @@ export async function executePoolSwap(
         poolingWalletKeypair.publicKey.toBase58(),
         {
           ...settings,
-          slippageType: 'fixed',  // Force fixed slippage for pool swaps
-          slippage: settings.slippage * 2
+          slippageType: 'dynamic',  // Force dynamic slippage for pool swaps
+          slippage: settings.slippage * 4  // Increase multiplier from 2 to 4
         }
       );
 
@@ -1058,11 +1168,19 @@ async function distributeTokensToUsers(
       const adjustedAmount = Math.floor(userShare);
 
       if (isNativeSOL) {
-        // Transfer SOL using SystemProgram.transfer
+        // Calculate amount after reserving fees
+        const feeAdjustedAmount = adjustedAmount - SOL_TRANSFER_FEE;
+        
+        // Check if pooling wallet has enough SOL
+        const poolBalance = await connection.getBalance(poolingWalletKeypair.publicKey);
+        if (poolBalance < feeAdjustedAmount) {
+          throw new Error(`Insufficient SOL balance in pooling wallet: ${poolBalance} < ${feeAdjustedAmount}`);
+        }
+
         const transferInstruction = SystemProgram.transfer({
           fromPubkey: poolingWalletKeypair.publicKey,
           toPubkey: new PublicKey(walletAddress),
-          lamports: adjustedAmount,
+          lamports: feeAdjustedAmount,
         });
 
         const transaction = new Transaction().add(transferInstruction);
@@ -1072,27 +1190,28 @@ async function distributeTokensToUsers(
         transaction.feePayer = poolingWalletKeypair.publicKey;
 
         transaction.sign(poolingWalletKeypair);
-
         const serializedTransaction = transaction.serialize();
-        const signature = await connection.sendRawTransaction(serializedTransaction);
+        const signature = await connection.sendRawTransaction(serializedTransaction, {
+          skipPreflight: false,
+          preflightCommitment: 'confirmed'
+        });
 
         await confirmTransactionWithRetry(connection, signature);
       } else {
-        // Handle SPL Token transfer
-        await ensureTokenAccountExists(walletAddress, outputTokenAddress, userId, true);
+        // For SPL tokens, ensure destination account exists first
+        const destinationTokenAccount = await ensureTokenAccountExists(
+          walletAddress,
+          outputTokenAddress,
+          userId,
+          true // isReceiving = true to create account if needed
+        );
 
         const sourceTokenAccount = await getAssociatedTokenAddress(
           new PublicKey(outputTokenAddress),
           poolingWalletKeypair.publicKey
         );
-        const destinationTokenAccount = await getAssociatedTokenAddress(
-          new PublicKey(outputTokenAddress),
-          new PublicKey(walletAddress)
-        );
-
 
         const outputTokenInfo = await getTokenInfo(outputTokenAddress);
-
         const transferInstruction = createTransferCheckedInstruction(
           sourceTokenAccount,
           new PublicKey(outputTokenAddress),
@@ -1109,9 +1228,11 @@ async function distributeTokensToUsers(
         transaction.feePayer = poolingWalletKeypair.publicKey;
 
         transaction.sign(poolingWalletKeypair);
-
         const serializedTransaction = transaction.serialize();
-        const signature = await connection.sendRawTransaction(serializedTransaction);
+        const signature = await connection.sendRawTransaction(serializedTransaction, {
+          skipPreflight: false,
+          preflightCommitment: 'confirmed'
+        });
 
         await confirmTransactionWithRetry(connection, signature);
       }
@@ -1220,11 +1341,15 @@ async function extractOutputAmountFromTransaction(transactionInfo: any, outputTo
         return Number(poolingWalletBalance.uiTokenAmount.amount);
       }
     }
+    
     // Also check postBalances for native SOL
     if (outputTokenAddress === 'So11111111111111111111111111111111111111112' && transactionInfo?.meta?.postBalances) {
-      const poolingWalletIndex = transactionInfo.transaction.message.accountKeys.findIndex(
+      // Use accountKeys from meta instead of transaction.message
+      const accountKeys = transactionInfo.transaction?.accountKeys || transactionInfo.meta.postTokenBalances?.map((b: any) => b.owner) || [];
+      const poolingWalletIndex = accountKeys.findIndex(
         (key: any) => key === poolingWalletKeypair.publicKey.toBase58()
       );
+      
       if (poolingWalletIndex !== -1) {
         return transactionInfo.meta.postBalances[poolingWalletIndex];
       }
@@ -1243,9 +1368,30 @@ async function refundContributions(
   inputTokenAddress: string
 ): Promise<void> {
   const connection = await getConnection();
-
+// Add at the start of refundContributions
+  console.log('Starting refunds:', contributions.map(c => ({
+    userId: c.userId,
+    amount: c.contributionAmount,
+    token: inputTokenAddress
+  })));
   for (const contribution of contributions) {
-    const { userId, walletAddress, contributionAmount } = contribution;
+    const { userId, walletAddress, contributionAmount, transferSignature } = contribution;
+    
+    // Verify this was actually received from this user
+    if (transferSignature) {
+      const txInfo = await connection.getTransaction(transferSignature);
+      if (!txInfo || 
+          !getAmountTransferredFromTransaction(
+            txInfo as any,
+            walletAddress,
+            poolingWalletKeypair.publicKey.toBase58(),
+            inputTokenAddress,
+            contributionAmount
+          )) {
+        console.error(`Cannot verify original transfer from user ${userId}`);
+        continue;
+      }
+    }
 
     try {
       const isNativeSOL = inputTokenAddress === 'So11111111111111111111111111111111111111112';
@@ -1402,12 +1548,6 @@ async function getTokenAccount(walletAddress: string, tokenMintAddress: string) 
   );
   return tokenAccount.address;
 }
-
-
-
-
-
-
 
 
 

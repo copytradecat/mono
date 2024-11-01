@@ -17,13 +17,35 @@ import {
 } from './swap-base';
 import { getTokenInfo, getTokenBalance } from '../../src/services/jupiter.service';
 import { defaultSettings } from '../../src/config/defaultSettings';
-import { getConnectedWalletsInChannel } from '../../src/lib/utils';
+import { getConnectedWalletsInChannel, getConnection } from '../../src/lib/utils';
 import { IUser, IPreset } from '../../src/models/User';
+import { EventEmitter } from 'events';
+import { VersionedTransaction } from '@solana/web3.js';
+
+async function retryWithNewBlockhash(transaction: VersionedTransaction, maxRetries = 3): Promise<VersionedTransaction> {
+  const connection = await getConnection();
+  let attempt = 0;
+  
+  while (attempt < maxRetries) {
+    try {
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+      transaction.message.recentBlockhash = blockhash;
+      return transaction;
+    } catch (error) {
+      attempt++;
+      if (attempt === maxRetries) throw error;
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+    }
+  }
+  throw new Error('Failed to get new blockhash after retries');
+}
 
 export async function handleSellCommand(
   interaction: CommandInteraction,
   testCollectorCallback?: (collector: InteractionCollector<ButtonInteraction>) => Promise<void>,
-  testPromptResponse?: 'swap_now' | 'cancel_swap' | null // Add this parameter
+  testPromptResponse?: 'swap_now' | 'cancel_swap' | null,
+  swapTime: number = 5000,
+  eventEmitter?: EventEmitter
 ) {
   try {
     try {
@@ -192,7 +214,7 @@ export async function handleSellCommand(
               interaction,
               `${swapPreview}\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`,
               false,
-              testPromptResponse // Pass it here
+              testPromptResponse
             );
 
             if (userResponse === 'swap_now' || userResponse === 'timeout') {
@@ -220,7 +242,7 @@ export async function handleSellCommand(
                   initiatingExitPercentages,
                   initiatingEntryAmounts: initiatingSettings.entryAmounts,
                   channelId
-                });
+                }, eventEmitter);
               } catch (error: any) {
                 console.error('Error executing swaps:', error);
                 if (interaction.isRepliable()) {
@@ -346,7 +368,7 @@ export async function handleSellCommand(
                     initiatingExitPercentages,
                     customPercentage,
                     channelId
-                  });
+                  }, eventEmitter);
                 } else if (userResponse === 'cancel_swap') {
                   if (interaction.isRepliable()) {
                     await interaction.editReply({

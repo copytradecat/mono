@@ -13,18 +13,39 @@ import {
   createSwapPreview,
   promptUserConfirmation,
   executeSwapsForUsers,
-  generateSelectionButtons,
   swapTime,
 } from './swap-base';
 import { getTokenInfo, getTokenBalance } from '../../src/services/jupiter.service';
 import { defaultSettings } from '../../src/config/defaultSettings';
-import { getConnectedWalletsInChannel, truncatedString } from '../../src/lib/utils';
-import { IUser, IPreset } from '../../src/models/User';
+import { getConnectedWalletsInChannel, getConnection } from '../../src/lib/utils';
+import { IUser } from '../../src/models/User';
+import { EventEmitter } from 'events';
+import { VersionedTransaction } from '@solana/web3.js';
+
+async function retryWithNewBlockhash(transaction: VersionedTransaction, maxRetries = 3): Promise<VersionedTransaction> {
+  const connection = await getConnection();
+  let attempt = 0;
+  
+  while (attempt < maxRetries) {
+    try {
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+      transaction.message.recentBlockhash = blockhash;
+      return transaction;
+    } catch (error) {
+      attempt++;
+      if (attempt === maxRetries) throw error;
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+    }
+  }
+  throw new Error('Failed to get new blockhash after retries');
+}
 
 export async function handleBuyCommand(
   interaction: CommandInteraction,
-  // optional parameter for testing
-  testCollectorCallback?: (collector: InteractionCollector<ButtonInteraction>) => Promise<void>
+  testCollectorCallback?: (collector: InteractionCollector<ButtonInteraction>) => Promise<void>,
+  testPromptResponse?: 'swap_now' | 'cancel_swap' | null,
+  swapTime: number = 5000,
+  eventEmitter?: EventEmitter
 ) {
   try {
     try {
@@ -178,7 +199,8 @@ export async function handleBuyCommand(
             // Prompt user confirmation
             const userResponse = await promptUserConfirmation(
               interaction,
-              `${swapPreview}\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
+              `${swapPreview}\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`,
+              testPromptResponse
             );
 
             if (userResponse === 'swap_now' || userResponse === 'timeout') {
@@ -187,7 +209,7 @@ export async function handleBuyCommand(
                 components: [],
               });
 
-              const tradeResults = await executeSwapsForUsers({
+              await executeSwapsForUsers({
                 interaction,
                 connectedWallets,
                 selectionIndex,
@@ -199,8 +221,9 @@ export async function handleBuyCommand(
                 initiatingUser,
                 initiatingSettings,
                 initiatingEntryAmounts,
+                initiatingExitPercentages: initiatingSettings.exitPercentages,
                 channelId
-              });
+              }, eventEmitter);
             } else if (userResponse === 'cancel_swap') {
               await interaction.editReply({
                 content: 'Swap cancelled by user.',
@@ -288,7 +311,7 @@ export async function handleBuyCommand(
                 }
 
                 // Execute swaps for users
-                const tradeResults = await executeSwapsForUsers({
+                await executeSwapsForUsers({
                   interaction,
                   connectedWallets,
                   selectionIndex: 'Custom',
@@ -301,8 +324,9 @@ export async function handleBuyCommand(
                   initiatingSettings,
                   initiatingEntryAmounts,
                   customAmount,
+                  initiatingExitPercentages: initiatingSettings.exitPercentages,
                   channelId
-                });
+                }, eventEmitter);
               } else if (userResponse === 'cancel_swap') {
                 if (interaction.isRepliable()) {
                   await interaction.editReply({

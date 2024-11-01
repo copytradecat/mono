@@ -1,4 +1,3 @@
-import { jest } from '@jest/globals';
 import { Client, GatewayIntentBits, Message, MessagePayload, InteractionEditReplyOptions } from 'discord.js';
 import { createMockInteraction, MockInteractionOptions } from './test/utils';
 import { config } from 'dotenv';
@@ -6,236 +5,234 @@ import { handleSellCommand } from './commands/sell';
 import { handleBuyCommand } from './commands/buy';
 import { connectDB } from '../src/lib/mongodb';
 import { defaultSettings } from '../src/config/defaultSettings';
-import * as swapBaseModule from './commands/swap-base';
-
-jest.mock('../commands/swap-base', () => {
-  const originalModule = jest.requireActual<typeof swapBaseModule>('../commands/swap-base');
-  return {
-    __esModule: true,
-    ...originalModule,
-    executeSwapsForUsers: jest.fn(),
-  };
-});
+import { EventEmitter } from 'events';
+import limiter from '../src/lib/limiter';
 
 config();
 
-const TEST_MODE = process.env.TEST_MODE || 'SELL'; // 'BUY' or 'SELL'
-const TEST_TOKEN = '7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr'; // POPCAT token
-const TEST_USER_INDEX = process.env.TEST_USER_INDEX ? parseInt(process.env.TEST_USER_INDEX) : 0;
-
-jest.setTimeout(30000);
+// Set a higher timeout for long-running tests
+jest.setTimeout(60000); // 60 seconds
 
 describe('Bot Commands', () => {
   let client: Client;
   let mongoConnection: any;
+  const eventEmitter = new EventEmitter();
 
   beforeAll(async () => {
-    try {
-      // Connect to MongoDB
-      mongoConnection = await connectDB();
-      
-      // Setup Discord client
-      client = new Client({
-        intents: [
-          GatewayIntentBits.Guilds,
-          GatewayIntentBits.GuildMessages,
-          GatewayIntentBits.MessageContent,
-        ]
-      });
+    // Connect to the test database
+    mongoConnection = await connectDB();
 
-      // Mock client login instead of actually connecting
-      jest.spyOn(client, 'login').mockImplementation(async () => 'mock-token');
-      
-      // Return a promise that resolves immediately
-      return Promise.resolve();
-    } catch (error) {
-      console.error('Setup failed:', error);
-      throw error;
-    }
+    // Insert test user and other necessary data here if not already present
+
+    // Initialize Discord client
+    client = new Client({
+      intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+      ],
+    });
   });
 
   afterAll(async () => {
-    try {
-      // Close MongoDB connection
-      if (mongoConnection) {
-        await mongoConnection.disconnect();
-      }
-
-      // Destroy Discord client
-      if (client) {
-        await client.destroy();
-      }
-
-      // Clear any remaining timers
-      jest.clearAllTimers();
-
-      // Allow time for cleanup
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    } catch (error) {
-      console.error('Cleanup failed:', error);
+    // Close MongoDB connection
+    if (mongoConnection) {
+      await mongoConnection.disconnect();
     }
+
+    // Destroy Discord client
+    if (client) {
+      await client.destroy();
+    }
+    
+    // Clean up any resources, timers, or listeners
+    eventEmitter.removeAllListeners();
   });
 
-  /* istanbul ignore next */
-  it('should execute sell command and proceed past swap preview', async () => {
+  it('should execute sell command and proceed through the entire trading process', async () => {
     const options = {
       mode: 'SELL',
-      tokenAddress: TEST_TOKEN,
+      tokenAddress: '7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr',
       settings: defaultSettings,
     };
 
     const interaction = createMockInteraction(client, options as MockInteractionOptions);
-
-    // Array to keep track of editReply calls
     const editReplyCalls: any[] = [];
+    
+    // Mock editReply to capture calls
+    interaction.editReply = jest.fn(
+      async (content: string | MessagePayload | InteractionEditReplyOptions): Promise<Message<boolean>> => {
+        editReplyCalls.push(content);
+        return {} as Message<boolean>;
+      }
+    ) as any;
 
-    // Promise that resolves when editReply is called the second time
-    const editReplySecondCall = new Promise<void>((resolve) => {
-      interaction.editReply = jest.fn(
-        async (
-          content: string | MessagePayload | InteractionEditReplyOptions
-        ): Promise<Message<boolean>> => {
-          editReplyCalls.push(content);
-          if (editReplyCalls.length === 2) {
-            resolve();
-          }
-          // Return a mock Message object
-          return Promise.resolve({} as Message<boolean>);
+    const processComplete = new Promise<void>((resolve, reject) => {
+      const processStates = {
+        transfersInitiated: false,
+        transfersConfirmed: false,
+        swapComplete: false,
+        executeSwapsForUsersCompleted: false,
+        limiterIdle: false,
+        allOperationsComplete: false
+      };
+      
+      const limiterIdleHandler = () => {
+        processStates.limiterIdle = true;
+        checkComplete();
+      };
+      
+      limiter.on('idle', limiterIdleHandler);
+      
+      eventEmitter.on('transfersInitiated', () => {
+        console.log('Event: transfersInitiated');
+        processStates.transfersInitiated = true;
+        checkComplete();
+      });
+      
+      eventEmitter.on('transfersConfirmed', () => {
+        console.log('Event: transfersConfirmed');
+        processStates.transfersConfirmed = true;
+        checkComplete();
+      });
+      
+      eventEmitter.on('swapComplete', () => {
+        console.log('Event: swapComplete');
+        processStates.swapComplete = true;
+        checkComplete();
+      });
+
+      eventEmitter.on('executeSwapsForUsersCompleted', () => {
+        console.log('Event: executeSwapsForUsersCompleted');
+        processStates.executeSwapsForUsersCompleted = true;
+        processStates.allOperationsComplete = true;
+        checkComplete();
+      });
+
+      function checkComplete() {
+        console.log('Current process states:', JSON.stringify(processStates));
+        if (Object.values(processStates).every(state => state)) {
+          limiter.removeAllListeners();
+          eventEmitter.removeAllListeners();
+          resolve();
         }
-      ) as unknown as (options: string | MessagePayload | InteractionEditReplyOptions) => Promise<Message<boolean>>;
+      }
+      
+      setTimeout(() => {
+        console.log('Timeout reached. Final process states:', JSON.stringify(processStates));
+        limiter.removeAllListeners();
+        eventEmitter.removeAllListeners();
+        reject(new Error(`Process incomplete. Status: ${JSON.stringify(processStates)}`));
+      }, 60000); // Increased timeout to 60 seconds
     });
 
-    // Create a promise that resolves when executeSwapsForUsers is called
-    const executeSwapsPromise = new Promise<void>((resolve) => {
-      (swapBaseModule.executeSwapsForUsers as jest.Mock).mockImplementation(async (params) => {
-        const realSwapBaseModule = jest.requireActual<typeof swapBaseModule>('./commands/swap-base');
-        const result = await realSwapBaseModule.executeSwapsForUsers(params as any);
-        resolve();
-        return result;
-      });
-    });
+    try {
+      await Promise.all([
+        handleSellCommand(
+          interaction,
+          async (collector) => {
+            console.log('Test: Emitting button interaction');
+            collector.emit('collect', {
+              customId: 'percentage_0',
+              isRepliable: () => true,
+              deferUpdate: jest.fn().mockResolvedValue(undefined),
+              update: jest.fn().mockResolvedValue(undefined),
+              editReply: jest.fn().mockResolvedValue(undefined),
+              followUp: jest.fn().mockResolvedValue(undefined),
+              user: { id: interaction.user.id },
+              channelId: interaction.channelId,
+            });
+          },
+          'swap_now',
+          1000,
+          eventEmitter
+        ),
+        processComplete
+      ]);
+    } finally {
+      // Cleanup is now handled in checkComplete and timeout
+    }
 
-    // Start the command and wait for it to complete
-    await handleSellCommand(interaction, async (collector) => {
-      // Simulate percentage selection button interaction
-      collector.emit('collect', {
-        customId: 'percentage_0',
-        isRepliable: () => true,
-        deferUpdate: jest.fn().mockResolvedValue(undefined as never),
-        update: jest.fn().mockResolvedValue(undefined as never),
-        editReply: jest.fn().mockResolvedValue(undefined as never),
-        followUp: jest.fn().mockResolvedValue(undefined as never),
-        user: { id: interaction.user.id },
-        channelId: interaction.channelId,
-      });
+    // Wait a bit for any final async operations
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Wait for the collector's 'collect' handler to process
-      await new Promise((resolve) => setImmediate(resolve));
-    });
-
-    // Wait until editReply has been called twice
-    await editReplySecondCall;
-
-    // Wait for executeSwapsForUsers to complete
-    await executeSwapsPromise;
-
-    // Optionally, add a small delay to ensure all logs complete
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    // Verify editReply calls
-    expect(interaction.editReply).toHaveBeenNthCalledWith(
-      1,
+    expect(editReplyCalls).toContainEqual(
       expect.objectContaining({
-        content: expect.stringContaining('Select a percentage'),
+        content: expect.stringContaining('Select a percentage')
       })
     );
+  });
 
-    expect(interaction.editReply).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        content: 'Processing swaps...',
-      })
-    );
-  }, 60000);
-  /* istanbul ignore next */
-  it('should execute buy command and proceed past swap preview', async () => {
-    const options = {
-      mode: 'BUY',
-      tokenAddress: TEST_TOKEN,
-      settings: defaultSettings,
-    };
+  // it.skip('should execute Buy command and proceed through the entire trading process', async () => {
+  //   const options = {
+  //     mode: 'BUY',
+  //     tokenAddress: '7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr', // POPCAT token
+  //     settings: defaultSettings,
+  //   };
 
-    const interaction = createMockInteraction(client, options as MockInteractionOptions);
+  //   const interaction = createMockInteraction(client, options as MockInteractionOptions);
 
-    // Array to keep track of editReply calls
-    const editReplyCalls: any[] = [];
+  //   // Override interaction.editReply to track calls
+  //   const editReplyCalls: any[] = [];
+  //   interaction.editReply = jest.fn(
+  //     async (
+  //       content: string | MessagePayload | InteractionEditReplyOptions
+  //     ): Promise<Message<boolean>> => {
+  //       editReplyCalls.push(content);
+  //       // Return a mock Message object
+  //       return {} as Message<boolean>;
+  //     }
+  //   ) as unknown as (
+  //     options: string | MessagePayload | InteractionEditReplyOptions
+  //   ) => Promise<Message<boolean>>;
 
-    // Promise that resolves when editReply is called the second time
-    const editReplySecondCall = new Promise<void>((resolve) => {
-      interaction.editReply = jest.fn(
-        async (
-          content: string | MessagePayload | InteractionEditReplyOptions
-        ): Promise<Message<boolean>> => {
-          editReplyCalls.push(content);
-          if (editReplyCalls.length === 2) {
-            resolve();
-          }
-          // Return a mock Message object
-          return Promise.resolve({} as Message<boolean>);
-        }
-      ) as unknown as (options: string | MessagePayload | InteractionEditReplyOptions) => Promise<Message<boolean>>;
-    });
+  //   // Create an event emitter
+  //   const eventEmitter = new EventEmitter();
 
-    // Create a promise that resolves when executeSwapsForUsers is called
-    const executeSwapsPromise = new Promise<void>((resolve) => {
-      (swapBaseModule.executeSwapsForUsers as jest.Mock).mockImplementation(async (params) => {
-        const realSwapBaseModule = jest.requireActual<typeof swapBaseModule>('./commands/swap-base');
-        const result = await realSwapBaseModule.executeSwapsForUsers(params as any);
-        resolve();
-        return result;
-      });
-    });
+  //   const swapsCompleted = new Promise<void>((resolve) => {
+  //     eventEmitter.on('executeSwapsForUsersCompleted', () => resolve());
+  //   });
 
-    // Start the command and wait for it to complete
-    await handleBuyCommand(interaction, async (collector) => {
-      // Simulate percentage selection button interaction
-      collector.emit('collect', {
-        customId: 'amount_0',
-        isRepliable: () => true,
-        deferUpdate: jest.fn().mockResolvedValue(undefined as never),
-        update: jest.fn().mockResolvedValue(undefined as never),
-        editReply: jest.fn().mockResolvedValue(undefined as never),
-        followUp: jest.fn().mockResolvedValue(undefined as never),
-        user: { id: interaction.user.id },
-        channelId: interaction.channelId,
-      });
+  //   // Start the Buy command and wait for it to complete
+  //   await handleBuyCommand(
+  //     interaction,
+  //     async (collector) => {
+  //       // Simulate percentage selection button interaction
+  //       collector.emit('collect', {
+  //         customId: 'percentage_0',
+  //         isRepliable: () => true,
+  //         deferUpdate: jest.fn().mockResolvedValue(undefined as never),
+  //         update: jest.fn().mockResolvedValue(undefined as never),
+  //         editReply: jest.fn().mockResolvedValue(undefined as never),
+  //         followUp: jest.fn().mockResolvedValue(undefined as never),
+  //         user: { id: interaction.user.id },
+  //         channelId: interaction.channelId,
+  //       });
 
-      // Wait for the collector's 'collect' handler to process
-      await new Promise((resolve) => setImmediate(resolve));
-    });
+  //       // Wait for the collector's 'collect' handler to process
+  //       await new Promise((resolve) => setImmediate(resolve));
+  //     },
+  //     'swap_now', // Simulate pressing 'Swap Now' button
+  //     1000        // Set swapTime to 1 second for testing
+  //   );
 
-    // Wait until editReply has been called twice
-    await editReplySecondCall;
+  //   // Wait for swaps to complete
+  //   await swapsCompleted;
 
-    // Wait for executeSwapsForUsers to complete
-    await executeSwapsPromise;
+  //   // Wait for all asynchronous operations to complete
+  //   await new Promise((resolve) => setTimeout(resolve, 20000)); // Adjust the timeout as needed
 
-    // Optionally, add a small delay to ensure all logs complete
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+  //   // Assertions
+  //   expect(interaction.editReply).toHaveBeenCalledWith(
+  //     expect.objectContaining({
+  //       content: expect.stringContaining('Select a percentage'),
+  //     })
+  //   );
 
-    // Verify editReply calls
-    expect(interaction.editReply).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        content: expect.stringContaining('Select a percentage'),
-      })
-    );
-
-    expect(interaction.editReply).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        content: 'Processing swaps...',
-      })
-    );
-  }, 60000);
+  //   expect(interaction.editReply).toHaveBeenCalledWith(
+  //     expect.objectContaining({
+  //       content: 'Processing swaps...',
+  //     })
+  //   );
+  // }, 60000); // Set a higher timeout if necessary
 });

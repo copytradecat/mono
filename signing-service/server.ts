@@ -154,6 +154,17 @@ app.post('/sign-and-send-pooling-wallet', async (req, res) => {
   }
 });
 
+// Add error handling middleware
+app.use((error: any, req: any, res: any, next: any) => {
+  console.error('Error in signing service:', error);
+  const statusCode = error.message?.includes('block height exceeded') ? 408 : 500;
+  res.status(statusCode).json({ 
+    error: 'Failed to sign and send transaction', 
+    details: error.message,
+    retryable: statusCode === 408
+  });
+});
+
 const PORT = process.env.SIGNING_SERVICE_PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Signing service running on port ${PORT}`);
