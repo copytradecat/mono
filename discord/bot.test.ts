@@ -11,7 +11,7 @@ import limiter from '../src/lib/limiter';
 config();
 
 // Set a higher timeout for long-running tests
-jest.setTimeout(60000); // 60 seconds
+jest.setTimeout(120000); // 2 minutes for all tests
 
 describe('Bot Commands', () => {
   let client: Client;
@@ -47,6 +47,155 @@ describe('Bot Commands', () => {
     
     // Clean up any resources, timers, or listeners
     eventEmitter.removeAllListeners();
+    limiter.removeAllListeners();
+
+    jest.clearAllMocks();
+    jest.useRealTimers();
+  });
+
+  it('should execute buy command and proceed through the entire trading process', async () => {
+    const options = {
+      mode: 'BUY',
+      tokenAddress: '7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr',
+      settings: defaultSettings,
+    };
+
+    const interaction = createMockInteraction(client, options as MockInteractionOptions);
+    const editReplyCalls: any[] = [];
+    
+    // Mock editReply to capture calls
+    interaction.editReply = jest.fn(
+      async (content: string | MessagePayload | InteractionEditReplyOptions): Promise<Message<boolean>> => {
+        editReplyCalls.push(content);
+        return {} as Message<boolean>;
+      }
+    ) as any;
+
+    const processComplete = new Promise<void>((resolve, reject) => {
+      const processStates = {
+        transfersInitiated: false,
+        transfersConfirmed: false,
+        swapComplete: false,
+        executeSwapsForUsersCompleted: false,
+        limiterIdle: false,
+        allOperationsComplete: false
+      };
+      
+      // Clear any existing listeners
+      eventEmitter.removeAllListeners();
+      limiter.removeAllListeners();
+      
+      const limiterIdleHandler = () => {
+        processStates.limiterIdle = true;
+        checkComplete();
+      };
+      
+      limiter.on('idle', limiterIdleHandler);
+      
+      function checkComplete() {
+        console.log('=== Checking Process States ===');
+        console.log('Current states:', JSON.stringify(processStates));
+        
+        const allComplete = Object.values(processStates).every(state => state === true);
+        console.log('=== Process Complete ===');
+        if (allComplete) {
+          clearTimeout(timeoutId); // Clear the timeout if process completes
+          resolve();
+        }
+      }
+      
+      eventEmitter.on('transfersInitiated', async () => {
+        try {
+          console.log('Event: transfersInitiated');
+          processStates.transfersInitiated = true;
+          checkComplete();
+        } catch (error) {
+          console.error('Error in transfersInitiated handler:', error);
+        }
+      });
+      
+      eventEmitter.on('transfersConfirmed', async () => {
+        try {
+          console.log('Event: transfersConfirmed');
+          processStates.transfersConfirmed = true;
+          checkComplete();
+        } catch (error) {
+          console.error('Error in transfersConfirmed handler:', error);
+        }
+      });
+      
+      eventEmitter.on('swapComplete', async () => {
+        try {
+          console.log('Event: swapComplete');
+          processStates.swapComplete = true;
+          checkComplete();
+        } catch (error) {
+          console.error('Error in swapComplete handler:', error);
+        }
+      });
+
+      eventEmitter.on('executeSwapsForUsersCompleted', async () => {
+        try {
+          console.log('Event: executeSwapsForUsersCompleted');
+          processStates.executeSwapsForUsersCompleted = true;
+          processStates.allOperationsComplete = true;
+          checkComplete();
+        } catch (error) {
+          console.error('Error in executeSwapsForUsersCompleted handler:', error);
+        }
+      });
+
+      // Shorter timeout for faster failure
+      const timeoutId = setTimeout(() => {
+        console.log('=== Test Timeout Reached ===');
+        console.log('Final process states:', JSON.stringify(processStates));
+        console.log('Limiter status:', {
+          received: limiter.counts().RECEIVED,
+          queued: limiter.counts().QUEUED,
+          running: limiter.counts().RUNNING,
+          executing: limiter.counts().EXECUTING
+        });
+        const finalStates = JSON.stringify(processStates);
+        clearTimeout(timeoutId);
+        reject(new Error(`Process incomplete after timeout. Final states: ${finalStates}`));
+      }, 60000);
+    });
+
+    try {
+      await Promise.all([
+        await handleBuyCommand(
+          interaction,
+          async (collector) => {
+            console.log('Test: Emitting button interaction');
+            collector.emit('collect', {
+              customId: 'amount_0',
+              isRepliable: () => true,
+              deferUpdate: jest.fn().mockResolvedValue(undefined),
+              update: jest.fn().mockResolvedValue(undefined),
+              editReply: jest.fn().mockResolvedValue(undefined),
+              followUp: jest.fn().mockResolvedValue(undefined),
+              user: { id: interaction.user.id },
+              channelId: interaction.channelId,
+            });
+          },
+          'swap_now',
+          1000,
+          eventEmitter
+        ),
+        await processComplete
+      ]);
+    } finally {
+      // Cleanup is now handled in checkComplete and timeout
+    }
+
+    // Wait a bit for any final async operations
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    expect(editReplyCalls).toContainEqual(
+      expect.objectContaining({
+        content: expect.stringContaining('Select the amount')
+      })
+    );
   });
 
   it('should execute sell command and proceed through the entire trading process', async () => {
@@ -83,52 +232,76 @@ describe('Bot Commands', () => {
       };
       
       limiter.on('idle', limiterIdleHandler);
-      
-      eventEmitter.on('transfersInitiated', () => {
-        console.log('Event: transfersInitiated');
-        processStates.transfersInitiated = true;
-        checkComplete();
-      });
-      
-      eventEmitter.on('transfersConfirmed', () => {
-        console.log('Event: transfersConfirmed');
-        processStates.transfersConfirmed = true;
-        checkComplete();
-      });
-      
-      eventEmitter.on('swapComplete', () => {
-        console.log('Event: swapComplete');
-        processStates.swapComplete = true;
-        checkComplete();
-      });
-
-      eventEmitter.on('executeSwapsForUsersCompleted', () => {
-        console.log('Event: executeSwapsForUsersCompleted');
-        processStates.executeSwapsForUsersCompleted = true;
-        processStates.allOperationsComplete = true;
-        checkComplete();
-      });
-
       function checkComplete() {
-        console.log('Current process states:', JSON.stringify(processStates));
-        if (Object.values(processStates).every(state => state)) {
-          limiter.removeAllListeners();
-          eventEmitter.removeAllListeners();
+        console.log('=== Checking Process States ===');
+        console.log('Current states:', JSON.stringify(processStates));
+        const allComplete = Object.values(processStates).every(state => state === true);
+        if (allComplete) {
+          console.log('=== Process Complete ===');
+          clearTimeout(timeoutId); // Clear the timeout if process completes
           resolve();
         }
       }
       
-      setTimeout(() => {
-        console.log('Timeout reached. Final process states:', JSON.stringify(processStates));
-        limiter.removeAllListeners();
-        eventEmitter.removeAllListeners();
-        reject(new Error(`Process incomplete. Status: ${JSON.stringify(processStates)}`));
-      }, 60000); // Increased timeout to 60 seconds
+      eventEmitter.on('transfersInitiated', async () => {
+        try { 
+          console.log('Event: transfersInitiated');
+          processStates.transfersInitiated = true;
+          checkComplete();
+        } catch (error) {
+          console.error('Error in transfersInitiated handler:', error);
+        }
+      });
+      
+      eventEmitter.on('transfersConfirmed', async () => {
+        try {
+          console.log('Event: transfersConfirmed');
+          processStates.transfersConfirmed = true;
+          checkComplete();
+        } catch (error) {
+          console.error('Error in transfersConfirmed handler:', error);
+        }
+      });
+      
+      eventEmitter.on('swapComplete', async () => {
+        try {
+          console.log('Event: swapComplete');
+          processStates.swapComplete = true;
+          checkComplete();
+        } catch (error) {
+          console.error('Error in swapComplete handler:', error);
+        }
+      });
+
+      eventEmitter.on('executeSwapsForUsersCompleted', async () => {
+        try {
+          console.log('Event: executeSwapsForUsersCompleted');
+          processStates.executeSwapsForUsersCompleted = true;
+          processStates.allOperationsComplete = true;
+          checkComplete();
+        } catch (error) {
+          console.error('Error in executeSwapsForUsersCompleted handler:', error);
+        }
+      });
+      
+      const timeoutId = setTimeout(() => {
+        console.log('=== Test Timeout Reached ===');
+        console.log('Final process states:', JSON.stringify(processStates));
+        console.log('Limiter status:', {
+          received: limiter.counts().RECEIVED,
+          queued: limiter.counts().QUEUED,
+          running: limiter.counts().RUNNING,
+          executing: limiter.counts().EXECUTING
+        });
+        const finalStates = JSON.stringify(processStates);
+        clearTimeout(timeoutId);
+        reject(new Error(`Process incomplete after timeout. Final states: ${finalStates}`));
+      }, 60000);
     });
 
     try {
       await Promise.all([
-        handleSellCommand(
+        await handleSellCommand(
           interaction,
           async (collector) => {
             console.log('Test: Emitting button interaction');
@@ -147,7 +320,7 @@ describe('Bot Commands', () => {
           1000,
           eventEmitter
         ),
-        processComplete
+        await processComplete
       ]);
     } finally {
       // Cleanup is now handled in checkComplete and timeout
@@ -162,77 +335,5 @@ describe('Bot Commands', () => {
       })
     );
   });
-
-  // it.skip('should execute Buy command and proceed through the entire trading process', async () => {
-  //   const options = {
-  //     mode: 'BUY',
-  //     tokenAddress: '7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr', // POPCAT token
-  //     settings: defaultSettings,
-  //   };
-
-  //   const interaction = createMockInteraction(client, options as MockInteractionOptions);
-
-  //   // Override interaction.editReply to track calls
-  //   const editReplyCalls: any[] = [];
-  //   interaction.editReply = jest.fn(
-  //     async (
-  //       content: string | MessagePayload | InteractionEditReplyOptions
-  //     ): Promise<Message<boolean>> => {
-  //       editReplyCalls.push(content);
-  //       // Return a mock Message object
-  //       return {} as Message<boolean>;
-  //     }
-  //   ) as unknown as (
-  //     options: string | MessagePayload | InteractionEditReplyOptions
-  //   ) => Promise<Message<boolean>>;
-
-  //   // Create an event emitter
-  //   const eventEmitter = new EventEmitter();
-
-  //   const swapsCompleted = new Promise<void>((resolve) => {
-  //     eventEmitter.on('executeSwapsForUsersCompleted', () => resolve());
-  //   });
-
-  //   // Start the Buy command and wait for it to complete
-  //   await handleBuyCommand(
-  //     interaction,
-  //     async (collector) => {
-  //       // Simulate percentage selection button interaction
-  //       collector.emit('collect', {
-  //         customId: 'percentage_0',
-  //         isRepliable: () => true,
-  //         deferUpdate: jest.fn().mockResolvedValue(undefined as never),
-  //         update: jest.fn().mockResolvedValue(undefined as never),
-  //         editReply: jest.fn().mockResolvedValue(undefined as never),
-  //         followUp: jest.fn().mockResolvedValue(undefined as never),
-  //         user: { id: interaction.user.id },
-  //         channelId: interaction.channelId,
-  //       });
-
-  //       // Wait for the collector's 'collect' handler to process
-  //       await new Promise((resolve) => setImmediate(resolve));
-  //     },
-  //     'swap_now', // Simulate pressing 'Swap Now' button
-  //     1000        // Set swapTime to 1 second for testing
-  //   );
-
-  //   // Wait for swaps to complete
-  //   await swapsCompleted;
-
-  //   // Wait for all asynchronous operations to complete
-  //   await new Promise((resolve) => setTimeout(resolve, 20000)); // Adjust the timeout as needed
-
-  //   // Assertions
-  //   expect(interaction.editReply).toHaveBeenCalledWith(
-  //     expect.objectContaining({
-  //       content: expect.stringContaining('Select a percentage'),
-  //     })
-  //   );
-
-  //   expect(interaction.editReply).toHaveBeenCalledWith(
-  //     expect.objectContaining({
-  //       content: 'Processing swaps...',
-  //     })
-  //   );
-  // }, 60000); // Set a higher timeout if necessary
 });
+

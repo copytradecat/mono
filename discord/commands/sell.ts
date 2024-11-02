@@ -354,21 +354,32 @@ export async function handleSellCommand(
                     console.log('Interaction is no longer valid for editing reply\n(Processing swaps...)');
                   }
 
-                  await executeSwapsForUsers({
-                    interaction,
-                    connectedWallets,
-                    selectionIndex: 'Custom',
-                    isBuyOperation: false,
-                    inputTokenInfo,
-                    outputTokenInfo,
-                    inputTokenAddress,
-                    outputTokenAddress,
-                    initiatingUser,
-                    initiatingSettings,
-                    initiatingExitPercentages,
-                    customPercentage,
-                    channelId
-                  }, eventEmitter);
+                  try {
+                    await executeSwapsForUsers({
+                      interaction,
+                      connectedWallets,
+                      selectionIndex: 'Custom',
+                      isBuyOperation: false,
+                      inputTokenInfo,
+                      outputTokenInfo,
+                      inputTokenAddress,
+                      outputTokenAddress,
+                      initiatingUser,
+                      initiatingSettings,
+                      initiatingExitPercentages,
+                      customPercentage,
+                      channelId
+                    }, eventEmitter);
+                  } catch (error: any) {
+                    console.error('Error executing swaps:', error);
+                    if (interaction.isRepliable()) {
+                      await interaction.editReply({
+                        content: `Failed to execute swaps: ${error.message}`,
+                        components: [],
+                      });
+                    }
+                    throw error;
+                  }
                 } else if (userResponse === 'cancel_swap') {
                   if (interaction.isRepliable()) {
                     await interaction.editReply({

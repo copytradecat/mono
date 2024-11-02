@@ -322,14 +322,13 @@ export async function getTokenBalance(
 
     return { balance: balanceLamports, decimals: 9, symbol: 'SOL' };
   } else {
-
     // For SPL Tokens
     // balance should be in raw units (smallest units)
     const tokenAccounts = await executeWithFallback(async (url) => {
       const conn = new Connection(url);
       return conn.getParsedTokenAccountsByOwner(publicKey, {
         mint: new PublicKey(tokenAddress),
-      });
+      }, 'confirmed');
     }, solanaRpcUrls);
 
     let balance = 0;

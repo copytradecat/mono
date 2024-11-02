@@ -17,7 +17,7 @@ import {
 } from './swap-base';
 import { getTokenInfo, getTokenBalance } from '../../src/services/jupiter.service';
 import { defaultSettings } from '../../src/config/defaultSettings';
-import { getConnectedWalletsInChannel, getConnection } from '../../src/lib/utils';
+import { getConnectedWalletsInChannel, getConnection, truncatedString } from '../../src/lib/utils';
 import { IUser } from '../../src/models/User';
 import { EventEmitter } from 'events';
 import { VersionedTransaction } from '@solana/web3.js';
@@ -200,6 +200,7 @@ export async function handleBuyCommand(
             const userResponse = await promptUserConfirmation(
               interaction,
               `${swapPreview}\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`,
+              false,
               testPromptResponse
             );
 
@@ -209,21 +210,32 @@ export async function handleBuyCommand(
                 components: [],
               });
 
-              await executeSwapsForUsers({
-                interaction,
-                connectedWallets,
-                selectionIndex,
-                isBuyOperation: true,
-                inputTokenInfo,
-                outputTokenInfo,
-                inputTokenAddress: inputToken,
-                outputTokenAddress,
-                initiatingUser,
-                initiatingSettings,
-                initiatingEntryAmounts,
-                initiatingExitPercentages: initiatingSettings.exitPercentages,
-                channelId
-              }, eventEmitter);
+              try {
+                await executeSwapsForUsers({
+                  interaction,
+                  connectedWallets,
+                  selectionIndex,
+                  isBuyOperation: true,
+                  inputTokenInfo,
+                  outputTokenInfo,
+                  inputTokenAddress: inputToken,
+                  outputTokenAddress,
+                  initiatingUser,
+                  initiatingSettings,
+                  initiatingEntryAmounts,
+                  initiatingExitPercentages: initiatingSettings.exitPercentages,
+                  channelId
+                }, eventEmitter);
+              } catch (error: any) {
+                console.error('Error executing swaps:', error);
+                if (interaction.isRepliable()) {
+                  await interaction.editReply({
+                    content: `Failed to execute swaps: ${error.message}`,
+                    components: [],
+                  });
+                }
+                throw error;
+              }
             } else if (userResponse === 'cancel_swap') {
               await interaction.editReply({
                 content: 'Swap cancelled by user.',
@@ -297,7 +309,9 @@ export async function handleBuyCommand(
               // Prompt user confirmation
               const userResponse = await promptUserConfirmation(
                 interaction,
-                `${swapPreview}\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`
+                `${swapPreview}\nSubmitting swap in ${swapTime / 1000} seconds.\nClick 'Swap Now' to proceed immediately, or 'Cancel' to abort.`,
+                false,
+                testPromptResponse
               );
 
               if (userResponse === 'swap_now' || userResponse === 'timeout') {
@@ -310,23 +324,34 @@ export async function handleBuyCommand(
                   console.log('Interaction is no longer valid for editing reply\n(Processing swaps...)');
                 }
 
-                // Execute swaps for users
-                await executeSwapsForUsers({
-                  interaction,
-                  connectedWallets,
-                  selectionIndex: 'Custom',
-                  isBuyOperation: true,
-                  inputTokenInfo,
-                  outputTokenInfo,
-                  inputTokenAddress: inputToken,
-                  outputTokenAddress,
-                  initiatingUser,
-                  initiatingSettings,
-                  initiatingEntryAmounts,
-                  customAmount,
-                  initiatingExitPercentages: initiatingSettings.exitPercentages,
-                  channelId
-                }, eventEmitter);
+                try {
+                  // Execute swaps for users
+                  await executeSwapsForUsers({
+                    interaction,
+                    connectedWallets,
+                    selectionIndex: 'Custom',
+                    isBuyOperation: true,
+                    inputTokenInfo,
+                    outputTokenInfo,
+                    inputTokenAddress: inputToken,
+                    outputTokenAddress,
+                    initiatingUser,
+                    initiatingSettings,
+                    initiatingEntryAmounts,
+                    customAmount,
+                    initiatingExitPercentages: initiatingSettings.exitPercentages,
+                    channelId
+                  }, eventEmitter);
+                } catch (error: any) {
+                  console.error('Error executing swaps:', error);
+                  if (interaction.isRepliable()) {
+                    await interaction.editReply({
+                      content: `Failed to execute swaps: ${error.message}`,
+                      components: [],
+                    });
+                  }
+                  throw error;
+                }
               } else if (userResponse === 'cancel_swap') {
                 if (interaction.isRepliable()) {
                   await interaction.editReply({
