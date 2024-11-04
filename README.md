@@ -2,6 +2,12 @@
 
 CopyTradeCat is a Discord bot and web application for copy trading on the Solana blockchain.
 
+## Features
+
+- Discord bot for copy trading
+- Web interface for managing settings and wallets
+- Integration with Solana blockchain for trading
+
 ## Getting Started
 
 ### Prerequisites
@@ -18,19 +24,17 @@ CopyTradeCat is a Discord bot and web application for copy trading on the Solana
    ```
 
 2. Create a `.env` file in the root directory and fill in the necessary environment variables:
-   ```
-   DISCORD_BOT_TOKEN=your_discord_bot_token
-   DISCORD_CLIENT_ID=your_discord_client_id
-   NEXT_PUBLIC_DISCORD_CLIENT_ID=your_discord_client_id
-   DISCORD_TEST_CHANNEL_ID=your_test_channel_id
-   DISCORD_TEST_USER_ID=your_test_user_id
-   MONGODB_URI=your_mongodb_uri
-   NEXT_PUBLIC_WEBSITE_URL=http://localhost:3000
-   SIGNING_SERVICE_URL=http://localhost:3001
-   ENCRYPTION_KEY=your_encryption_key
-   BOT_API_KEY=your_bot_api_key
-   RATE_LIMIT_MIN_TIME=240
-   ```
+
+   `DISCORD_BOT_TOKEN`: Your Discord bot token from the [Discord Developer Portal](https://discord.com/developers/applications).
+   `DISCORD_CLIENT_ID`: Your Discord application's client ID.
+   `NEXT_PUBLIC_DISCORD_CLIENT_ID`: Same as `DISCORD_CLIENT_ID`, used in the frontend.
+   `MONGODB_URI`: Connection string for your MongoDB database.
+   `NEXT_PUBLIC_WEBSITE_URL`: URL where your web app will run (e.g., `http://localhost:3000`).
+   `SIGNING_SERVICE_URL`: URL where your signing service is hosted (e.g., `http://localhost:3001`).
+   `ENCRYPTION_KEY`: A secret key for encrypting sensitive data.
+   `BOT_API_KEY`: API key for bot authentication.
+   `RATE_LIMIT_MIN_TIME`: Minimum time between API calls (in milliseconds).
+
 
 3. Install dependencies:
    ```bash
@@ -65,11 +69,28 @@ You can run the different components of the application separately or all at onc
 
 The web application will be available at `http://localhost:3000`.
 
-## Features
+  ### Running Tests
 
-- Discord bot for copy trading
-- Web interface for managing settings and wallets
-- Integration with Solana blockchain for trading
+    To run the test suite, watches files for changes and reruns tests:
+    ```bash
+    pnpm run test:watch
+    ```
+
+
+## Usage
+
+  ### Discord Bot Commands
+
+  - `/ct help`: Display help message.
+  - `/ct connect`: Connect your wallet.
+  - `/ct buy <token>`: Place a buy order for a specified token.
+  - `/ct sell <token>`: Place a sell order for a specified token.
+
+  ### Web Application
+
+  - **Dashboard**: Overview of your account and recent trades.
+  - **Settings**: Configure your trading preferences.
+
 
 ## Learn More
 
@@ -88,6 +109,10 @@ To learn more about the technologies used in this project:
 ## Contributing
 
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+Feel free to submit issues and feature requests!
+
+## Contact
+`code@copytradecat.com`
 
 ## License
 
